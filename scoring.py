@@ -356,7 +356,7 @@ def get_ranking(session) -> list:
         ranking.append({
             'user_id': user.id,
             'nome': user.name,
-            'pontos': total_pontos,
+            'total_pontos': total_pontos,
             'placares_exatos': placares_exatos,
             'resultado_gols': resultado_gols,
             'resultado': resultado,
@@ -368,7 +368,7 @@ def get_ranking(session) -> list:
     
     # Ordena pelo critério de desempate completo
     ranking.sort(key=lambda x: (
-        -x['pontos'],              # 1. Maior pontuação total
+        -x['total_pontos'],              # 1. Maior pontuação total
         -x['placares_exatos'],     # 2. Mais placares exatos
         -x['resultado_gols'],      # 3. Mais resultado + gols
         -x['resultado'],           # 4. Mais resultado sem gols
