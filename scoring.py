@@ -1,0 +1,384 @@
+"""
+Módulo de pontuação do Bolão Copa do Mundo 2026
+Calcula pontos dos palpites e gera ranking com critérios de desempate completos
+"""
+
+import json
+from datetime import datetime
+from sqlalchemy import func, desc, case
+from models import (
+    User, Match, Prediction, GroupPrediction, PodiumPrediction, 
+    Team, Config, TournamentResult, GroupResult
+)
+from db import get_config_value
+
+
+def get_scoring_config(session):
+    """
+    Obtém todas as configurações de pontuação do banco de dados.
+    """
+    config = {}
+    
+    # Pontuação de jogos
+    config['placar_exato'] = int(get_config_value(session, 'pontos_placar_exato', '20'))
+    config['resultado_gols'] = int(get_config_value(session, 'pontos_resultado_gols', '15'))
+    config['resultado'] = int(get_config_value(session, 'pontos_resultado', '10'))
+    config['gols'] = int(get_config_value(session, 'pontos_gols', '5'))
+    config['nenhum'] = int(get_config_value(session, 'pontos_nenhum', '0'))
+    
+    # Pontuação de grupos
+    config['grupo_ordem_correta'] = int(get_config_value(session, 'grupo_ordem_correta', '20'))
+    config['grupo_ordem_invertida'] = int(get_config_value(session, 'grupo_ordem_invertida', '10'))
+    config['grupo_um_certo'] = int(get_config_value(session, 'grupo_um_certo', '5'))
+    
+    # Pontuação do pódio
+    config['podio_completo'] = int(get_config_value(session, 'podio_completo', '150'))
+    config['podio_campeao'] = int(get_config_value(session, 'podio_campeao', '100'))
+    config['podio_vice'] = int(get_config_value(session, 'podio_vice', '50'))
+    config['podio_terceiro'] = int(get_config_value(session, 'podio_terceiro', '30'))
+    config['podio_fora_ordem'] = int(get_config_value(session, 'podio_fora_ordem', '20'))
+    
+    return config
+
+
+def calculate_match_points(pred_team1: int, pred_team2: int, 
+                           real_team1: int, real_team2: int,
+                           config: dict) -> tuple:
+    """
+    Calcula os pontos de um palpite para uma partida.
+    
+    Regras:
+    - 20 pts: acertar resultado e placar exato
+    - 15 pts: acertar vencedor/empate + gols de uma das equipes
+    - 10 pts: acertar vencedor/empate, sem acertar gols
+    - 5 pts: acertar apenas os gols de uma das equipes
+    - 0 pts: errar tudo
+    """
+    # Determina resultado previsto e real
+    if pred_team1 > pred_team2:
+        pred_result = 'team1'
+    elif pred_team1 < pred_team2:
+        pred_result = 'team2'
+    else:
+        pred_result = 'draw'
+    
+    if real_team1 > real_team2:
+        real_result = 'team1'
+    elif real_team1 < real_team2:
+        real_result = 'team2'
+    else:
+        real_result = 'draw'
+    
+    # Verifica acertos
+    acertou_resultado = pred_result == real_result
+    acertou_gols_team1 = pred_team1 == real_team1
+    acertou_gols_team2 = pred_team2 == real_team2
+    acertou_placar = acertou_gols_team1 and acertou_gols_team2
+    
+    # Calcula pontuação
+    if acertou_placar:
+        return config['placar_exato'], 'placar_exato', "Placar exato! 🎯"
+    
+    elif acertou_resultado and (acertou_gols_team1 or acertou_gols_team2):
+        return config['resultado_gols'], 'resultado_gols', "Resultado + gols de um time ✓"
+    
+    elif acertou_resultado:
+        return config['resultado'], 'resultado', "Resultado correto ✓"
+    
+    elif acertou_gols_team1 or acertou_gols_team2:
+        return config['gols'], 'gols', "Gols de um time ✓"
+    
+    else:
+        return config['nenhum'], 'nenhum', "Não pontuou"
+
+
+def calculate_group_points(pred_first_id: int, pred_second_id: int,
+                           real_first_id: int, real_second_id: int,
+                           config: dict) -> tuple:
+    """
+    Calcula os pontos de um palpite de classificação de grupo.
+    
+    Regras:
+    - 20 pts: acertou os 2 classificados na ordem correta
+    - 10 pts: acertou os 2 classificados em ordem invertida
+    - 5 pts: acertou apenas 1 classificado na posição errada
+    """
+    if pred_first_id is None or pred_second_id is None:
+        return 0, "Palpite incompleto"
+    
+    if real_first_id is None or real_second_id is None:
+        return 0, "Resultado ainda não definido"
+    
+    # Acertou os dois na ordem correta
+    if pred_first_id == real_first_id and pred_second_id == real_second_id:
+        return config['grupo_ordem_correta'], "Acertou 1º e 2º na ordem! 🎯"
+    
+    # Acertou os dois, mas invertidos
+    if pred_first_id == real_second_id and pred_second_id == real_first_id:
+        return config['grupo_ordem_invertida'], "Acertou os 2 classificados (ordem invertida) ✓"
+    
+    # Acertou apenas um na posição errada
+    if pred_first_id in [real_first_id, real_second_id] or pred_second_id in [real_first_id, real_second_id]:
+        return config['grupo_um_certo'], "Acertou 1 classificado (posição errada) ✓"
+    
+    return 0, "Não pontuou"
+
+
+def calculate_podium_points(pred_champion: int, pred_runner: int, pred_third: int,
+                            real_champion: int, real_runner: int, real_third: int,
+                            config: dict) -> tuple:
+    """
+    Calcula os pontos do palpite de pódio.
+    
+    Regras:
+    - 150 pts: acertou Campeão, Vice e 3º na ordem correta
+    - 100 pts: acertou o Campeão
+    - 50 pts: acertou o Vice-Campeão
+    - 30 pts: acertou o 3º Lugar
+    - 20 pts: acertou posição fora de ordem (ex: indicou campeão como vice)
+    """
+    total_points = 0
+    breakdown = []
+    
+    if real_champion is None:
+        return 0, "Resultado ainda não definido"
+    
+    # Verifica pódio completo na ordem
+    if (pred_champion == real_champion and 
+        pred_runner == real_runner and 
+        pred_third == real_third):
+        return config['podio_completo'], "Pódio completo na ordem exata! 🏆🥈🥉"
+    
+    # Verifica acertos individuais
+    real_podium = {real_champion, real_runner, real_third}
+    
+    # Campeão correto
+    if pred_champion == real_champion:
+        total_points += config['podio_campeao']
+        breakdown.append(f"Campeão correto (+{config['podio_campeao']})")
+    elif pred_champion in real_podium:
+        total_points += config['podio_fora_ordem']
+        breakdown.append(f"Campeão no pódio (+{config['podio_fora_ordem']})")
+    
+    # Vice correto
+    if pred_runner == real_runner:
+        total_points += config['podio_vice']
+        breakdown.append(f"Vice correto (+{config['podio_vice']})")
+    elif pred_runner in real_podium:
+        total_points += config['podio_fora_ordem']
+        breakdown.append(f"Vice no pódio (+{config['podio_fora_ordem']})")
+    
+    # Terceiro correto
+    if pred_third == real_third:
+        total_points += config['podio_terceiro']
+        breakdown.append(f"3º lugar correto (+{config['podio_terceiro']})")
+    elif pred_third in real_podium:
+        total_points += config['podio_fora_ordem']
+        breakdown.append(f"3º lugar no pódio (+{config['podio_fora_ordem']})")
+    
+    if not breakdown:
+        breakdown.append("Não pontuou no pódio")
+    
+    return total_points, "; ".join(breakdown)
+
+
+def process_match_predictions(session, match_id: int):
+    """
+    Processa todos os palpites de uma partida finalizada e atribui pontos.
+    """
+    match = session.query(Match).filter_by(id=match_id).first()
+    
+    if not match or match.status != 'finished':
+        return
+    
+    if match.team1_score is None or match.team2_score is None:
+        return
+    
+    config = get_scoring_config(session)
+    predictions = session.query(Prediction).filter_by(match_id=match_id).all()
+    
+    for pred in predictions:
+        points, points_type, breakdown = calculate_match_points(
+            pred.pred_team1_score, pred.pred_team2_score,
+            match.team1_score, match.team2_score,
+            config
+        )
+        
+        pred.points_awarded = points
+        pred.points_type = points_type
+        pred.breakdown = breakdown
+    
+    session.commit()
+
+
+def process_group_predictions(session, group_name: str):
+    """
+    Processa todos os palpites de classificação de um grupo.
+    """
+    result = session.query(GroupResult).filter_by(group_name=group_name).first()
+    
+    if not result or not result.first_place_team_id or not result.second_place_team_id:
+        return
+    
+    config = get_scoring_config(session)
+    predictions = session.query(GroupPrediction).filter_by(group_name=group_name).all()
+    
+    for pred in predictions:
+        points, breakdown = calculate_group_points(
+            pred.first_place_team_id, pred.second_place_team_id,
+            result.first_place_team_id, result.second_place_team_id,
+            config
+        )
+        
+        pred.points_awarded = points
+        pred.breakdown = breakdown
+    
+    session.commit()
+
+
+def process_podium_predictions(session):
+    """
+    Processa todos os palpites de pódio após definição dos resultados.
+    """
+    champion = session.query(TournamentResult).filter_by(result_type='champion').first()
+    runner = session.query(TournamentResult).filter_by(result_type='runner_up').first()
+    third = session.query(TournamentResult).filter_by(result_type='third_place').first()
+    
+    if not champion:
+        return
+    
+    config = get_scoring_config(session)
+    predictions = session.query(PodiumPrediction).all()
+    
+    for pred in predictions:
+        points, breakdown = calculate_podium_points(
+            pred.champion_team_id, pred.runner_up_team_id, pred.third_place_team_id,
+            champion.team_id if champion else None,
+            runner.team_id if runner else None,
+            third.team_id if third else None,
+            config
+        )
+        
+        pred.points_awarded = points
+        pred.breakdown = breakdown
+    
+    session.commit()
+
+
+def get_user_stats(session, user_id: int) -> dict:
+    """
+    Obtém estatísticas detalhadas de um usuário.
+    """
+    predictions = session.query(Prediction).filter_by(user_id=user_id).all()
+    
+    stats = {
+        'total_palpites': len(predictions),
+        'placares_exatos': 0,
+        'resultados_corretos': 0,
+        'gols_corretos': 0,
+        'palpites_zerados': 0,
+        'pontos_jogos': 0,
+        'pontos_grupos': 0,
+        'pontos_podio': 0,
+        'total_pontos': 0
+    }
+    
+    for pred in predictions:
+        stats['pontos_jogos'] += pred.points_awarded or 0
+        
+        if pred.points_type == 'placar_exato':
+            stats['placares_exatos'] += 1
+            stats['resultados_corretos'] += 1
+            stats['gols_corretos'] += 1
+        elif pred.points_type == 'resultado_gols':
+            stats['resultados_corretos'] += 1
+            stats['gols_corretos'] += 1
+        elif pred.points_type == 'resultado':
+            stats['resultados_corretos'] += 1
+        elif pred.points_type == 'gols':
+            stats['gols_corretos'] += 1
+        elif pred.points_type == 'nenhum':
+            stats['palpites_zerados'] += 1
+    
+    # Pontos de grupos
+    group_preds = session.query(GroupPrediction).filter_by(user_id=user_id).all()
+    for gp in group_preds:
+        stats['pontos_grupos'] += gp.points_awarded or 0
+    
+    # Pontos de pódio
+    podium_pred = session.query(PodiumPrediction).filter_by(user_id=user_id).first()
+    if podium_pred:
+        stats['pontos_podio'] = podium_pred.points_awarded or 0
+    
+    stats['total_pontos'] = stats['pontos_jogos'] + stats['pontos_grupos'] + stats['pontos_podio']
+    
+    return stats
+
+
+def get_ranking(session) -> list:
+    """
+    Gera o ranking completo dos participantes com critérios de desempate.
+    
+    Critérios de desempate (em ordem):
+    1. Maior pontuação total
+    2. Mais acertos de placares exatos
+    3. Mais acertos de resultado + gols de uma equipe
+    4. Mais acertos de resultado sem gols
+    5. Mais acertos de gols de uma equipe
+    6. Menos palpites zerados
+    7. Ordem de inscrição (ID menor = inscrito primeiro)
+    """
+    users = session.query(User).filter_by(active=True).all()
+    
+    ranking = []
+    
+    for user in users:
+        predictions = session.query(Prediction).filter_by(user_id=user.id).all()
+        
+        # Conta tipos de acertos
+        placares_exatos = sum(1 for p in predictions if p.points_type == 'placar_exato')
+        resultado_gols = sum(1 for p in predictions if p.points_type == 'resultado_gols')
+        resultado = sum(1 for p in predictions if p.points_type == 'resultado')
+        gols = sum(1 for p in predictions if p.points_type == 'gols')
+        zeros = sum(1 for p in predictions if p.points_type == 'nenhum')
+        
+        # Calcula pontos
+        pontos_jogos = sum(p.points_awarded or 0 for p in predictions)
+        
+        group_preds = session.query(GroupPrediction).filter_by(user_id=user.id).all()
+        pontos_grupos = sum(gp.points_awarded or 0 for gp in group_preds)
+        
+        podium_pred = session.query(PodiumPrediction).filter_by(user_id=user.id).first()
+        pontos_podio = podium_pred.points_awarded if podium_pred else 0
+        
+        total_pontos = pontos_jogos + pontos_grupos + pontos_podio
+        
+        ranking.append({
+            'user_id': user.id,
+            'nome': user.name,
+            'pontos': total_pontos,
+            'placares_exatos': placares_exatos,
+            'resultado_gols': resultado_gols,
+            'resultado': resultado,
+            'gols': gols,
+            'zeros': zeros,
+            'resultados': placares_exatos + resultado_gols + resultado,
+            'created_at': user.created_at
+        })
+    
+    # Ordena pelo critério de desempate completo
+    ranking.sort(key=lambda x: (
+        -x['pontos'],              # 1. Maior pontuação total
+        -x['placares_exatos'],     # 2. Mais placares exatos
+        -x['resultado_gols'],      # 3. Mais resultado + gols
+        -x['resultado'],           # 4. Mais resultado sem gols
+        -x['gols'],                # 5. Mais gols de um time
+        x['zeros'],                # 6. Menos zeros
+        x['user_id']               # 7. Ordem de inscrição
+    ))
+    
+    # Adiciona posição
+    for i, r in enumerate(ranking, 1):
+        r['posicao'] = i
+    
+    return ranking
