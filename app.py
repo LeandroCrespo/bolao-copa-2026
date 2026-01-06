@@ -2283,17 +2283,13 @@ def admin_resultados(session):
     
     jogos_pendentes = query.order_by(Match.datetime).all()
     
-    # Separa jogos com times definidos e jogos do mata-mata sem times
-    jogos_com_times = [j for j in jogos_pendentes if j.team1_id and j.team2_id]
-    jogos_sem_times = [j for j in jogos_pendentes if not j.team1_id or not j.team2_id]
+    st.markdown(f"**Total de jogos pendentes:** {len(jogos_pendentes)}")
     
-    st.markdown(f"**Total de jogos pendentes:** {len(jogos_pendentes)} ({len(jogos_com_times)} com times definidos, {len(jogos_sem_times)} aguardando definição)")
-    
-    # Mostra jogos com times definidos (podem receber resultado)
-    if jogos_com_times:
+    # Mostra todos os jogos pendentes (podem receber resultado mesmo com placeholder)
+    if jogos_pendentes:
         st.markdown("### ⚽ Jogos prontos para resultado")
         
-        for match in jogos_com_times:
+        for match in jogos_pendentes:
             team1_display = get_team_display(match.team1, match.team1_code)
             team2_display = get_team_display(match.team2, match.team2_code)
             
@@ -2318,18 +2314,6 @@ def admin_resultados(session):
                         st.success(f"Resultado registrado: {gols1} x {gols2}")
                         log_action(session, st.session_state.user['id'], 'resultado_lancado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
                         st.rerun()
-    
-    # Mostra jogos do mata-mata aguardando definição de times
-    if jogos_sem_times:
-        st.divider()
-        st.markdown("### 🏆 Jogos do Mata-Mata (aguardando definição de times)")
-        st.info("⚠️ Esses jogos precisam ter os times definidos na aba 'Jogos' antes de receber resultado.")
-        
-        for match in jogos_sem_times:
-            team1_display = get_team_display(match.team1, match.team1_code)
-            team2_display = get_team_display(match.team2, match.team2_code)
-            
-            st.markdown(f"#{match.match_number} - {team1_display} vs {team2_display} | {format_datetime(match.datetime)} | **{match.phase}**")
     
     st.divider()
     
