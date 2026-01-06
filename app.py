@@ -1600,20 +1600,7 @@ def page_ranking():
                 border-radius: 20px;
             }
             
-            .zona-rebaixamento-header {
-                background: linear-gradient(90deg, #E63946 0%, #ff6b6b 100%) !important;
-                color: #ffffff !important;
-                padding: 10px 20px;
-                border-radius: 10px;
-                margin: 20px 0 10px 0;
-                text-align: center;
-                font-weight: bold;
-            }
-            
-            .zona-rebaixamento-header * {
-                color: #ffffff !important;
-                background: transparent !important;
-            }
+            /* CSS da zona de rebaixamento removido - usando estilo inline */
         
     /* ========================================
        ÍCONE DA SIDEBAR - FORÇAR BRANCO
@@ -1800,7 +1787,7 @@ def page_ranking():
             elif posicao == 3:
                 icone = "🥉"
             elif is_rebaixado:
-                icone = "⬇️"
+                icone = f"⬇️ {posicao}º"
             else:
                 icone = f"{posicao}º"
             
