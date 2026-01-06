@@ -292,6 +292,28 @@ st.markdown("""
         color: #ffffff !important;
     }
     
+    /* Forçar texto branco em TODOS os elementos do selectbox */
+    .stSelectbox div[data-baseweb="select"] * {
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] input {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+    
+    .stSelectbox [role="combobox"] {
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] [data-testid="stMarkdownContainer"] {
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] p {
+        color: #ffffff !important;
+    }
+    
     [data-baseweb="popover"] {
         background-color: #1E3A5F !important;
     }
