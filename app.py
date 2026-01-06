@@ -1720,38 +1720,38 @@ def page_ranking():
         st.subheader("🥇 Pódio")
         
         if len(ranking) >= 3:
-            # Pódio visual com HTML
-            podio_html = '<div class="podio-container">'
+            # Pódio visual usando colunas do Streamlit (mais confiável)
+            col_space1, col2, col1, col3, col_space2 = st.columns([0.5, 1, 1.2, 1, 0.5])
             
             # 2º lugar (esquerda)
-            podio_html += f'''
-            <div class="podio-item podio-2">
-                <div class="podio-posicao">🥈</div>
-                <div class="podio-nome">{ranking[1]['nome']}</div>
-                <div class="podio-pontos">{ranking[1]['total_pontos']} pts</div>
-            </div>
-            '''
+            with col2:
+                st.markdown(f'''
+                <div style="background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%); border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-top: 40px;">
+                    <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 10px;">🥈</div>
+                    <div style="font-size: 1.1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 5px;">{ranking[1]['nome']}</div>
+                    <div style="font-size: 1.3rem; font-weight: bold; color: #1E3A5F;">{ranking[1]['total_pontos']} pts</div>
+                </div>
+                ''', unsafe_allow_html=True)
             
             # 1º lugar (centro, mais alto)
-            podio_html += f'''
-            <div class="podio-item podio-1">
-                <div class="podio-posicao">🥇</div>
-                <div class="podio-nome">{ranking[0]['nome']}</div>
-                <div class="podio-pontos">{ranking[0]['total_pontos']} pts</div>
-            </div>
-            '''
+            with col1:
+                st.markdown(f'''
+                <div style="background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); border-radius: 15px; padding: 25px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                    <div style="font-size: 3rem; font-weight: bold; margin-bottom: 10px;">🥇</div>
+                    <div style="font-size: 1.2rem; font-weight: 600; color: #1a1a2e; margin-bottom: 5px;">{ranking[0]['nome']}</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #1E3A5F;">{ranking[0]['total_pontos']} pts</div>
+                </div>
+                ''', unsafe_allow_html=True)
             
             # 3º lugar (direita)
-            podio_html += f'''
-            <div class="podio-item podio-3">
-                <div class="podio-posicao">🥉</div>
-                <div class="podio-nome">{ranking[2]['nome']}</div>
-                <div class="podio-pontos">{ranking[2]['total_pontos']} pts</div>
-            </div>
-            '''
-            
-            podio_html += '</div>'
-            st.markdown(podio_html, unsafe_allow_html=True)
+            with col3:
+                st.markdown(f'''
+                <div style="background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%); border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-top: 70px;">
+                    <div style="font-size: 2rem; font-weight: bold; margin-bottom: 10px;">🥉</div>
+                    <div style="font-size: 1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 5px;">{ranking[2]['nome']}</div>
+                    <div style="font-size: 1.1rem; font-weight: bold; color: #1E3A5F;">{ranking[2]['total_pontos']} pts</div>
+                </div>
+                ''', unsafe_allow_html=True)
         
         elif len(ranking) > 0:
             # Menos de 3 participantes - mostra o que tem
@@ -1784,7 +1784,7 @@ def page_ranking():
             # Adiciona header de zona de rebaixamento
             if is_rebaixado and posicao == inicio_rebaixamento + 1:
                 ranking_html += f'''
-                <div class="zona-rebaixamento-header">
+                <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: #ffffff; padding: 10px 20px; border-radius: 10px; margin: 15px 0; font-weight: bold; text-align: center;">
                     ⚠️ ZONA DE REBAIXAMENTO ({qtd_rebaixados} {'vaga' if qtd_rebaixados == 1 else 'vagas'})
                 </div>
                 '''
