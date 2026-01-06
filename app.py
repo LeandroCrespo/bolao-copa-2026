@@ -1529,19 +1529,22 @@ def page_ranking():
                 font-size: 2.5rem;
                 font-weight: bold;
                 margin-bottom: 10px;
+                background: transparent !important;
             }
             
             .podio-nome {
                 font-size: 1.1rem;
                 font-weight: 600;
-                color: #1a1a2e;
+                color: #1a1a2e !important;
                 margin-bottom: 5px;
+                background: transparent !important;
             }
             
             .podio-pontos {
                 font-size: 1.3rem;
                 font-weight: bold;
-                color: #1E3A5F;
+                color: #1E3A5F !important;
+                background: transparent !important;
             }
             
             .ranking-row {
@@ -1583,13 +1586,18 @@ def page_ranking():
             }
             
             .zona-rebaixamento-header {
-                background: linear-gradient(90deg, #E63946 0%, #ff6b6b 100%);
-                color: white;
+                background: linear-gradient(90deg, #E63946 0%, #ff6b6b 100%) !important;
+                color: #ffffff !important;
                 padding: 10px 20px;
                 border-radius: 10px;
                 margin: 20px 0 10px 0;
                 text-align: center;
                 font-weight: bold;
+            }
+            
+            .zona-rebaixamento-header * {
+                color: #ffffff !important;
+                background: transparent !important;
             }
         
     /* ========================================
