@@ -349,7 +349,7 @@ def get_ranking(session) -> list:
         pontos_grupos = sum(gp.points_awarded or 0 for gp in group_preds)
         
         podium_pred = session.query(PodiumPrediction).filter_by(user_id=user.id).first()
-        pontos_podio = podium_pred.points_awarded if podium_pred else 0
+        pontos_podio = (podium_pred.points_awarded or 0) if podium_pred else 0
         
         total_pontos = pontos_jogos + pontos_grupos + pontos_podio
         
