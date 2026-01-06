@@ -1757,8 +1757,9 @@ def page_ranking():
         total_participantes = len(ranking)
         inicio_rebaixamento = total_participantes - qtd_rebaixados
         
-        # Mostra ranking do 4º em diante (os 3 primeiros já estão no pódio)
-        ranking_html = ""
+        # Mostra ranking - separado em duas partes (antes e depois da zona de rebaixamento)
+        ranking_html_normal = ""
+        ranking_html_rebaixados = ""
         
         for i, r in enumerate(ranking):
             posicao = i + 1
@@ -1767,14 +1768,6 @@ def page_ranking():
             
             # Verifica se está na zona de rebaixamento
             is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
-            
-            # Adiciona header de zona de rebaixamento
-            if is_rebaixado and posicao == inicio_rebaixamento + 1:
-                ranking_html += f'''
-                <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: #ffffff; padding: 10px 20px; border-radius: 10px; margin: 15px 0; font-weight: bold; text-align: center;">
-                    ⚠️ ZONA DE REBAIXAMENTO ({qtd_rebaixados} {'vaga' if qtd_rebaixados == 1 else 'vagas'})
-                </div>
-                '''
             
             # Classe CSS
             row_class = "ranking-row-rebaixado" if is_rebaixado else ""
@@ -1791,15 +1784,26 @@ def page_ranking():
             else:
                 icone = f"{posicao}º"
             
-            ranking_html += f'''
+            row_html = f'''
             <div class="ranking-row {row_class}">
                 <div class="ranking-posicao">{icone}</div>
                 <div class="ranking-nome">{nome}</div>
                 <div class="ranking-pontos">{pontos} pts</div>
             </div>
             '''
+            
+            if is_rebaixado:
+                ranking_html_rebaixados += row_html
+            else:
+                ranking_html_normal += row_html
         
-        st.markdown(ranking_html, unsafe_allow_html=True)
+        # Renderiza ranking normal
+        st.markdown(ranking_html_normal, unsafe_allow_html=True)
+        
+        # Renderiza zona de rebaixamento (se houver)
+        if qtd_rebaixados > 0 and ranking_html_rebaixados:
+            st.warning(f"⚠️ ZONA DE REBAIXAMENTO ({qtd_rebaixados} {'vaga' if qtd_rebaixados == 1 else 'vagas'})")
+            st.markdown(ranking_html_rebaixados, unsafe_allow_html=True)
         
         # ========================================
         # ESTATÍSTICAS ADICIONAIS
