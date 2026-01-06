@@ -1505,24 +1505,39 @@ def page_ranking():
                 padding: 20px;
                 min-width: 150px;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                background: transparent !important;
             }
             
             .podio-1 {
-                background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+                background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%) !important;
                 height: 200px;
                 order: 2;
             }
             
             .podio-2 {
-                background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%);
+                background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%) !important;
                 height: 160px;
                 order: 1;
             }
             
             .podio-3 {
-                background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%);
+                background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%) !important;
                 height: 130px;
                 order: 3;
+            }
+            
+            /* Forçar cores corretas no pódio */
+            .podio-item.podio-1,
+            .podio-item.podio-2,
+            .podio-item.podio-3 {
+                color: #1a1a2e !important;
+            }
+            
+            .podio-item.podio-1 *,
+            .podio-item.podio-2 *,
+            .podio-item.podio-3 * {
+                background: transparent !important;
+                color: #1a1a2e !important;
             }
             
             .podio-posicao {
