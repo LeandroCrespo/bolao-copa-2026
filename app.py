@@ -1009,6 +1009,18 @@ def page_palpites_jogos():
                         match_id=match.id
                     ).first()
                     
+                    # Mostra indicação de palpite salvo
+                    if pred:
+                        data_salvo = pred.updated_at or pred.created_at
+                        if data_salvo:
+                            # Converter para horário de Brasília
+                            import pytz
+                            tz_brazil = pytz.timezone('America/Sao_Paulo')
+                            if data_salvo.tzinfo is None:
+                                data_salvo = pytz.utc.localize(data_salvo)
+                            data_brazil = data_salvo.astimezone(tz_brazil)
+                            st.success(f"✅ Palpite salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+                    
                     if can_predict:
                         col1, col2 = st.columns(2)
                         with col1:
@@ -1135,6 +1147,17 @@ def page_palpites_grupos():
                         key=f"g{grupo}_2"
                     )
                     
+                    # Mostra indicação de palpite salvo
+                    if pred:
+                        data_salvo = pred.updated_at or pred.created_at
+                        if data_salvo:
+                            import pytz
+                            tz_brazil = pytz.timezone('America/Sao_Paulo')
+                            if data_salvo.tzinfo is None:
+                                data_salvo = pytz.utc.localize(data_salvo)
+                            data_brazil = data_salvo.astimezone(tz_brazil)
+                            st.success(f"✅ Salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+                    
                     if st.form_submit_button("💾 Salvar", disabled=not can_predict):
                         if not can_predict:
                             st.error("⏰ O prazo para palpites já encerrou!")
@@ -1218,6 +1241,17 @@ def page_palpites_podio():
                 disabled=not can_predict,
                 key="podio_terceiro"
             )
+        
+        # Mostra indicação de palpite salvo
+        if pred and (pred.champion_team_id or pred.runner_up_team_id or pred.third_place_team_id):
+            data_salvo = pred.updated_at or pred.created_at
+            if data_salvo:
+                import pytz
+                tz_brazil = pytz.timezone('America/Sao_Paulo')
+                if data_salvo.tzinfo is None:
+                    data_salvo = pytz.utc.localize(data_salvo)
+                data_brazil = data_salvo.astimezone(tz_brazil)
+                st.success(f"✅ Palpite de pódio salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
         
         if can_predict:
             if st.button("💾 Salvar Palpite de Pódio", use_container_width=True):
