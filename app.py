@@ -2670,7 +2670,30 @@ def admin_palpites(session):
         with tabs[0]:
             st.markdown("### Palpites de Jogos")
             
-            matches = session.query(Match).order_by(Match.datetime).limit(20).all()
+            # Filtros de Fase e Grupo
+            col_fase, col_grupo = st.columns(2)
+            with col_fase:
+                fases_opcoes = ["Todas as Fases", "Grupos", "Oitavas32", "Oitavas16", "Quartas", "Semifinal", "Terceiro", "Final"]
+                fase_filter = st.selectbox("Fase", fases_opcoes, key="admin_palpite_fase")
+            with col_grupo:
+                grupos_opcoes = ["Todos os Grupos"] + list(GRUPOS)
+                grupo_filter = st.selectbox("Grupo", grupos_opcoes, key="admin_palpite_grupo")
+            
+            # Query base
+            query = session.query(Match)
+            
+            # Aplicar filtro de fase
+            if fase_filter != "Todas as Fases":
+                query = query.filter(Match.phase == fase_filter)
+            
+            # Aplicar filtro de grupo
+            if grupo_filter != "Todos os Grupos":
+                query = query.filter(Match.group == grupo_filter)
+            
+            matches = query.order_by(Match.datetime).all()
+            
+            if not matches:
+                st.info("Nenhum jogo encontrado com os filtros selecionados.")
             
             for match in matches:
                 team1_display = get_team_display(match.team1, match.team1_code)
