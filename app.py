@@ -717,6 +717,10 @@ def can_predict_match(match):
     if match.status != 'scheduled':
         return False
     now = get_brazil_time().replace(tzinfo=None)
+    # Debug: armazena os valores para exibição
+    match._debug_now = now
+    match._debug_match_dt = match.datetime
+    match._debug_can_predict = now < match.datetime
     return now < match.datetime
 
 def can_predict_podium(session):
@@ -979,6 +983,10 @@ def page_palpites_jogos():
                 with st.expander(f"{status_icon} {format_time(match.datetime)} - {team1_display} vs {team2_display}"):
                     st.markdown(f"**{team1_display}** VS **{team2_display}**")
                     st.markdown(f"📍 {match.city} | {FASES.get(match.phase, match.phase)} - Grupo {match.group or 'N/A'}")
+                    
+                    # Debug de horários (temporário)
+                    if hasattr(match, '_debug_now'):
+                        st.caption(f"🕐 Debug: Agora={match._debug_now.strftime('%d/%m %H:%M:%S')} | Jogo={match._debug_match_dt.strftime('%d/%m %H:%M:%S')} | Pode palpitar={match._debug_can_predict}")
                     
                     # Busca palpite existente
                     pred = session.query(Prediction).filter_by(
