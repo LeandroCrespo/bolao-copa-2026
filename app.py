@@ -748,7 +748,7 @@ def log_action(session, user_id, action, target_user_id=None, details=None):
 def page_login():
     """Página de login e cadastro"""
     # Imagem dos mascotes embutida em base64
-    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrepo/bolao-copa-2026/main/mascotes.png"
+    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
     
     # Imagem dos mascotes
     st.markdown(f'''
@@ -839,7 +839,7 @@ def page_login():
 def page_home():
     """Página inicial com resumo do bolão"""
     # Imagem dos mascotes embutida em base64
-    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrepo/bolao-copa-2026/main/mascotes.png"
+    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
     
     # Imagem dos mascotes (menor na home)
     st.markdown(f'''
@@ -1638,8 +1638,8 @@ def page_ranking():
             podio_html += f'''
             <div class="podio-item podio-2">
                 <div class="podio-posicao">🥈</div>
-                <div class="podio-nome">{ranking[1]['user'].full_name}</div>
-                <div class="podio-pontos">{ranking[1]['total_points']} pts</div>
+                <div class="podio-nome">{ranking[1]['nome']}</div>
+                <div class="podio-pontos">{ranking[1]['total_pontos']} pts</div>
             </div>
             '''
             
@@ -1647,8 +1647,8 @@ def page_ranking():
             podio_html += f'''
             <div class="podio-item podio-1">
                 <div class="podio-posicao">🥇</div>
-                <div class="podio-nome">{ranking[0]['user'].full_name}</div>
-                <div class="podio-pontos">{ranking[0]['total_points']} pts</div>
+                <div class="podio-nome">{ranking[0]['nome']}</div>
+                <div class="podio-pontos">{ranking[0]['total_pontos']} pts</div>
             </div>
             '''
             
@@ -1656,8 +1656,8 @@ def page_ranking():
             podio_html += f'''
             <div class="podio-item podio-3">
                 <div class="podio-posicao">🥉</div>
-                <div class="podio-nome">{ranking[2]['user'].full_name}</div>
-                <div class="podio-pontos">{ranking[2]['total_points']} pts</div>
+                <div class="podio-nome">{ranking[2]['nome']}</div>
+                <div class="podio-pontos">{ranking[2]['total_pontos']} pts</div>
             </div>
             '''
             
@@ -1668,7 +1668,7 @@ def page_ranking():
             # Menos de 3 participantes - mostra o que tem
             for i, r in enumerate(ranking[:3]):
                 medalha = ["🥇", "🥈", "🥉"][i]
-                st.markdown(f"**{medalha} {r['user'].full_name}** - {r['total_points']} pts")
+                st.markdown(f"**{medalha} {r['nome']}** - {r['total_pontos']} pts")
         
         st.divider()
         
@@ -1686,8 +1686,8 @@ def page_ranking():
         
         for i, r in enumerate(ranking):
             posicao = i + 1
-            nome = r['user'].full_name
-            pontos = r['total_points']
+            nome = r['nome']
+            pontos = r['total_pontos']
             
             # Verifica se está na zona de rebaixamento
             is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
@@ -1738,12 +1738,12 @@ def page_ranking():
         
         with col2:
             if ranking:
-                maior_pontuacao = max(r['total_points'] for r in ranking)
+                maior_pontuacao = max(r['total_pontos'] for r in ranking)
                 st.metric("🏆 Maior Pontuação", f"{maior_pontuacao} pts")
         
         with col3:
             if ranking:
-                media = sum(r['total_points'] for r in ranking) / len(ranking)
+                media = sum(r['total_pontos'] for r in ranking) / len(ranking)
                 st.metric("📊 Média", f"{media:.1f} pts")
         
         with col4:
