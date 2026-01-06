@@ -1,8 +1,19 @@
 """
 Funções para calcular classificação dos grupos
+Versão corrigida para incluir times da repescagem (placeholders)
 """
 from sqlalchemy.orm import Session
 from models import Match, Team, Prediction
+
+
+class PlaceholderTeam:
+    """Classe para representar times placeholder (repescagem)"""
+    def __init__(self, code):
+        self.id = f"placeholder_{code}"
+        self.code = code
+        self.name = code  # Nome é o próprio código (EUR_A, EUR_B, etc.)
+        self.flag = "🏳️"  # Bandeira genérica
+
 
 def calculate_group_standings(session: Session, group: str, matches_results: dict = None, is_prediction: bool = False):
     """
@@ -30,13 +41,30 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
     teams_stats = {}
     
     for match in matches:
-        if not match.team1_id or not match.team2_id:
-            continue
+        # Determina time 1 (pode ser real ou placeholder)
+        if match.team1_id:
+            team1_key = match.team1_id
+            team1_obj = match.team1
+        elif match.team1_code:
+            team1_key = f"placeholder_{match.team1_code}"
+            team1_obj = PlaceholderTeam(match.team1_code)
+        else:
+            continue  # Sem time definido
+        
+        # Determina time 2 (pode ser real ou placeholder)
+        if match.team2_id:
+            team2_key = match.team2_id
+            team2_obj = match.team2
+        elif match.team2_code:
+            team2_key = f"placeholder_{match.team2_code}"
+            team2_obj = PlaceholderTeam(match.team2_code)
+        else:
+            continue  # Sem time definido
             
         # Inicializa times se necessário
-        if match.team1_id not in teams_stats:
-            teams_stats[match.team1_id] = {
-                'team': match.team1,
+        if team1_key not in teams_stats:
+            teams_stats[team1_key] = {
+                'team': team1_obj,
                 'points': 0,
                 'played': 0,
                 'wins': 0,
@@ -47,9 +75,9 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
                 'goal_difference': 0
             }
         
-        if match.team2_id not in teams_stats:
-            teams_stats[match.team2_id] = {
-                'team': match.team2,
+        if team2_key not in teams_stats:
+            teams_stats[team2_key] = {
+                'team': team2_obj,
                 'points': 0,
                 'played': 0,
                 'wins': 0,
@@ -69,33 +97,33 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
             continue  # Jogo sem resultado ainda
         
         # Atualiza estatísticas
-        teams_stats[match.team1_id]['played'] += 1
-        teams_stats[match.team2_id]['played'] += 1
-        teams_stats[match.team1_id]['goals_for'] += gols1
-        teams_stats[match.team1_id]['goals_against'] += gols2
-        teams_stats[match.team2_id]['goals_for'] += gols2
-        teams_stats[match.team2_id]['goals_against'] += gols1
+        teams_stats[team1_key]['played'] += 1
+        teams_stats[team2_key]['played'] += 1
+        teams_stats[team1_key]['goals_for'] += gols1
+        teams_stats[team1_key]['goals_against'] += gols2
+        teams_stats[team2_key]['goals_for'] += gols2
+        teams_stats[team2_key]['goals_against'] += gols1
         
         if gols1 > gols2:
             # Time 1 venceu
-            teams_stats[match.team1_id]['points'] += 3
-            teams_stats[match.team1_id]['wins'] += 1
-            teams_stats[match.team2_id]['losses'] += 1
+            teams_stats[team1_key]['points'] += 3
+            teams_stats[team1_key]['wins'] += 1
+            teams_stats[team2_key]['losses'] += 1
         elif gols2 > gols1:
             # Time 2 venceu
-            teams_stats[match.team2_id]['points'] += 3
-            teams_stats[match.team2_id]['wins'] += 1
-            teams_stats[match.team1_id]['losses'] += 1
+            teams_stats[team2_key]['points'] += 3
+            teams_stats[team2_key]['wins'] += 1
+            teams_stats[team1_key]['losses'] += 1
         else:
             # Empate
-            teams_stats[match.team1_id]['points'] += 1
-            teams_stats[match.team1_id]['draws'] += 1
-            teams_stats[match.team2_id]['points'] += 1
-            teams_stats[match.team2_id]['draws'] += 1
+            teams_stats[team1_key]['points'] += 1
+            teams_stats[team1_key]['draws'] += 1
+            teams_stats[team2_key]['points'] += 1
+            teams_stats[team2_key]['draws'] += 1
     
     # Calcula saldo de gols
-    for team_id in teams_stats:
-        teams_stats[team_id]['goal_difference'] = teams_stats[team_id]['goals_for'] - teams_stats[team_id]['goals_against']
+    for team_key in teams_stats:
+        teams_stats[team_key]['goal_difference'] = teams_stats[team_key]['goals_for'] - teams_stats[team_key]['goals_against']
     
     # Ordena por: pontos, saldo de gols, gols marcados
     standings = sorted(
