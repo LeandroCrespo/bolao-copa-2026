@@ -1037,11 +1037,18 @@ def page_palpites_jogos():
 def page_palpites_grupos():
     """Página para fazer palpites de classificação dos grupos"""
     st.markdown("## 🏅 Palpites de Classificação dos Grupos")
-    st.info("Escolha quem será o 1º e 2º colocado de cada grupo")
     
     session = get_session(engine)
     
     try:
+        # Verifica se ainda pode fazer palpites (usa mesma lógica do pódio)
+        can_predict = can_predict_podium(session)
+        
+        if can_predict:
+            st.info("Escolha quem será o 1º e 2º colocado de cada grupo")
+        else:
+            st.warning("⏰ O prazo para palpites de grupos já encerrou! A Copa já começou.")
+        
         teams = session.query(Team).order_by(Team.name).all()
         
         # Organiza em colunas de 3
@@ -1105,8 +1112,10 @@ def page_palpites_grupos():
                         key=f"g{grupo}_2"
                     )
                     
-                    if st.form_submit_button("💾 Salvar"):
-                        if primeiro and segundo and primeiro != segundo:
+                    if st.form_submit_button("💾 Salvar", disabled=not can_predict):
+                        if not can_predict:
+                            st.error("⏰ O prazo para palpites já encerrou!")
+                        elif primeiro and segundo and primeiro != segundo:
                             if pred:
                                 pred.first_place_team_id = primeiro
                                 pred.second_place_team_id = segundo
