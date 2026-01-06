@@ -1473,7 +1473,7 @@ def page_ranking():
         # Configuração de rebaixamento (apenas admin vê)
         qtd_rebaixados = int(get_config_value(session, 'qtd_rebaixados', '2'))
         
-        if st.session_state.user.get('is_admin'):
+        if st.session_state.user.get('role') == 'admin':
             with st.expander("⚙️ Configurar Zona de Rebaixamento"):
                 nova_qtd = st.number_input(
                     "Quantidade de rebaixados:",
