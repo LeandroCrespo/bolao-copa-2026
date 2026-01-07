@@ -377,12 +377,13 @@ def get_ranking(session) -> list:
     
     Critérios de desempate (em ordem):
     1. Maior pontuação total
-    2. Mais acertos de placares exatos
-    3. Mais acertos de resultado + gols de uma equipe
-    4. Mais acertos de resultado sem gols
-    5. Mais acertos de gols de uma equipe
-    6. Menos palpites zerados
-    7. Ordem de inscrição (ID menor = inscrito primeiro)
+    2. Maior número de placares exatos (20 pts)
+    3. Maior número de acerto de Vencedores com gols corretos (15 pts)
+    4. Maior número de acerto de Vencedores (10 pts)
+    5. Maior número de acerto de classificados no grupo
+    6. Maior número de acerto de gols de um time (5 pts)
+    7. Menos palpites zerados
+    8. Ordem de inscrição (quem se inscreveu primeiro)
     
     IMPORTANTE: Só considera pontos de jogos que JÁ COMEÇARAM (horário passou)
     """
@@ -456,11 +457,17 @@ def get_ranking(session) -> list:
         # Pontos de grupos - só conta se o grupo tem resultado salvo
         group_preds = session.query(GroupPrediction).filter_by(user_id=user.id).all()
         pontos_grupos = 0
+        grupos_corretos = 0  # Conta quantos classificados acertou
         for gp in group_preds:
             # Verifica se o grupo tem resultado salvo
             group_result = session.query(GroupResult).filter_by(group_name=gp.group_name).first()
             if group_result and group_result.first_place_team_id and group_result.second_place_team_id:
                 pontos_grupos += gp.points_awarded or 0
+                # Conta acertos de classificados
+                if gp.first_place_team_id == group_result.first_place_team_id:
+                    grupos_corretos += 1
+                if gp.second_place_team_id == group_result.second_place_team_id:
+                    grupos_corretos += 1
         
         # Pontos de pódio - só conta se o pódio foi definido
         podium_pred = session.query(PodiumPrediction).filter_by(user_id=user.id).first()
@@ -482,19 +489,30 @@ def get_ranking(session) -> list:
             'resultado': resultado,
             'gols': gols,
             'zeros': zeros,
+            'grupos_corretos': grupos_corretos,
             'resultados_corretos': placares_exatos + resultado_gols + resultado,
             'created_at': user.created_at
         })
     
     # Ordena pelo critério de desempate completo
+    # Ordem definida pelo usuário:
+    # 1. Maior pontuação total
+    # 2. Maior número de placares exatos (20 pts)
+    # 3. Maior número de acerto de Vencedores com gols corretos (15 pts)
+    # 4. Maior número de acerto de Vencedores (10 pts)
+    # 5. Maior número de acerto de classificados no grupo
+    # 6. Maior número de acerto de gols de um time (5 pts)
+    # 7. Menos palpites zerados
+    # 8. Ordem de inscrição (quem se inscreveu primeiro)
     ranking.sort(key=lambda x: (
-        -x['total_pontos'],              # 1. Maior pontuação total
-        -x['placares_exatos'],     # 2. Mais placares exatos
-        -x['resultado_gols'],      # 3. Mais resultado + gols
-        -x['resultado'],           # 4. Mais resultado sem gols
-        -x['gols'],                # 5. Mais gols de um time
-        x['zeros'],                # 6. Menos zeros
-        x['user_id']               # 7. Ordem de inscrição
+        -x['total_pontos'],        # 1. Maior pontuação total
+        -x['placares_exatos'],     # 2. Mais placares exatos (20 pts)
+        -x['resultado_gols'],      # 3. Mais resultado + gols (15 pts)
+        -x['resultado'],           # 4. Mais resultado sem gols (10 pts)
+        -x['grupos_corretos'],     # 5. Mais acertos de classificados no grupo
+        -x['gols'],                # 6. Mais gols de um time (5 pts)
+        x['zeros'],                # 7. Menos zeros
+        x['user_id']               # 8. Ordem de inscrição
     ))
     
     # Adiciona posição

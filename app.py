@@ -2413,6 +2413,57 @@ def admin_grupos(session):
     st.subheader("🏅 Classificados dos Grupos")
     st.info("Defina os classificados de cada grupo após o término da fase de grupos")
     
+    # Botão para preencher automaticamente todos os grupos
+    from group_standings import get_official_group_standings
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if st.button("🤖 Preencher Todos Automaticamente", help="Preenche todos os grupos com base nos resultados dos jogos"):
+            grupos_preenchidos = 0
+            for grupo in GRUPOS:
+                standings = get_official_group_standings(session, grupo)
+                if standings and len(standings) >= 2:
+                    result = session.query(GroupResult).filter_by(group_name=grupo).first()
+                    if result:
+                        result.first_place_team_id = standings[0]['team'].id
+                        result.second_place_team_id = standings[1]['team'].id
+                    else:
+                        result = GroupResult(
+                            group_name=grupo,
+                            first_place_team_id=standings[0]['team'].id,
+                            second_place_team_id=standings[1]['team'].id
+                        )
+                        session.add(result)
+                    
+                    session.commit()
+                    process_group_predictions(session, grupo)
+                    grupos_preenchidos += 1
+            
+            if grupos_preenchidos > 0:
+                st.success(f"✅ {grupos_preenchidos} grupos preenchidos automaticamente!")
+                log_action(session, st.session_state.user['id'], 'grupos_auto', details=f"{grupos_preenchidos} grupos")
+                st.rerun()
+            else:
+                st.warning("⚠️ Nenhum grupo tem resultados suficientes para preencher automaticamente.")
+    
+    with col2:
+        if st.button("🗑️ Apagar Todos os Grupos", type="secondary"):
+            # Zera pontos de todos os palpites de grupo
+            all_group_preds = session.query(GroupPrediction).all()
+            for gp in all_group_preds:
+                gp.points_awarded = 0
+                gp.breakdown = None
+            
+            # Remove todos os resultados de grupo
+            session.query(GroupResult).delete()
+            session.commit()
+            
+            st.success("✅ Todos os resultados de grupos apagados!")
+            log_action(session, st.session_state.user['id'], 'grupos_apagados_todos')
+            st.rerun()
+    
+    st.divider()
+    
     teams = session.query(Team).order_by(Team.name).all()
     
     for grupo in GRUPOS:
