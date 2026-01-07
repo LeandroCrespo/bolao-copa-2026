@@ -3555,6 +3555,181 @@ def page_resumo_diario():
 
 
 # =============================================================================
+# PÁGINA DE RESULTADOS POR GRUPO
+# =============================================================================
+def page_resultados_grupos():
+    """
+    Página que mostra os resultados dos jogos e classificação por grupo.
+    Atualiza em tempo real conforme os resultados são lançados.
+    """
+    from group_standings import get_official_group_standings
+    
+    st.header("🏆 Resultados por Grupo")
+    st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
+    
+    with get_session() as session:
+        # Seletor de grupo
+        grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        
+        # Opção para ver todos os grupos ou selecionar um
+        view_mode = st.radio(
+            "Visualização:",
+            ["Todos os Grupos", "Selecionar Grupo"],
+            horizontal=True
+        )
+        
+        if view_mode == "Selecionar Grupo":
+            grupo_selecionado = st.selectbox(
+                "Selecione o Grupo:",
+                grupos,
+                format_func=lambda x: f"Grupo {x}"
+            )
+            grupos_para_mostrar = [grupo_selecionado]
+        else:
+            grupos_para_mostrar = grupos
+        
+        st.divider()
+        
+        # Mostra cada grupo
+        for grupo in grupos_para_mostrar:
+            with st.expander(f"🏅 Grupo {grupo}", expanded=(view_mode == "Selecionar Grupo")):
+                # Busca classificação do grupo
+                standings = get_official_group_standings(session, grupo)
+                
+                # Busca jogos do grupo
+                jogos_grupo = session.query(Match).filter(
+                    Match.group == grupo,
+                    Match.phase == 'Fase de Grupos'
+                ).order_by(Match.datetime).all()
+                
+                if not jogos_grupo:
+                    # Tenta com 'Grupos' ao invés de 'Fase de Grupos'
+                    jogos_grupo = session.query(Match).filter(
+                        Match.group == grupo,
+                        Match.phase == 'Grupos'
+                    ).order_by(Match.datetime).all()
+                
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    st.markdown("#### 📊 Classificação")
+                    
+                    if standings:
+                        # Cria tabela de classificação
+                        table_data = []
+                        for i, team_stats in enumerate(standings, 1):
+                            team = team_stats['team']
+                            
+                            # Determina nome e bandeira
+                            if hasattr(team, 'flag') and team.flag:
+                                flag = team.flag
+                            else:
+                                flag = "🏳️"
+                            
+                            if hasattr(team, 'name') and team.name:
+                                name = team.name
+                            elif hasattr(team, 'code'):
+                                name = team.code
+                            else:
+                                name = "TBD"
+                            
+                            # Destaque para classificados
+                            if i <= 2:
+                                pos_icon = "🟢" if i == 1 else "🟡"
+                            else:
+                                pos_icon = ""
+                            
+                            table_data.append({
+                                "Pos": f"{pos_icon} {i}º",
+                                "Seleção": f"{flag} {name}",
+                                "P": team_stats['points'],
+                                "J": team_stats['played'],
+                                "V": team_stats['wins'],
+                                "E": team_stats['draws'],
+                                "D": team_stats['losses'],
+                                "GP": team_stats['goals_for'],
+                                "GC": team_stats['goals_against'],
+                                "SG": team_stats['goal_difference']
+                            })
+                        
+                        df = pd.DataFrame(table_data)
+                        st.dataframe(
+                            df,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "Pos": st.column_config.TextColumn("Pos", width="small"),
+                                "Seleção": st.column_config.TextColumn("Seleção", width="medium"),
+                                "P": st.column_config.NumberColumn("Pts", width="small"),
+                                "J": st.column_config.NumberColumn("J", width="small"),
+                                "V": st.column_config.NumberColumn("V", width="small"),
+                                "E": st.column_config.NumberColumn("E", width="small"),
+                                "D": st.column_config.NumberColumn("D", width="small"),
+                                "GP": st.column_config.NumberColumn("GP", width="small"),
+                                "GC": st.column_config.NumberColumn("GC", width="small"),
+                                "SG": st.column_config.NumberColumn("SG", width="small")
+                            }
+                        )
+                        
+                        st.caption("🟢 1º lugar | 🟡 2º lugar | P=Pontos | J=Jogos | V=Vitórias | E=Empates | D=Derrotas | GP=Gols Pró | GC=Gols Contra | SG=Saldo")
+                    else:
+                        st.info("Nenhum resultado lançado ainda para este grupo.")
+                
+                with col2:
+                    st.markdown("#### ⚽ Jogos")
+                    
+                    if jogos_grupo:
+                        for jogo in jogos_grupo:
+                            # Determina times
+                            if jogo.team1:
+                                team1_name = f"{jogo.team1.flag} {jogo.team1.name}"
+                            elif jogo.team1_code:
+                                team1_name = f"🏳️ {jogo.team1_code}"
+                            else:
+                                team1_name = "TBD"
+                            
+                            if jogo.team2:
+                                team2_name = f"{jogo.team2.flag} {jogo.team2.name}"
+                            elif jogo.team2_code:
+                                team2_name = f"🏳️ {jogo.team2_code}"
+                            else:
+                                team2_name = "TBD"
+                            
+                            # Formata data
+                            data_jogo = jogo.datetime.strftime("%d/%m %H:%M") if jogo.datetime else "TBD"
+                            
+                            # Determina placar e status
+                            if jogo.status == 'finished':
+                                placar = f"**{jogo.team1_score}** x **{jogo.team2_score}**"
+                                status_icon = "✅"
+                            elif jogo.team1_score is not None and jogo.team2_score is not None:
+                                placar = f"**{jogo.team1_score}** x **{jogo.team2_score}**"
+                                status_icon = "🔴"
+                            else:
+                                placar = "vs"
+                                status_icon = "⏰"
+                            
+                            st.markdown(
+                                f"{status_icon} {team1_name} {placar} {team2_name}  \n"
+                                f"<small style='color: gray;'>{data_jogo}</small>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.info("Nenhum jogo encontrado para este grupo.")
+        
+        # Legenda
+        st.divider()
+        st.markdown("""
+        **Legenda:**
+        - ✅ Jogo finalizado
+        - 🔴 Jogo em andamento
+        - ⏰ Jogo agendado
+        - 🟢 Classificado em 1º lugar
+        - 🟡 Classificado em 2º lugar
+        """)
+
+
+# =============================================================================
 # NAVEGAÇÃO PRINCIPAL
 # =============================================================================
 def main():
@@ -3577,6 +3752,7 @@ def main():
                 menu_options = {
                     "🏠 Início": "home",
                     "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
+                    "🏆 Resultados por Grupo": "resultados_grupos",
                     "📊 Ranking": "ranking",
                     "📄 Resumo Diário": "resumo_diario",
                     "📈 Estatísticas": "estatisticas",
@@ -3591,6 +3767,7 @@ def main():
                     "🏅 Palpites - Grupos": "palpites_grupos",
                     "🏆 Palpites - Pódio": "palpites_podio",
                     "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
+                    "🏆 Resultados por Grupo": "resultados_grupos",
                     "📊 Ranking": "ranking",
                     "💡 Dicas": "dicas",
                     "📈 Estatísticas": "estatisticas",
@@ -3616,6 +3793,7 @@ def main():
             "palpites_grupos": page_palpites_grupos,
             "palpites_podio": page_palpites_podio,
             "visualizacao_ao_vivo": page_visualizacao_ao_vivo,
+            "resultados_grupos": page_resultados_grupos,
             "ranking": page_ranking,
             "resumo_diario": page_resumo_diario,
             "dicas": page_dicas,
