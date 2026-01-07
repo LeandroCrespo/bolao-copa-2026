@@ -327,23 +327,38 @@ def get_ranking(session) -> list:
     5. Mais acertos de gols de uma equipe
     6. Menos palpites zerados
     7. Ordem de inscrição (ID menor = inscrito primeiro)
+    
+    IMPORTANTE: Só considera pontos de jogos que JÁ COMEÇARAM (horário passou)
     """
+    from datetime import datetime
+    import pytz
+    
     users = session.query(User).filter_by(active=True).filter(User.role != 'admin').all()
+    
+    # Pega horário atual (UTC para comparar com banco)
+    now_utc = datetime.now(pytz.UTC)
+    
+    # Pega IDs de jogos que já começaram (horário passou)
+    started_matches = session.query(Match.id).filter(Match.datetime <= now_utc).all()
+    started_match_ids = {m.id for m in started_matches}
     
     ranking = []
     
     for user in users:
         predictions = session.query(Prediction).filter_by(user_id=user.id).all()
         
-        # Conta tipos de acertos
-        placares_exatos = sum(1 for p in predictions if p.points_type == 'placar_exato')
-        resultado_gols = sum(1 for p in predictions if p.points_type == 'resultado_gols')
-        resultado = sum(1 for p in predictions if p.points_type == 'resultado')
-        gols = sum(1 for p in predictions if p.points_type == 'gols')
-        zeros = sum(1 for p in predictions if p.points_type == 'nenhum')
+        # FILTRA: Só considera palpites de jogos que JÁ COMEÇARAM
+        started_predictions = [p for p in predictions if p.match_id in started_match_ids]
         
-        # Calcula pontos
-        pontos_jogos = sum(p.points_awarded or 0 for p in predictions)
+        # Conta tipos de acertos (só de jogos que já começaram)
+        placares_exatos = sum(1 for p in started_predictions if p.points_type == 'placar_exato')
+        resultado_gols = sum(1 for p in started_predictions if p.points_type == 'resultado_gols')
+        resultado = sum(1 for p in started_predictions if p.points_type == 'resultado')
+        gols = sum(1 for p in started_predictions if p.points_type == 'gols')
+        zeros = sum(1 for p in started_predictions if p.points_type == 'nenhum')
+        
+        # Calcula pontos (só de jogos que já começaram)
+        pontos_jogos = sum(p.points_awarded or 0 for p in started_predictions)
         
         group_preds = session.query(GroupPrediction).filter_by(user_id=user.id).all()
         pontos_grupos = sum(gp.points_awarded or 0 for gp in group_preds)
