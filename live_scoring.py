@@ -172,32 +172,28 @@ def get_ongoing_matches(session) -> list:
     
     # Timezone do Brasil
     brazil_tz = pytz.timezone('America/Sao_Paulo')
-    now = datetime.now(brazil_tz)
+    now_br = datetime.now(brazil_tz)
+    now_naive = now_br.replace(tzinfo=None)  # Para comparar com banco (naive)
     
-    # Início e fim do dia atual (meia-noite a meia-noite)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Início e fim do dia atual (meia-noite a meia-noite) - naive
+    today_start = now_naive.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     
-    # Converte para UTC para comparar com banco
-    today_start_utc = today_start.astimezone(pytz.UTC)
-    today_end_utc = today_end.astimezone(pytz.UTC)
-    
-    # Pega apenas jogos do dia atual que já começaram
+    # Pega jogos do dia atual que já começaram (comparação naive)
     matches = session.query(Match).filter(
-        Match.datetime >= today_start_utc,
-        Match.datetime < today_end_utc,
-        Match.datetime <= now.astimezone(pytz.UTC)  # Já começou
+        Match.datetime >= today_start,
+        Match.datetime < today_end,
+        Match.datetime <= now_naive  # Já começou
     ).order_by(Match.datetime.desc()).all()
     
     result = []
     
     for match in matches:
-        # Converte datetime para timezone do Brasil
-        match_time_utc = match.datetime.replace(tzinfo=pytz.UTC)
-        match_time_br = match_time_utc.astimezone(brazil_tz)
+        # Datetime do jogo (naive, assume horário de Brasília)
+        match_time = match.datetime
         
-        # Determina se o jogo está em andamento
-        time_since_start = now - match_time_br
+        # Calcula tempo desde o início
+        time_since_start = now_naive - match_time
         
         # Jogo em andamento: começou há menos de 2 horas e não está finalizado
         is_live = (
@@ -216,7 +212,7 @@ def get_ongoing_matches(session) -> list:
             'team2': match.get_team2_display(),
             'team1_score': match.team1_score,
             'team2_score': match.team2_score,
-            'datetime': match_time_br,
+            'datetime': match_time,
             'phase': match.phase,
             'group': match.group,
             'status': match.status,
