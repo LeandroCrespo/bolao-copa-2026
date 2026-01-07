@@ -80,6 +80,136 @@ st.set_page_config(
 st.markdown("""
 <style>
     /* ========================================
+       HEADER FIXO COM LOGO DO BOLÃO
+       ======================================== */
+    
+    .fixed-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: linear-gradient(135deg, #1E3A5F 0%, #2A398D 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 999;
+        box-shadow: 0 2px 15px rgba(0,0,0,0.2);
+        padding: 0 20px;
+    }
+    
+    .fixed-header-content {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .fixed-header-logo {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .fixed-header-title {
+        color: #ffffff !important;
+        font-size: 1.3rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        margin: 0;
+    }
+    
+    .fixed-header-subtitle {
+        color: #FFD700 !important;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 2px;
+    }
+    
+    /* Ajusta o conteúdo principal para não ficar atrás do header */
+    .main .block-container {
+        padding-top: 80px !important;
+    }
+    
+    /* ========================================
+       ANIMAÇÕES SUTIS NAS TRANSIÇÕES
+       ======================================== */
+    
+    /* Animação de fade-in para o conteúdo principal */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideInLeft {
+        from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    
+    /* Aplica animações aos elementos */
+    .main .block-container > div {
+        animation: fadeInUp 0.5s ease-out;
+    }
+    
+    .stMetric {
+        animation: fadeIn 0.6s ease-out;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .stMetric:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    /* Cards com animação */
+    .element-container {
+        transition: all 0.3s ease;
+    }
+    
+    /* Botões com animação de pulse no hover */
+    .stButton > button:hover {
+        animation: pulse 0.5s ease-in-out;
+    }
+    
+    /* Expanders com transição suave */
+    .streamlit-expanderHeader {
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+    }
+    
+    /* Tabelas com animação de linha */
+    .stDataFrame tbody tr {
+        transition: background-color 0.2s ease;
+    }
+    
+    .stDataFrame tbody tr:hover {
+        background-color: rgba(52, 152, 219, 0.1) !important;
+    }
+    
+    /* ========================================
        CORES DAS FONTES - CONTRASTE GARANTIDO
        ======================================== */
     
@@ -167,46 +297,29 @@ st.markdown("""
     }
     
     [data-testid="stSidebar"] .stButton > button {
-        background: linear-gradient(135deg, #3498db 0%, #2575fc 50%, #1e88e5 100%) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
         color: #ffffff !important;
-        border: none;
-        border-radius: 12px;
-        padding: 0.7rem 1.2rem;
-        font-weight: 600;
-        font-size: 0.95rem;
-        letter-spacing: 0.3px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3),
-                    0 2px 4px rgba(0, 0, 0, 0.1);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    [data-testid="stSidebar"] .stButton > button::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-        transition: left 0.5s ease;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        font-size: 0.9rem;
+        letter-spacing: 0.2px;
+        transition: all 0.25s ease;
+        backdrop-filter: blur(10px);
+        text-align: left !important;
     }
     
     [data-testid="stSidebar"] .stButton > button:hover {
-        background: linear-gradient(135deg, #2980b9 0%, #1e5799 50%, #1565c0 100%) !important;
-        transform: translateY(-3px) scale(1.02);
-        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4),
-                    0 4px 10px rgba(0, 0, 0, 0.15);
-    }
-    
-    [data-testid="stSidebar"] .stButton > button:hover::before {
-        left: 100%;
+        background: rgba(52, 152, 219, 0.3) !important;
+        border-color: rgba(52, 152, 219, 0.5) !important;
+        transform: translateX(5px);
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.2);
     }
     
     [data-testid="stSidebar"] .stButton > button:active {
-        transform: translateY(-1px) scale(0.98);
-        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.3);
+        background: rgba(52, 152, 219, 0.4) !important;
+        transform: translateX(3px);
     }
     
     /* Ícone de colapsar sidebar (<<) - BRANCO */
@@ -773,6 +886,20 @@ st.markdown("""
 
 </style>
 """, unsafe_allow_html=True)
+
+# Header fixo com logo do bolão
+LOGO_URL = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png"
+st.markdown(f'''
+<div class="fixed-header">
+    <div class="fixed-header-content">
+        <img src="{LOGO_URL}" class="fixed-header-logo" alt="Logo Copa 2026">
+        <div>
+            <div class="fixed-header-title">⚽ Bolão Copa 2026</div>
+            <div class="fixed-header-subtitle">#WeAre26</div>
+        </div>
+    </div>
+</div>
+''', unsafe_allow_html=True)
 
 # =============================================================================
 # CONSTANTES
@@ -4057,6 +4184,51 @@ def page_resultados_grupos():
 # =============================================================================
 # NAVEGAÇÃO PRINCIPAL
 # =============================================================================
+
+def get_notification_badges(session, user_id):
+    """Retorna contagem de notificações para badges no menu"""
+    from datetime import datetime
+    badges = {}
+    
+    try:
+        now = get_brazil_time().replace(tzinfo=None)
+        
+        # Jogos em andamento (ao vivo)
+        jogos_ao_vivo = session.query(Match).filter(
+            Match.status == 'in_progress'
+        ).count()
+        
+        # Jogos que começaram nas últimas 24h (novos resultados)
+        from datetime import timedelta
+        ontem = now - timedelta(hours=24)
+        jogos_recentes = session.query(Match).filter(
+            Match.status == 'finished',
+            Match.datetime >= ontem
+        ).count()
+        
+        # Palpites pendentes (jogos futuros sem palpite)
+        jogos_futuros = session.query(Match).filter(
+            Match.datetime > now,
+            Match.status == 'scheduled'
+        ).all()
+        
+        palpites_feitos = session.query(Prediction).filter(
+            Prediction.user_id == user_id
+        ).count()
+        
+        palpites_pendentes = len(jogos_futuros) - palpites_feitos
+        if palpites_pendentes < 0:
+            palpites_pendentes = 0
+        
+        badges['ao_vivo'] = jogos_ao_vivo
+        badges['novos_resultados'] = jogos_recentes
+        badges['palpites_pendentes'] = min(palpites_pendentes, 99)  # Max 99
+        
+    except Exception:
+        badges = {'ao_vivo': 0, 'novos_resultados': 0, 'palpites_pendentes': 0}
+    
+    return badges
+
 def main():
     """Função principal do aplicativo"""
     
@@ -4070,6 +4242,10 @@ def main():
         with st.sidebar:
             st.markdown(f"### 👋 Olá, {st.session_state.user['name']}!")
             st.divider()
+            
+            # Busca badges de notificação
+            with get_session(engine) as session:
+                badges = get_notification_badges(session, st.session_state.user['id'])
             
             # Menu de navegação - diferente para admin e participantes
             if st.session_state.user['role'] == 'admin':
@@ -4086,12 +4262,16 @@ def main():
                 }
             else:
                 # Participantes veem todas as opções de palpites
+                # Adiciona badges dinâmicos
+                palpites_badge = f" 🔴{badges['palpites_pendentes']}" if badges['palpites_pendentes'] > 0 else ""
+                ao_vivo_badge = " 🔴 AO VIVO" if badges['ao_vivo'] > 0 else ""
+                
                 menu_options = {
                     "🏠 Início": "home",
-                    "📝 Palpites - Jogos": "palpites_jogos",
+                    f"📝 Palpites - Jogos{palpites_badge}": "palpites_jogos",
                     "🏅 Palpites - Grupos": "palpites_grupos",
                     "🏆 Palpites - Pódio": "palpites_podio",
-                    "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
+                    f"📺 Visualização ao Vivo{ao_vivo_badge}": "visualizacao_ao_vivo",
                     "🏆 Resultados por Grupo": "resultados_grupos",
                     "📊 Ranking": "ranking",
                     "💡 Dicas": "dicas",
