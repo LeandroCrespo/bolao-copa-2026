@@ -2963,12 +2963,13 @@ def page_visualizacao_ao_vivo():
             key="select_match_live"
         )
         
-        # CSS específico para este selectbox
+        # CSS específico para esta página
         st.markdown("""
         <style>
             /* Corrige texto do selectbox na visualização ao vivo */
             div[data-testid="stSelectbox"] div[data-baseweb="select"] {
                 background-color: #ffffff !important;
+                border: 1px solid #ccc !important;
             }
             div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
                 background-color: #ffffff !important;
@@ -2977,6 +2978,21 @@ def page_visualizacao_ao_vivo():
             div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
                 color: #1a1a2e !important;
             }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+                color: #1a1a2e !important;
+            }
+            
+            /* Corrige fundo da tabela de palpites */
+            .live-table {
+                background-color: #ffffff !important;
+            }
+            .live-table td {
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            .live-table tr {
+                background-color: #ffffff !important;
+            }
         </style>
         """, unsafe_allow_html=True)
         
@@ -2984,43 +3000,89 @@ def page_visualizacao_ao_vivo():
         
         # Se selecionou "Todos os jogos"
         if selected_match_id == 0:
-            st.subheader("🎯 Todos os Jogos em Andamento")
+            st.subheader("🎯 Jogos em Andamento")
             
-            for selected_match in started_matches:
-                st.markdown(f"### 🎮 Jogo {selected_match['match_number']}: {selected_match['team1']} vs {selected_match['team2']}")
+            # Lista de jogos em andamento
+            st.markdown("**⚽ Jogos:**")
+            for match in started_matches:
+                score = f"{match['team1_score']} x {match['team2_score']}" if match['team1_score'] is not None else "- x -"
+                status_icon = "🔴" if match['is_live'] else "✅"
+                st.markdown(f"{status_icon} **Jogo {match['match_number']}:** {match['team1']} **{score}** {match['team2']}")
+            
+            st.divider()
+            
+            # Calcula soma total de pontos por participante em todos os jogos
+            st.subheader("🏆 Pontuação Total (Jogos em Andamento)")
+            
+            # Dicionário para somar pontos de cada usuário
+            total_points_by_user = {}
+            
+            for match in started_matches:
+                predictions = get_live_match_predictions(session, match['id'])
+                for pred in predictions:
+                    user_name = pred['user_name']
+                    if user_name not in total_points_by_user:
+                        total_points_by_user[user_name] = {'points': 0, 'user_id': pred['user_id']}
+                    total_points_by_user[user_name]['points'] += pred['points']
+            
+            # Ordena por pontos (maior primeiro)
+            sorted_users = sorted(total_points_by_user.items(), key=lambda x: x[1]['points'], reverse=True)
+            
+            # Mostra tabela de pontuação total
+            if sorted_users:
+                # Calcula ranking ao vivo para variação
+                live_ranking = calculate_live_ranking(session, started_matches[0]['id'] if started_matches else None)
+                variacao_map = {user['user_id']: user for user in live_ranking}
                 
-                # Mostra placar
-                col1, col2, col3 = st.columns([2, 1, 2])
+                # Pega informações de pódio e rebaixamento
+                zone_info = get_podium_zone_info(session)
+                total_users = len(live_ranking)
+                rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
                 
-                with col1:
-                    st.markdown(f"**{selected_match['team1']}**")
+                st.markdown("""  
+                | Pos | Participante | Pontos | Variação | Status |
+                |-----|--------------|--------|----------|--------|
+                """)
                 
-                with col2:
-                    if selected_match['team1_score'] is not None and selected_match['team2_score'] is not None:
-                        st.markdown(f"**<center>{selected_match['team1_score']} x {selected_match['team2_score']}</center>**", unsafe_allow_html=True)
+                for i, (user_name, data) in enumerate(sorted_users):
+                    pos = i + 1
+                    points = data['points']
+                    user_id = data['user_id']
+                    
+                    # Variação de posição
+                    user_rank = variacao_map.get(user_id, {})
+                    variacao = user_rank.get('variacao', 0)
+                    posicao_atual = user_rank.get('posicao_atual', pos)
+                    
+                    if variacao > 0:
+                        var_text = f"⬆️ +{variacao}"
+                    elif variacao < 0:
+                        var_text = f"⬇️ {variacao}"
                     else:
-                        st.markdown("**<center>- x -</center>**", unsafe_allow_html=True)
-                
-                with col3:
-                    st.markdown(f"**{selected_match['team2']}**")
-                
-                # Status
-                if selected_match['is_live']:
-                    st.success("🔴 Jogo em andamento")
-                elif selected_match['status'] == 'finished':
-                    st.info("✅ Jogo finalizado")
-                
-                # Pega palpites
-                predictions = get_live_match_predictions(session, selected_match['id'])
-                
-                if predictions:
-                    # Mostra top 3 pontuadores deste jogo
-                    st.markdown("**🏆 Top 3 neste jogo:**")
-                    for i, pred in enumerate(predictions[:3]):
-                        medal = ["🥇", "🥈", "🥉"][i]
-                        st.markdown(f"{medal} {pred['user_name']}: {pred['prediction']} - {pred['points']} pts")
-                
-                st.divider()
+                        var_text = "➡️ 0"
+                    
+                    # Status especial
+                    status = ""
+                    if posicao_atual <= 3:
+                        status = "🏆 Pódio"
+                    elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
+                        status = "⚠️ Rebaixamento"
+                    
+                    # Medalhas para top 3
+                    if pos == 1:
+                        pos_display = "🥇"
+                    elif pos == 2:
+                        pos_display = "🥈"
+                    elif pos == 3:
+                        pos_display = "🥉"
+                    else:
+                        pos_display = f"{pos}º"
+                    
+                    st.markdown(f"**{pos_display}** {user_name} - **{points} pts** {var_text} {status}")
+            else:
+                st.info("Nenhum palpite registrado para os jogos em andamento.")
+            
+            st.divider()
             
             # Botão de atualização
             col1, col2, col3 = st.columns([1, 1, 1])
@@ -3091,6 +3153,7 @@ def page_visualizacao_ao_vivo():
                 width: 100%;
                 border-collapse: collapse;
                 margin: 20px 0;
+                background-color: #ffffff !important;
             }
             .live-table th {
                 background-color: #1E3A5F;
@@ -3102,9 +3165,14 @@ def page_visualizacao_ao_vivo():
             .live-table td {
                 padding: 10px 12px;
                 border-bottom: 1px solid #dee2e6;
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            .live-table tr {
+                background-color: #ffffff !important;
             }
             .live-table tr:hover {
-                background-color: #f8f9fa;
+                background-color: #f8f9fa !important;
             }
             .points-badge {
                 display: inline-block;
@@ -3359,8 +3427,11 @@ def page_resumo_diario():
             with col3:
                 # Link para WhatsApp Web (abre com texto pré-preenchido)
                 import urllib.parse
-                # Usa safe='' para não codificar emojis
-                whatsapp_text = urllib.parse.quote(st.session_state['daily_summary'], safe='')
+                # Codifica o texto preservando emojis
+                # WhatsApp aceita texto URL-encoded em UTF-8
+                summary_text = st.session_state['daily_summary']
+                # Codifica para bytes UTF-8 e depois para URL
+                whatsapp_text = urllib.parse.quote(summary_text.encode('utf-8'), safe='')
                 whatsapp_url = f"https://wa.me/?text={whatsapp_text}"
                 
                 st.markdown(
