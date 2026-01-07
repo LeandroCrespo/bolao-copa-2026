@@ -2343,7 +2343,7 @@ def page_estatisticas():
         # Busca todos os palpites do usuário com pontos
         user_predictions = session.query(Prediction).filter(
             Prediction.user_id == st.session_state.user['id'],
-            Prediction.points > 0
+            Prediction.points_awarded > 0
         ).all()
         
         if user_predictions:
@@ -2355,7 +2355,7 @@ def page_estatisticas():
                     data_str = match.datetime.strftime('%d/%m')
                     if data_str not in pontos_por_data:
                         pontos_por_data[data_str] = 0
-                    pontos_por_data[data_str] += pred.points
+                    pontos_por_data[data_str] += pred.points_awarded
             
             if pontos_por_data:
                 # Ordena por data
