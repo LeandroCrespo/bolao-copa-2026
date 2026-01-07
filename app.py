@@ -2259,6 +2259,10 @@ def page_ranking():
 # =============================================================================
 def page_estatisticas():
     """Página com estatísticas do usuário"""
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from datetime import datetime, timedelta
+    
     st.markdown("## 📈 Suas Estatísticas")
     
     session = get_session(engine)
@@ -2279,6 +2283,145 @@ def page_estatisticas():
         with col3:
             st.metric("🏅 Pontos de Grupos", stats.get('pontos_grupos', 0))
             st.metric("🏆 Pontos de Pódio", stats.get('pontos_podio', 0))
+        
+        st.divider()
+        
+        # ========================================
+        # GRÁFICO DE EVOLUÇÃO DE PONTOS
+        # ========================================
+        st.subheader("📈 Evolução de Pontos")
+        
+        # Busca todos os palpites do usuário com pontos
+        user_predictions = session.query(Prediction).filter(
+            Prediction.user_id == st.session_state.user['id'],
+            Prediction.points > 0
+        ).all()
+        
+        if user_predictions:
+            # Agrupa pontos por data do jogo
+            pontos_por_data = {}
+            for pred in user_predictions:
+                match = session.query(Match).get(pred.match_id)
+                if match and match.datetime:
+                    data_str = match.datetime.strftime('%d/%m')
+                    if data_str not in pontos_por_data:
+                        pontos_por_data[data_str] = 0
+                    pontos_por_data[data_str] += pred.points
+            
+            if pontos_por_data:
+                # Ordena por data
+                datas = list(pontos_por_data.keys())
+                pontos = list(pontos_por_data.values())
+                
+                # Calcula pontos acumulados
+                pontos_acumulados = []
+                acumulado = 0
+                for p in pontos:
+                    acumulado += p
+                    pontos_acumulados.append(acumulado)
+                
+                # Cria gráfico com Plotly
+                fig = go.Figure()
+                
+                # Linha de evolução
+                fig.add_trace(go.Scatter(
+                    x=datas,
+                    y=pontos_acumulados,
+                    mode='lines+markers',
+                    name='Pontos Acumulados',
+                    line=dict(color='#3498db', width=3),
+                    marker=dict(size=10, color='#2980b9'),
+                    fill='tozeroy',
+                    fillcolor='rgba(52, 152, 219, 0.2)'
+                ))
+                
+                # Barras de pontos por dia
+                fig.add_trace(go.Bar(
+                    x=datas,
+                    y=pontos,
+                    name='Pontos no Dia',
+                    marker_color='rgba(46, 204, 113, 0.7)',
+                    yaxis='y2'
+                ))
+                
+                fig.update_layout(
+                    title=dict(
+                        text='🏆 Sua Evolução no Bolão',
+                        font=dict(size=18, color='#1E3A5F')
+                    ),
+                    xaxis_title='Data',
+                    yaxis=dict(
+                        title='Pontos Acumulados',
+                        titlefont=dict(color='#3498db'),
+                        tickfont=dict(color='#3498db')
+                    ),
+                    yaxis2=dict(
+                        title='Pontos no Dia',
+                        titlefont=dict(color='#2ecc71'),
+                        tickfont=dict(color='#2ecc71'),
+                        overlaying='y',
+                        side='right'
+                    ),
+                    legend=dict(
+                        orientation='h',
+                        yanchor='bottom',
+                        y=1.02,
+                        xanchor='right',
+                        x=1
+                    ),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    hovermode='x unified'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("📊 Ainda não há dados suficientes para o gráfico de evolução.")
+        else:
+            st.info("📊 Você ainda não pontuou em nenhum jogo. Aguarde os resultados!")
+        
+        st.divider()
+        
+        # ========================================
+        # GRÁFICO DE DISTRIBUIÇÃO DE PONTOS
+        # ========================================
+        st.subheader("🎯 Distribuição de Acertos")
+        
+        # Conta tipos de acertos
+        placares_exatos = stats.get('placares_exatos', 0)
+        resultados_corretos = stats.get('resultados_corretos', 0)
+        total_palpites = stats.get('total_palpites', 0)
+        
+        # Calcula outros tipos (aproximado)
+        outros_acertos = max(0, total_palpites - placares_exatos - resultados_corretos)
+        
+        if placares_exatos > 0 or resultados_corretos > 0:
+            labels = ['Placar Exato (20pts)', 'Resultado Correto (10pts)', 'Outros']
+            values = [placares_exatos, resultados_corretos, outros_acertos]
+            colors = ['#3CAC3B', '#2A398D', '#E61D25']
+            
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.4,
+                marker_colors=colors,
+                textinfo='label+percent',
+                textposition='outside'
+            )])
+            
+            fig_pie.update_layout(
+                title=dict(
+                    text='Tipos de Acertos',
+                    font=dict(size=16, color='#1E3A5F')
+                ),
+                showlegend=False,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
+            )
+            
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
     
     finally:
         session.close()
