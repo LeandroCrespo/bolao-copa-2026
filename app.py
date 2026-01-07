@@ -119,15 +119,40 @@ st.markdown("""
     }
     
     /* Tabs - texto visível */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px !important;
+        background: transparent !important;
+    }
+    
     .stTabs [data-baseweb="tab"] {
         color: #1E3A5F !important;
-        background: #e9ecef !important;
-        font-weight: 600;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        font-weight: 700 !important;
+        border-radius: 10px 10px 0 0 !important;
+        padding: 12px 24px !important;
+        border: 1px solid #dee2e6 !important;
+        border-bottom: none !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+        transform: translateY(-2px) !important;
     }
     
     .stTabs [aria-selected="true"] {
-        background: #1E3A5F !important;
+        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
         color: #ffffff !important;
+        border-color: #1E3A5F !important;
+        box-shadow: 0 4px 15px rgba(30, 58, 95, 0.3) !important;
+    }
+    
+    .stTabs [data-baseweb="tab-panel"] {
+        background: #ffffff !important;
+        border-radius: 0 12px 12px 12px !important;
+        padding: 1.5rem !important;
+        border: 1px solid #dee2e6 !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
     }
     
     /* ========================================
@@ -240,8 +265,52 @@ st.markdown("""
         border-radius: 12px;
         margin-bottom: 0.8rem;
         border-left: 5px solid #D4AF37;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         color: #1a1a2e !important;
+        transition: all 0.3s ease;
+    }
+    
+    .match-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    /* Cards de estatísticas/métricas */
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+        padding: 1.2rem !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 20px rgba(30, 58, 95, 0.1) !important;
+        border: 1px solid rgba(30, 58, 95, 0.08) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-5px) !important;
+        box-shadow: 0 8px 30px rgba(30, 58, 95, 0.15) !important;
+    }
+    
+    /* Expanders mais bonitos */
+    .streamlit-expanderHeader {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        font-weight: 700 !important;
+        border: 1px solid #dee2e6 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
+    }
+    
+    .streamlit-expanderContent {
+        background: #ffffff !important;
+        border-radius: 0 0 12px 12px !important;
+        border: 1px solid #dee2e6 !important;
+        border-top: none !important;
+        padding: 1.5rem !important;
     }
     
     .team-name {
@@ -419,15 +488,23 @@ st.markdown("""
        MÉTRICAS
        ======================================== */
     [data-testid="stMetricValue"] {
-        font-size: 2rem;
-        font-weight: 800;
+        font-size: 2.2rem !important;
+        font-weight: 900 !important;
         color: #1E3A5F !important;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.05) !important;
     }
     
     [data-testid="stMetricLabel"] {
-        font-size: 1rem;
-        font-weight: 600;
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
         color: #495057 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
     }
     
     /* ========================================
@@ -435,29 +512,69 @@ st.markdown("""
        ======================================== */
     .stDataFrame {
         color: #1a1a2e !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
     }
     
     .stDataFrame th {
-        background: #1E3A5F !important;
+        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
         color: #ffffff !important;
+        font-weight: 700 !important;
+        padding: 1rem !important;
+        text-transform: uppercase !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.5px !important;
     }
     
     .stDataFrame td {
         color: #1a1a2e !important;
         background: #ffffff !important;
+        padding: 0.8rem !important;
+        border-bottom: 1px solid #e9ecef !important;
+        transition: background 0.2s ease !important;
+    }
+    
+    .stDataFrame tr:nth-child(even) td {
+        background: #f8f9fa !important;
+    }
+    
+    .stDataFrame tr:hover td {
+        background: #e3f2fd !important;
     }
     
     /* ========================================
        ALERTAS
        ======================================== */
     .stAlert {
-        border-radius: 10px;
-        border-left-width: 5px;
+        border-radius: 12px !important;
+        border-left-width: 5px !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+        padding: 1rem 1.2rem !important;
     }
     
     /* Info alert */
     div[data-testid="stAlert"] {
         color: #1a1a2e !important;
+        border-radius: 12px !important;
+    }
+    
+    /* Success alert */
+    .stSuccess {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
+        border-left-color: #28a745 !important;
+    }
+    
+    /* Warning alert */
+    .stWarning {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%) !important;
+        border-left-color: #ffc107 !important;
+    }
+    
+    /* Error alert */
+    .stError {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%) !important;
+        border-left-color: #dc3545 !important;
     }
     
     /* ========================================
@@ -1713,30 +1830,123 @@ def page_ranking():
             # 2º lugar (esquerda)
             with col2:
                 st.markdown(f'''
-                <div style="background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%); border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-top: 40px;">
-                    <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 10px;">🥈</div>
-                    <div style="font-size: 1.1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 5px;">{ranking[1]['nome']}</div>
-                    <div style="font-size: 1.3rem; font-weight: bold; color: #1E3A5F;">{ranking[1]['total_pontos']} pts</div>
+                <div style="
+                    background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
+                    border-radius: 20px;
+                    padding: 25px 20px;
+                    text-align: center;
+                    box-shadow: 0 8px 30px rgba(192,192,192,0.4), inset 0 2px 10px rgba(255,255,255,0.5);
+                    margin-top: 50px;
+                    border: 3px solid #d4d4d4;
+                    transition: all 0.3s ease;
+                    position: relative;
+                    overflow: hidden;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: -10px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
+                        color: white;
+                        padding: 5px 20px;
+                        border-radius: 20px;
+                        font-size: 0.8rem;
+                        font-weight: bold;
+                    ">2º LUGAR</div>
+                    <div style="font-size: 3rem; margin: 15px 0;">🥈</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; text-shadow: 1px 1px 2px rgba(255,255,255,0.8);">{ranking[1]['nome']}</div>
+                    <div style="
+                        font-size: 1.5rem;
+                        font-weight: 800;
+                        color: #1E3A5F;
+                        background: rgba(255,255,255,0.5);
+                        padding: 8px 15px;
+                        border-radius: 10px;
+                        display: inline-block;
+                    ">{ranking[1]['total_pontos']} pts</div>
                 </div>
                 ''', unsafe_allow_html=True)
             
             # 1º lugar (centro, mais alto)
             with col1:
                 st.markdown(f'''
-                <div style="background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); border-radius: 15px; padding: 25px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                    <div style="font-size: 3rem; font-weight: bold; margin-bottom: 10px;">🥇</div>
-                    <div style="font-size: 1.2rem; font-weight: 600; color: #1a1a2e; margin-bottom: 5px;">{ranking[0]['nome']}</div>
-                    <div style="font-size: 1.5rem; font-weight: bold; color: #1E3A5F;">{ranking[0]['total_pontos']} pts</div>
+                <div style="
+                    background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%);
+                    border-radius: 20px;
+                    padding: 30px 25px;
+                    text-align: center;
+                    box-shadow: 0 10px 40px rgba(255,215,0,0.5), inset 0 2px 15px rgba(255,255,255,0.6);
+                    border: 4px solid #FFD700;
+                    transition: all 0.3s ease;
+                    position: relative;
+                    overflow: hidden;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: -10px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
+                        color: white;
+                        padding: 5px 20px;
+                        border-radius: 20px;
+                        font-size: 0.9rem;
+                        font-weight: bold;
+                    ">🏆 CAMPEÃO</div>
+                    <div style="font-size: 4rem; margin: 20px 0; filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));">🥇</div>
+                    <div style="font-size: 1.3rem; font-weight: 800; color: #1a1a2e; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(255,255,255,0.8);">{ranking[0]['nome']}</div>
+                    <div style="
+                        font-size: 1.8rem;
+                        font-weight: 900;
+                        color: #1E3A5F;
+                        background: rgba(255,255,255,0.6);
+                        padding: 10px 20px;
+                        border-radius: 12px;
+                        display: inline-block;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    ">{ranking[0]['total_pontos']} pts</div>
                 </div>
                 ''', unsafe_allow_html=True)
             
             # 3º lugar (direita)
             with col3:
                 st.markdown(f'''
-                <div style="background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%); border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-top: 70px;">
-                    <div style="font-size: 2rem; font-weight: bold; margin-bottom: 10px;">🥉</div>
-                    <div style="font-size: 1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 5px;">{ranking[2]['nome']}</div>
-                    <div style="font-size: 1.1rem; font-weight: bold; color: #1E3A5F;">{ranking[2]['total_pontos']} pts</div>
+                <div style="
+                    background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
+                    border-radius: 20px;
+                    padding: 20px 15px;
+                    text-align: center;
+                    box-shadow: 0 8px 30px rgba(205,127,50,0.4), inset 0 2px 10px rgba(255,255,255,0.4);
+                    margin-top: 80px;
+                    border: 3px solid #CD7F32;
+                    transition: all 0.3s ease;
+                    position: relative;
+                    overflow: hidden;
+                ">
+                    <div style="
+                        position: absolute;
+                        top: -10px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
+                        color: white;
+                        padding: 5px 20px;
+                        border-radius: 20px;
+                        font-size: 0.8rem;
+                        font-weight: bold;
+                    ">3º LUGAR</div>
+                    <div style="font-size: 2.5rem; margin: 15px 0;">🥉</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">{ranking[2]['nome']}</div>
+                    <div style="
+                        font-size: 1.3rem;
+                        font-weight: 800;
+                        color: #1E3A5F;
+                        background: rgba(255,255,255,0.5);
+                        padding: 8px 15px;
+                        border-radius: 10px;
+                        display: inline-block;
+                    ">{ranking[2]['total_pontos']} pts</div>
                 </div>
                 ''', unsafe_allow_html=True)
         
