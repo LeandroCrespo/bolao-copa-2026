@@ -2443,51 +2443,78 @@ def page_estatisticas():
         # ========================================
         st.subheader("🎯 Distribuição de Acertos")
         
-        # Conta tipos de acertos
-        placares_exatos = stats.get('placares_exatos', 0)
-        resultados_corretos = stats.get('resultados_corretos', 0)
-        total_palpites = stats.get('total_palpites', 0)
+        # Conta tipos de acertos baseado no campo points_type
+        from sqlalchemy import func
         
-        # Calcula outros tipos (aproximado)
-        outros_acertos = max(0, total_palpites - placares_exatos - resultados_corretos)
+        # Busca contagem por tipo de acerto
+        tipos_acertos = session.query(
+            Prediction.points_type,
+            func.count(Prediction.id).label('count')
+        ).filter(
+            Prediction.user_id == st.session_state.user['id'],
+            Prediction.points_awarded > 0,
+            Prediction.points_type.isnot(None)
+        ).group_by(Prediction.points_type).all()
         
-        if placares_exatos > 0 or resultados_corretos > 0:
-            labels = ['Placar Exato (20pts)', 'Resultado Correto (10pts)', 'Outros']
-            values = [placares_exatos, resultados_corretos, outros_acertos]
-            colors = ['#3CAC3B', '#2A398D', '#E61D25']
+        # Mapeamento de tipos para labels e cores
+        tipo_config = {
+            'placar_exato': ('Placar Exato (20pts)', '#3CAC3B'),
+            'resultado_gols': ('Resultado + Gols (15pts)', '#2ECC71'),
+            'apenas_resultado': ('Resultado Correto (10pts)', '#2A398D'),
+            'apenas_gols': ('Gols de um Time (5pts)', '#F39C12'),
+        }
+        
+        if tipos_acertos:
+            labels = []
+            values = []
+            colors = []
             
-            fig_pie = go.Figure(data=[go.Pie(
-                labels=labels,
-                values=values,
-                hole=0.4,
-                marker_colors=colors,
-                textinfo='percent',
-                textposition='inside',
-                insidetextfont=dict(size=14, color='white'),
-                pull=[0.05, 0.02, 0.02]  # Destaca o primeiro segmento
-            )])
+            for tipo, count in tipos_acertos:
+                if tipo in tipo_config:
+                    label, color = tipo_config[tipo]
+                    labels.append(label)
+                    values.append(count)
+                    colors.append(color)
             
-            fig_pie.update_layout(
-                title='Tipos de Acertos',
-                showlegend=True,
-                legend=dict(
-                    orientation='h',
-                    yanchor='bottom',
-                    y=-0.2,
-                    xanchor='center',
-                    x=0.5,
-                    font=dict(size=12, color='#333333'),
-                    bgcolor='rgba(255,255,255,0.9)',
-                    bordercolor='#E0E0E0',
-                    borderwidth=1
-                ),
-                plot_bgcolor='#FAFAFA',
-                paper_bgcolor='#FAFAFA',
-                font=dict(color='#333333'),
-                margin=dict(t=50, b=100, l=20, r=20)
-            )
-            
-            st.plotly_chart(fig_pie, use_container_width=True)
+            # Só mostra o gráfico se houver dados válidos
+            if values and sum(values) > 0:
+                # Ajusta pull dinamicamente baseado no número de categorias
+                pull_values = [0.05] + [0.02] * (len(values) - 1) if len(values) > 1 else [0.05]
+                
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=0.4,
+                    marker_colors=colors,
+                    textinfo='percent',
+                    textposition='inside',
+                    insidetextfont=dict(size=14, color='white'),
+                    pull=pull_values
+                )])
+                
+                fig_pie.update_layout(
+                    title='Tipos de Acertos',
+                    showlegend=True,
+                    legend=dict(
+                        orientation='h',
+                        yanchor='bottom',
+                        y=-0.2,
+                        xanchor='center',
+                        x=0.5,
+                        font=dict(size=12, color='#333333'),
+                        bgcolor='rgba(255,255,255,0.9)',
+                        bordercolor='#E0E0E0',
+                        borderwidth=1
+                    ),
+                    plot_bgcolor='#FAFAFA',
+                    paper_bgcolor='#FAFAFA',
+                    font=dict(color='#333333'),
+                    margin=dict(t=50, b=100, l=20, r=20)
+                )
+                
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
         else:
             st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
     
