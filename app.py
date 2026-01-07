@@ -1633,6 +1633,23 @@ def page_ranking():
         # CSS para o pódio e ranking
         st.markdown("""
         <style>
+            /* Marca d'água do logo Copa 2026 */
+            .ranking-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 400px;
+                height: 400px;
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+                opacity: 0.06;
+                pointer-events: none;
+                z-index: 0;
+            }
+            
             .podio-container {
                 display: flex;
                 justify-content: center;
@@ -1640,6 +1657,8 @@ def page_ranking():
                 gap: 20px;
                 margin: 30px 0;
                 padding: 20px;
+                position: relative;
+                z-index: 1;
             }
             
             .podio-item {
@@ -1843,6 +1862,9 @@ def page_ranking():
 
 </style>
         """, unsafe_allow_html=True)
+        
+        # Adiciona marca d'água do logo Copa 2026
+        st.markdown('<div class="ranking-watermark"></div>', unsafe_allow_html=True)
         
         # ========================================
         # PÓDIO - TOP 3
@@ -3349,6 +3371,23 @@ def page_visualizacao_ao_vivo():
         # CSS específico para esta página
         st.markdown("""
         <style>
+            /* Marca d'água do logo Copa 2026 */
+            .live-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 350px;
+                height: 350px;
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+                opacity: 0.05;
+                pointer-events: none;
+                z-index: 0;
+            }
+            
             /* Corrige texto do selectbox na visualização ao vivo */
             div[data-testid="stSelectbox"] div[data-baseweb="select"] {
                 background-color: #ffffff !important;
@@ -3378,6 +3417,9 @@ def page_visualizacao_ao_vivo():
             }
         </style>
         """, unsafe_allow_html=True)
+        
+        # Adiciona marca d'água do logo Copa 2026
+        st.markdown('<div class="live-watermark"></div>', unsafe_allow_html=True)
         
         st.divider()
         
@@ -3809,6 +3851,28 @@ def page_resultados_grupos():
     
     st.header("🏆 Resultados por Grupo")
     st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
+    
+    # CSS e marca d'água do logo Copa 2026
+    st.markdown("""
+    <style>
+        .grupos-watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 350px;
+            height: 350px;
+            background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.05;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+    <div class="grupos-watermark"></div>
+    """, unsafe_allow_html=True)
     
     with get_session(engine) as session:
         # Seletor de grupo
