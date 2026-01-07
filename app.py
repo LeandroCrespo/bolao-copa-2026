@@ -2340,22 +2340,34 @@ def page_estatisticas():
         # ========================================
         st.subheader("📈 Evolução de Pontos")
         
-        # Busca todos os palpites do usuário com pontos
+        # Busca todos os palpites do usuário com pontos de jogos que já iniciaram
+        from datetime import datetime
+        import pytz
+        
+        now = datetime.now(pytz.timezone('America/Sao_Paulo'))
+        
+        # Busca palpites com pontos
         user_predictions = session.query(Prediction).filter(
             Prediction.user_id == st.session_state.user['id'],
             Prediction.points_awarded > 0
         ).all()
         
         if user_predictions:
-            # Agrupa pontos por data do jogo
+            # Agrupa pontos por data do jogo (apenas jogos que já iniciaram)
             pontos_por_data = {}
             for pred in user_predictions:
                 match = session.query(Match).get(pred.match_id)
                 if match and match.datetime:
-                    data_str = match.datetime.strftime('%d/%m')
-                    if data_str not in pontos_por_data:
-                        pontos_por_data[data_str] = 0
-                    pontos_por_data[data_str] += pred.points_awarded
+                    # Só considera se o jogo já iniciou
+                    match_time = match.datetime
+                    if match_time.tzinfo is None:
+                        match_time = pytz.timezone('America/Sao_Paulo').localize(match_time)
+                    
+                    if match_time <= now:
+                        data_str = match.datetime.strftime('%d/%m')
+                        if data_str not in pontos_por_data:
+                            pontos_por_data[data_str] = 0
+                        pontos_por_data[data_str] += pred.points_awarded
             
             if pontos_por_data:
                 # Ordena por data
