@@ -3562,6 +3562,7 @@ def page_resultados_grupos():
     Página que mostra os resultados dos jogos e classificação por grupo.
     Atualiza em tempo real conforme os resultados são lançados.
     """
+    import pandas as pd
     from group_standings import get_official_group_standings
     
     st.header("🏆 Resultados por Grupo")
