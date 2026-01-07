@@ -2889,6 +2889,445 @@ def admin_palpites(session):
 
 
 # =============================================================================
+# PÁGINA DE VISUALIZAÇÃO AO VIVO
+# =============================================================================
+def page_visualizacao_ao_vivo():
+    """
+    Página de visualização em tempo real dos jogos.
+    Mostra palpites de todos os participantes e variação de ranking.
+    Só mostra palpites após o jogo começar.
+    """
+    import streamlit as st
+    from datetime import datetime
+    import pytz
+    from db import get_session, get_config_value
+    from live_scoring import (
+        get_ongoing_matches, get_live_match_predictions, 
+        calculate_live_ranking, get_podium_zone_info
+    )
+    
+    st.header("📺 Visualização ao Vivo")
+    st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
+    
+    with get_session(engine) as session:
+        # Pega jogos que já começaram
+        matches = get_ongoing_matches(session)
+        
+        if not matches:
+            st.info("Nenhum jogo disponível para visualização ainda.")
+            return
+        
+        # Filtra apenas jogos que já começaram
+        started_matches = [m for m in matches if m['has_started']]
+        
+        if not started_matches:
+            st.info("Aguardando início dos jogos...")
+            return
+        
+        # Seletor de jogo
+        st.subheader("🎮 Selecione o Jogo")
+        
+        match_options = {}
+        for match in started_matches:
+            score_display = ""
+            if match['team1_score'] is not None and match['team2_score'] is not None:
+                score_display = f" - {match['team1_score']} x {match['team2_score']}"
+            
+            status_icon = "🔴" if match['is_live'] else "✅"
+            match_label = f"{status_icon} Jogo {match['match_number']}: {match['team1']} vs {match['team2']}{score_display}"
+            match_options[match['id']] = match_label
+        
+        selected_match_id = st.selectbox(
+            "Escolha o jogo:",
+            options=list(match_options.keys()),
+            format_func=lambda x: match_options[x]
+        )
+        
+        if not selected_match_id:
+            return
+        
+        # Pega informações do jogo selecionado
+        selected_match = next((m for m in started_matches if m['id'] == selected_match_id), None)
+        
+        if not selected_match:
+            return
+        
+        st.divider()
+        
+        # Mostra placar atual
+        st.subheader("⚽ Placar Atual")
+        
+        col1, col2, col3 = st.columns([2, 1, 2])
+        
+        with col1:
+            st.markdown(f"### {selected_match['team1']}")
+        
+        with col2:
+            if selected_match['team1_score'] is not None and selected_match['team2_score'] is not None:
+                st.markdown(f"### <center>{selected_match['team1_score']} x {selected_match['team2_score']}</center>", unsafe_allow_html=True)
+            else:
+                st.markdown("### <center>- x -</center>", unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"### {selected_match['team2']}")
+        
+        # Status do jogo
+        if selected_match['is_live']:
+            st.success("🔴 **Jogo em andamento!**")
+        elif selected_match['status'] == 'finished':
+            st.info("✅ **Jogo finalizado**")
+        else:
+            st.warning("⏸️ **Aguardando atualização do placar**")
+        
+        st.divider()
+        
+        # Pega palpites de todos os participantes
+        predictions = get_live_match_predictions(session, selected_match_id)
+        
+        if not predictions:
+            st.info("Nenhum palpite registrado para este jogo.")
+            return
+        
+        # Calcula ranking ao vivo
+        live_ranking = calculate_live_ranking(session, selected_match_id)
+        
+        # Cria mapa de variação de posição
+        variacao_map = {user['user_id']: user for user in live_ranking}
+        
+        # Pega informações de pódio e rebaixamento
+        zone_info = get_podium_zone_info(session)
+        total_users = len(live_ranking)
+        rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
+        
+        # Mostra tabela de palpites e pontos
+        st.subheader("📊 Palpites e Pontuação")
+        
+        # CSS para a tabela
+        st.markdown("""
+        <style>
+            .live-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }
+            .live-table th {
+                background-color: #1E3A5F;
+                color: white;
+                padding: 12px;
+                text-align: left;
+                font-weight: bold;
+            }
+            .live-table td {
+                padding: 10px 12px;
+                border-bottom: 1px solid #dee2e6;
+            }
+            .live-table tr:hover {
+                background-color: #f8f9fa;
+            }
+            .points-badge {
+                display: inline-block;
+                padding: 4px 12px;
+                border-radius: 12px;
+                font-weight: bold;
+                color: white;
+            }
+            .points-20 { background-color: #28a745; }
+            .points-15 { background-color: #17a2b8; }
+            .points-10 { background-color: #ffc107; color: #000; }
+            .points-5 { background-color: #fd7e14; }
+            .points-0 { background-color: #6c757d; }
+            .variation-up {
+                color: #28a745;
+                font-weight: bold;
+            }
+            .variation-down {
+                color: #dc3545;
+                font-weight: bold;
+            }
+            .variation-same {
+                color: #6c757d;
+            }
+            .zone-podio {
+                background-color: #fff3cd;
+            }
+            .zone-rebaixamento {
+                background-color: #f8d7da;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Constrói tabela HTML
+        table_html = """
+        <table class="live-table">
+            <thead>
+                <tr>
+                    <th>Participante</th>
+                    <th>Palpite</th>
+                    <th>Pontos</th>
+                    <th>Variação no Ranking</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        
+        for pred in predictions:
+            user_id = pred['user_id']
+            user_rank = variacao_map.get(user_id, {})
+            
+            # Determina classe de pontos
+            points = pred['points']
+            if points >= 20:
+                points_class = 'points-20'
+            elif points >= 15:
+                points_class = 'points-15'
+            elif points >= 10:
+                points_class = 'points-10'
+            elif points >= 5:
+                points_class = 'points-5'
+            else:
+                points_class = 'points-0'
+            
+            # Variação de posição
+            variacao = user_rank.get('variacao', 0)
+            posicao_atual = user_rank.get('posicao_atual', '-')
+            posicao_anterior = user_rank.get('posicao_anterior', '-')
+            
+            if variacao > 0:
+                variacao_html = f'<span class="variation-up">⬆️ +{variacao} (→ {posicao_atual}º)</span>'
+            elif variacao < 0:
+                variacao_html = f'<span class="variation-down">⬇️ {variacao} (→ {posicao_atual}º)</span>'
+            else:
+                variacao_html = f'<span class="variation-same">➡️ Mantém {posicao_atual}º</span>'
+            
+            # Status especial (pódio/rebaixamento)
+            status_html = ""
+            
+            # Verifica se está entrando ou saindo do pódio
+            estava_podio = posicao_anterior in zone_info['podio_posicoes']
+            esta_podio = posicao_atual in zone_info['podio_posicoes']
+            
+            if esta_podio and not estava_podio:
+                status_html = '🏆 <strong>Entrando no pódio!</strong>'
+            elif estava_podio and not esta_podio:
+                status_html = '📉 <strong>Saindo do pódio</strong>'
+            elif esta_podio:
+                status_html = '🥇 <strong>No pódio</strong>'
+            
+            # Verifica zona de rebaixamento
+            if rebaixamento_inicio:
+                estava_rebaixamento = posicao_anterior >= rebaixamento_inicio
+                esta_rebaixamento = posicao_atual >= rebaixamento_inicio
+                
+                if esta_rebaixamento and not estava_rebaixamento:
+                    status_html = '⚠️ <strong>Entrando na zona de rebaixamento!</strong>'
+                elif estava_rebaixamento and not esta_rebaixamento:
+                    status_html = '✅ <strong>Saindo da zona de rebaixamento!</strong>'
+                elif esta_rebaixamento:
+                    status_html = '⚠️ <strong>Zona de rebaixamento</strong>'
+            
+            # Determina classe da linha
+            row_class = ""
+            if esta_podio:
+                row_class = 'zone-podio'
+            elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
+                row_class = 'zone-rebaixamento'
+            
+            table_html += f"""
+                <tr class="{row_class}">
+                    <td><strong>{pred['user_name']}</strong></td>
+                    <td>{pred['prediction']}</td>
+                    <td><span class="points-badge {points_class}">{points} pts</span></td>
+                    <td>{variacao_html}</td>
+                    <td>{status_html}</td>
+                </tr>
+            """
+        
+        table_html += """
+            </tbody>
+        </table>
+        """
+        
+        st.markdown(table_html, unsafe_allow_html=True)
+        
+        # Legenda
+        st.markdown("""  
+        **Legenda de Pontos:**
+        - 🟢 20 pts: Placar exato
+        - 🔵 15 pts: Resultado + gols de um time
+        - 🟡 10 pts: Resultado correto
+        - 🟠 5 pts: Gols de um time
+        - ⚫ 0 pts: Não pontuou
+        """)
+        
+        # Botão de atualização
+        st.divider()
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔄 Atualizar", use_container_width=True):
+                st.rerun()
+        
+        # Auto-refresh a cada 30 segundos se o jogo estiver ao vivo
+        if selected_match['is_live']:
+            st.markdown("<small>🔄 Página atualiza automaticamente a cada 30 segundos</small>", unsafe_allow_html=True)
+            import time
+            time.sleep(30)
+            st.rerun()
+
+
+# =============================================================================
+# PÁGINA DE RESUMO DIÁRIO
+# =============================================================================
+def page_resumo_diario():
+    """
+    Página de resumo diário.
+    Gera resumos automáticos com resultados, pontuadores e variações de ranking.
+    Permite copiar para WhatsApp.
+    """
+    import streamlit as st
+    from datetime import datetime, timedelta
+    import pytz
+    from db import get_session
+    from daily_summary import generate_daily_summary, get_brazil_time
+    
+    st.header("📄 Resumo Diário")
+    st.markdown("Gere resumos automáticos dos jogos e compartilhe no WhatsApp!")
+    
+    with get_session(engine) as session:
+        # Seletor de data
+        st.subheader("📅 Selecione a Data")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            target_date = st.date_input(
+                "Data do resumo:",
+                value=get_brazil_time().date(),
+                help="Selecione a data para gerar o resumo"
+            )
+        
+        with col2:
+            format_type = st.selectbox(
+                "Formato:",
+                options=['rich', 'plain'],
+                format_func=lambda x: 'Rico (com emojis)' if x == 'rich' else 'Simples (texto puro)',
+                index=0
+            )
+        
+        # Converte date para datetime
+        brazil_tz = pytz.timezone('America/Sao_Paulo')
+        target_datetime = datetime.combine(target_date, datetime.min.time())
+        target_datetime = brazil_tz.localize(target_datetime)
+        
+        st.divider()
+        
+        # Botão para gerar resumo
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col2:
+            if st.button("📝 Gerar Resumo", use_container_width=True):
+                with st.spinner('Gerando resumo...'):
+                    summary = generate_daily_summary(session, target_datetime, format_type)
+                    st.session_state['daily_summary'] = summary
+        
+        # Mostra resumo se existir
+        if 'daily_summary' in st.session_state:
+            st.divider()
+            st.subheader("📜 Resumo Gerado")
+            
+            # Mostra preview
+            st.text_area(
+                "Preview:",
+                value=st.session_state['daily_summary'],
+                height=400,
+                help="Copie este texto e cole no WhatsApp"
+            )
+            
+            # Botões de ação
+            col1, col2, col3 = st.columns([1, 1, 1])
+            
+            with col1:
+                # Botão de copiar (usando componente nativo do Streamlit)
+                st.download_button(
+                    label="📋 Baixar como TXT",
+                    data=st.session_state['daily_summary'],
+                    file_name=f"resumo_{target_date.strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # JavaScript para copiar para área de transferência
+                st.markdown("""
+                <script>
+                function copyToClipboard() {
+                    const text = document.querySelector('textarea').value;
+                    navigator.clipboard.writeText(text).then(function() {
+                        alert('✅ Texto copiado para a área de transferência!');
+                    }, function(err) {
+                        alert('❌ Erro ao copiar texto');
+                    });
+                }
+                </script>
+                """, unsafe_allow_html=True)
+                
+                if st.button("📋 Copiar para Área de Transferência", use_container_width=True):
+                    st.success("✅ Use Ctrl+C para copiar o texto acima!")
+            
+            with col3:
+                # Link para WhatsApp Web (abre com texto pré-preenchido)
+                import urllib.parse
+                whatsapp_text = urllib.parse.quote(st.session_state['daily_summary'])
+                whatsapp_url = f"https://wa.me/?text={whatsapp_text}"
+                
+                st.markdown(
+                    f'<a href="{whatsapp_url}" target="_blank" style="display: inline-block; padding: 0.5rem 1rem; background-color: #25D366; color: white; text-decoration: none; border-radius: 5px; text-align: center; width: 100%;">'
+                    f'📱 Enviar pelo WhatsApp</a>',
+                    unsafe_allow_html=True
+                )
+            
+            st.divider()
+            
+            # Instruções
+            with st.expander("💡 Como usar"):
+                st.markdown("""
+                **Opção 1: Copiar manualmente**
+                1. Selecione todo o texto no campo acima
+                2. Pressione Ctrl+C (ou Cmd+C no Mac)
+                3. Cole no WhatsApp
+                
+                **Opção 2: Baixar arquivo**
+                1. Clique em "Baixar como TXT"
+                2. Abra o arquivo
+                3. Copie e cole no WhatsApp
+                
+                **Opção 3: Enviar direto pelo WhatsApp**
+                1. Clique em "Enviar pelo WhatsApp"
+                2. Escolha o contato ou grupo
+                3. Envie a mensagem
+                
+                💡 **Dica:** O formato "Rico" usa emojis e *negrito* que funcionam no WhatsApp!
+                """)
+        
+        # Geração automática ao final do dia
+        st.divider()
+        
+        with st.expander("⚙️ Geração Automática"):
+            st.info("""
+            🕒 **Geração Automática**
+            
+            O resumo pode ser gerado automaticamente ao final de cada dia de jogos.
+            
+            Para implementar:
+            1. Configure um agendador (cron job)
+            2. Execute o script de geração às 23:00
+            3. O resumo será salvo e poderá ser enviado automaticamente
+            
+            🚧 Funcionalidade em desenvolvimento
+            """)
+
+
+# =============================================================================
 # NAVEGAÇÃO PRINCIPAL
 # =============================================================================
 def main():
@@ -2910,7 +3349,9 @@ def main():
                 # Admin só vê opções administrativas
                 menu_options = {
                     "🏠 Início": "home",
+                    "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
                     "📊 Ranking": "ranking",
+                    "📄 Resumo Diário": "resumo_diario",
                     "📈 Estatísticas": "estatisticas",
                     "⚙️ Configurações": "configuracoes",
                     "🔧 Admin": "admin",
@@ -2922,6 +3363,7 @@ def main():
                     "📝 Palpites - Jogos": "palpites_jogos",
                     "🏅 Palpites - Grupos": "palpites_grupos",
                     "🏆 Palpites - Pódio": "palpites_podio",
+                    "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
                     "📊 Ranking": "ranking",
                     "💡 Dicas": "dicas",
                     "📈 Estatísticas": "estatisticas",
@@ -2946,7 +3388,9 @@ def main():
             "palpites_jogos": page_palpites_jogos,
             "palpites_grupos": page_palpites_grupos,
             "palpites_podio": page_palpites_podio,
+            "visualizacao_ao_vivo": page_visualizacao_ao_vivo,
             "ranking": page_ranking,
+            "resumo_diario": page_resumo_diario,
             "dicas": page_dicas,
             "estatisticas": page_estatisticas,
             "configuracoes": page_configuracoes,
