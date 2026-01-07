@@ -3934,20 +3934,70 @@ def page_visualizacao_ao_vivo():
                         'Status': status
                     })
                 
-                # Cria DataFrame e exibe
-                df = pd.DataFrame(table_data)
-                st.dataframe(
-                    df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        'Pos': st.column_config.TextColumn('Pos', width='small'),
-                        'Participante': st.column_config.TextColumn('Participante', width='medium'),
-                        'Pontos': st.column_config.TextColumn('Pontos', width='small'),
-                        'Variação': st.column_config.TextColumn('Variação', width='small'),
-                        'Status': st.column_config.TextColumn('Status', width='medium')
-                    }
-                )
+                # Cria tabela HTML estilizada
+                html_rows = ""
+                for i, row in enumerate(table_data):
+                    # Define cor de fundo alternada e destaque para top 3
+                    if i == 0:
+                        bg_color = "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)"
+                        text_color = "#000"
+                    elif i == 1:
+                        bg_color = "linear-gradient(135deg, #C0C0C0 0%, #A0A0A0 100%)"
+                        text_color = "#000"
+                    elif i == 2:
+                        bg_color = "linear-gradient(135deg, #CD7F32 0%, #8B4513 100%)"
+                        text_color = "#fff"
+                    elif i % 2 == 0:
+                        bg_color = "#f8f9fa"
+                        text_color = "#333"
+                    else:
+                        bg_color = "#ffffff"
+                        text_color = "#333"
+                    
+                    # Status badge
+                    status_html = ""
+                    if "Pódio" in row['Status']:
+                        status_html = '<span style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 600;">🏆 Pódio</span>'
+                    elif "Rebaixamento" in row['Status']:
+                        status_html = '<span style="background: linear-gradient(135deg, #dc3545, #c82333); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 600;">⚠️ Risco</span>'
+                    
+                    # Variação com cor
+                    var_text = row['Variação']
+                    if "⬆️" in var_text:
+                        var_html = f'<span style="color: #28a745; font-weight: 600;">{var_text}</span>'
+                    elif "⬇️" in var_text:
+                        var_html = f'<span style="color: #dc3545; font-weight: 600;">{var_text}</span>'
+                    else:
+                        var_html = f'<span style="color: #6c757d;">{var_text}</span>'
+                    
+                    html_rows += f'''
+                    <tr style="background: {bg_color}; color: {text_color};">
+                        <td style="padding: 12px 15px; text-align: center; font-weight: 700; font-size: 1.1em;">{row['Pos']}</td>
+                        <td style="padding: 12px 15px; font-weight: 500;">{row['Participante']}</td>
+                        <td style="padding: 12px 15px; text-align: center; font-weight: 700; color: #2A398D;">{row['Pontos']}</td>
+                        <td style="padding: 12px 15px; text-align: center;">{var_html}</td>
+                        <td style="padding: 12px 15px; text-align: center;">{status_html}</td>
+                    </tr>
+                    '''
+                
+                st.markdown(f'''
+                <div style="background: white; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white;">
+                                <th style="padding: 15px; text-align: center; font-weight: 600; width: 80px;">Pos</th>
+                                <th style="padding: 15px; text-align: left; font-weight: 600;">Participante</th>
+                                <th style="padding: 15px; text-align: center; font-weight: 600; width: 100px;">Pontos</th>
+                                <th style="padding: 15px; text-align: center; font-weight: 600; width: 100px;">Variação</th>
+                                <th style="padding: 15px; text-align: center; font-weight: 600; width: 140px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {html_rows}
+                        </tbody>
+                    </table>
+                </div>
+                ''', unsafe_allow_html=True)
             else:
                 st.info("Nenhum palpite registrado para os jogos em andamento.")
             
