@@ -2394,20 +2394,11 @@ def page_estatisticas():
                 ))
                 
                 fig.update_layout(
-                    title=dict(
-                        text='🏆 Sua Evolução no Bolão',
-                        font=dict(size=18, color='#1E3A5F')
-                    ),
+                    title='🏆 Sua Evolução no Bolão',
                     xaxis_title='Data',
-                    yaxis=dict(
-                        title='Pontos Acumulados',
-                        titlefont=dict(color='#3498db'),
-                        tickfont=dict(color='#3498db')
-                    ),
+                    yaxis_title='Pontos Acumulados',
                     yaxis2=dict(
                         title='Pontos no Dia',
-                        titlefont=dict(color='#2ecc71'),
-                        tickfont=dict(color='#2ecc71'),
                         overlaying='y',
                         side='right'
                     ),
@@ -2418,8 +2409,6 @@ def page_estatisticas():
                         xanchor='right',
                         x=1
                     ),
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
                     hovermode='x unified'
                 )
                 
