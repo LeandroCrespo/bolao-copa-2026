@@ -2419,9 +2419,15 @@ def page_estatisticas():
                         yanchor='bottom',
                         y=1.02,
                         xanchor='right',
-                        x=1
+                        x=1,
+                        bgcolor='rgba(255,255,255,0.8)',
+                        bordercolor='#E0E0E0',
+                        borderwidth=1
                     ),
-                    hovermode='x unified'
+                    hovermode='x unified',
+                    plot_bgcolor='#F5F5F5',
+                    paper_bgcolor='#FAFAFA',
+                    font=dict(color='#333333')
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
@@ -2455,18 +2461,30 @@ def page_estatisticas():
                 values=values,
                 hole=0.4,
                 marker_colors=colors,
-                textinfo='label+percent',
-                textposition='outside'
+                textinfo='percent',
+                textposition='inside',
+                insidetextfont=dict(size=14, color='white'),
+                pull=[0.05, 0.02, 0.02]  # Destaca o primeiro segmento
             )])
             
             fig_pie.update_layout(
-                title=dict(
-                    text='Tipos de Acertos',
-                    font=dict(size=16, color='#1E3A5F')
+                title='Tipos de Acertos',
+                showlegend=True,
+                legend=dict(
+                    orientation='h',
+                    yanchor='bottom',
+                    y=-0.2,
+                    xanchor='center',
+                    x=0.5,
+                    font=dict(size=12, color='#333333'),
+                    bgcolor='rgba(255,255,255,0.9)',
+                    bordercolor='#E0E0E0',
+                    borderwidth=1
                 ),
-                showlegend=False,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
+                plot_bgcolor='#FAFAFA',
+                paper_bgcolor='#FAFAFA',
+                font=dict(color='#333333'),
+                margin=dict(t=50, b=100, l=20, r=20)
             )
             
             st.plotly_chart(fig_pie, use_container_width=True)
