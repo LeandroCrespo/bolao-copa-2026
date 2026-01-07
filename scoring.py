@@ -278,7 +278,8 @@ def process_podium_predictions(session):
 def get_user_stats(session, user_id: int) -> dict:
     """
     Obtém estatísticas detalhadas de um usuário.
-    Só considera jogos que já começaram E têm placar.
+    Só considera jogos que já começaram (horário passou).
+    Usa placar 0x0 implícito se o jogo começou mas não tem placar ainda.
     """
     from datetime import datetime
     import pytz
@@ -288,19 +289,27 @@ def get_user_stats(session, user_id: int) -> dict:
     now_br = datetime.now(brazil_tz)
     now_naive = now_br.replace(tzinfo=None)
     
-    # Pega IDs de jogos que já começaram E têm placar
-    started_matches = session.query(Match.id).filter(
-        Match.datetime <= now_naive,
-        Match.team1_score.isnot(None),
-        Match.team2_score.isnot(None)
+    # Pega jogos que já começaram (horário passou)
+    started_matches = session.query(Match).filter(
+        Match.datetime <= now_naive
     ).all()
     started_match_ids = {m.id for m in started_matches}
+    
+    # Mapa de placares (usa 0x0 se não tiver placar ainda)
+    match_scores = {}
+    for m in started_matches:
+        match_scores[m.id] = {
+            'team1_score': m.team1_score if m.team1_score is not None else 0,
+            'team2_score': m.team2_score if m.team2_score is not None else 0
+        }
     
     # Pega todos os palpites do usuário
     all_predictions = session.query(Prediction).filter_by(user_id=user_id).all()
     
-    # Filtra apenas palpites de jogos que já começaram e têm placar
+    # Filtra apenas palpites de jogos que já começaram
     predictions = [p for p in all_predictions if p.match_id in started_match_ids]
+    
+    config = get_scoring_config(session)
     
     stats = {
         'total_palpites': len(all_predictions),  # Total de palpites feitos
@@ -315,20 +324,30 @@ def get_user_stats(session, user_id: int) -> dict:
     }
     
     for pred in predictions:
-        stats['pontos_jogos'] += pred.points_awarded or 0
+        # Pega placar atual (ou 0x0 se não tiver)
+        scores = match_scores.get(pred.match_id, {'team1_score': 0, 'team2_score': 0})
         
-        if pred.points_type == 'placar_exato':
+        # Calcula pontos em tempo real
+        points, points_type, _ = calculate_match_points(
+            pred.pred_team1_score, pred.pred_team2_score,
+            scores['team1_score'], scores['team2_score'],
+            config
+        )
+        
+        stats['pontos_jogos'] += points
+        
+        if points_type == 'placar_exato':
             stats['placares_exatos'] += 1
             stats['resultados_corretos'] += 1
             stats['gols_corretos'] += 1
-        elif pred.points_type == 'resultado_gols':
+        elif points_type == 'resultado_gols':
             stats['resultados_corretos'] += 1
             stats['gols_corretos'] += 1
-        elif pred.points_type == 'resultado':
+        elif points_type == 'resultado':
             stats['resultados_corretos'] += 1
-        elif pred.points_type == 'gols':
+        elif points_type == 'gols':
             stats['gols_corretos'] += 1
-        elif pred.points_type == 'nenhum':
+        elif points_type == 'nenhum':
             stats['palpites_zerados'] += 1
     
     # Pontos de grupos
@@ -371,15 +390,24 @@ def get_ranking(session) -> list:
     now_br = datetime.now(brazil_tz)
     now_naive = now_br.replace(tzinfo=None)
     
-    # Pega IDs de jogos que já começaram (horário passou) E TEM PLACAR
-    started_matches = session.query(Match.id).filter(
-        Match.datetime <= now_naive,
-        Match.team1_score.isnot(None),
-        Match.team2_score.isnot(None)
+    # Pega jogos que já começaram (horário passou)
+    # Regra: quando o jogo começa, assume placar 0x0 até ser atualizado
+    started_matches = session.query(Match).filter(
+        Match.datetime <= now_naive
     ).all()
     started_match_ids = {m.id for m in started_matches}
     
+    # Mapa de placares (usa 0x0 se não tiver placar ainda)
+    match_scores = {}
+    for m in started_matches:
+        match_scores[m.id] = {
+            'team1_score': m.team1_score if m.team1_score is not None else 0,
+            'team2_score': m.team2_score if m.team2_score is not None else 0
+        }
+    
     ranking = []
+    
+    config = get_scoring_config(session)
     
     for user in users:
         predictions = session.query(Prediction).filter_by(user_id=user.id).all()
@@ -387,15 +415,37 @@ def get_ranking(session) -> list:
         # FILTRA: Só considera palpites de jogos que JÁ COMEÇARAM
         started_predictions = [p for p in predictions if p.match_id in started_match_ids]
         
-        # Conta tipos de acertos (só de jogos que já começaram)
-        placares_exatos = sum(1 for p in started_predictions if p.points_type == 'placar_exato')
-        resultado_gols = sum(1 for p in started_predictions if p.points_type == 'resultado_gols')
-        resultado = sum(1 for p in started_predictions if p.points_type == 'resultado')
-        gols = sum(1 for p in started_predictions if p.points_type == 'gols')
-        zeros = sum(1 for p in started_predictions if p.points_type == 'nenhum')
+        # Calcula pontos em tempo real (usando placar atual ou 0x0 se não tiver)
+        placares_exatos = 0
+        resultado_gols = 0
+        resultado = 0
+        gols = 0
+        zeros = 0
+        pontos_jogos = 0
         
-        # Calcula pontos (só de jogos que já começaram)
-        pontos_jogos = sum(p.points_awarded or 0 for p in started_predictions)
+        for pred in started_predictions:
+            # Pega placar atual (ou 0x0 se não tiver)
+            scores = match_scores.get(pred.match_id, {'team1_score': 0, 'team2_score': 0})
+            
+            # Calcula pontos em tempo real
+            points, points_type, _ = calculate_match_points(
+                pred.pred_team1_score, pred.pred_team2_score,
+                scores['team1_score'], scores['team2_score'],
+                config
+            )
+            
+            pontos_jogos += points
+            
+            if points_type == 'placar_exato':
+                placares_exatos += 1
+            elif points_type == 'resultado_gols':
+                resultado_gols += 1
+            elif points_type == 'resultado':
+                resultado += 1
+            elif points_type == 'gols':
+                gols += 1
+            elif points_type == 'nenhum':
+                zeros += 1
         
         group_preds = session.query(GroupPrediction).filter_by(user_id=user.id).all()
         pontos_grupos = sum(gp.points_awarded or 0 for gp in group_preds)
