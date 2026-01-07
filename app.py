@@ -2407,20 +2407,10 @@ def page_estatisticas():
                 
                 fig.update_layout(
                     title='🏆 Sua Evolução no Bolão',
-                    xaxis=dict(
-                        title='Data',
-                        titlefont=dict(color='#000000'),
-                        tickfont=dict(color='#000000')
-                    ),
-                    yaxis=dict(
-                        title='Pontos Acumulados',
-                        titlefont=dict(color='#000000'),
-                        tickfont=dict(color='#000000')
-                    ),
+                    xaxis_title='Data',
+                    yaxis_title='Pontos Acumulados',
                     yaxis2=dict(
                         title='Pontos no Dia',
-                        titlefont=dict(color='#000000'),
-                        tickfont=dict(color='#000000'),
                         overlaying='y',
                         side='right'
                     ),
@@ -2429,17 +2419,16 @@ def page_estatisticas():
                         yanchor='bottom',
                         y=1.02,
                         xanchor='right',
-                        x=1,
-                        bgcolor='rgba(255,255,255,0.9)',
-                        bordercolor='#E0E0E0',
-                        borderwidth=1,
-                        font=dict(color='#000000')
+                        x=1
                     ),
                     hovermode='x unified',
-                    plot_bgcolor='#FFFFFF',
-                    paper_bgcolor='#FAFAFA',
-                    font=dict(color='#000000')
+                    plot_bgcolor='white',
+                    paper_bgcolor='white'
                 )
+                
+                # Atualiza cores dos eixos separadamente para compatibilidade
+                fig.update_xaxes(title_font_color='black', tickfont_color='black')
+                fig.update_yaxes(title_font_color='black', tickfont_color='black')
                 
                 st.plotly_chart(fig, use_container_width=True)
             else:
