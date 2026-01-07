@@ -83,6 +83,11 @@ st.markdown("""
        HEADER FIXO COM LOGO DO BOLÃO
        ======================================== */
     
+    /* Força overflow visible nos containers do Streamlit para o header fixo funcionar */
+    .stApp, .stAppViewContainer, .appview-container {
+        overflow: visible !important;
+    }
+    
     .fixed-header {
         position: fixed;
         top: 0;
@@ -93,7 +98,7 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 999;
+        z-index: 999999;
         box-shadow: 0 2px 15px rgba(0,0,0,0.2);
         padding: 0 20px;
     }
