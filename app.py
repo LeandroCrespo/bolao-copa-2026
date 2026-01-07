@@ -1836,10 +1836,14 @@ def page_ranking():
             st.markdown("""
             Em caso de empate em pontos, os critérios de desempate são:
             
-            1. **Maior número de placares exatos**
-            2. **Maior número de resultados corretos**
-            3. **Maior número de palpites feitos**
-            4. **Ordem alfabética do nome**
+            1. **Maior número de placares exatos** (20 pts)
+            2. **Maior número de acerto de Vencedores com gols corretos** (15 pts)
+            3. **Maior número de acerto de Vencedores** (10 pts)
+            4. **Maior número de acerto de classificados no grupo**
+            5. **Maior número de acerto de pódio**
+            6. **Maior número de acerto de gols de um time** (5 pts)
+            7. **Menos palpites zerados**
+            8. **Ordem de inscrição** (quem se inscreveu primeiro)
             """)
 
 
