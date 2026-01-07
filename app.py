@@ -907,6 +907,39 @@ st.markdown(f'''
 ''', unsafe_allow_html=True)
 
 # =============================================================================
+# CABEÇALHO PADRÃO DAS PÁGINAS
+# =============================================================================
+MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
+
+def render_page_header():
+    """Renderiza o cabeçalho padrão com banner, mascotes e título"""
+    # Banner decorativo com ícones dos países sede
+    st.markdown('''
+    <div style="
+        background: linear-gradient(90deg, #E61D25 0%, #3CAC3B 25%, #2A398D 50%, #3CAC3B 75%, #E61D25 100%);
+        padding: 8px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    ">
+        <span style="font-size: 1.3rem; letter-spacing: 8px;">
+            🍁 🇨🇦 • 🦅 🇲🇽 • ⭐ 🇺🇸
+        </span>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Imagem dos mascotes
+    st.markdown(f'''
+    <div style="text-align: center; margin-bottom: 0.5rem;">
+        <img src="{MASCOTES_IMG}" alt="Mascotes Copa 2026" style="max-width: 200px; height: auto;">
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Título principal
+    st.markdown('<h1 class="main-header">⚽ Bolão Copa do Mundo 2026</h1>', unsafe_allow_html=True)
+
+# =============================================================================
 # CONSTANTES
 # =============================================================================
 GRUPOS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
@@ -1135,33 +1168,8 @@ def page_login():
 # =============================================================================
 def page_home():
     """Página inicial com resumo do bolão"""
-    # Imagem dos mascotes embutida em base64
-    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
-    
-    # Banner decorativo com ícones dos países sede
-    st.markdown('''
-    <div style="
-        background: linear-gradient(90deg, #E61D25 0%, #3CAC3B 25%, #2A398D 50%, #3CAC3B 75%, #E61D25 100%);
-        padding: 8px;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 15px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    ">
-        <span style="font-size: 1.3rem; letter-spacing: 8px;">
-            🍁 🇨🇦 • 🦅 🇲🇽 • ⭐ 🇺🇸
-        </span>
-    </div>
-    ''', unsafe_allow_html=True)
-    
-    # Imagem dos mascotes (menor na home)
-    st.markdown(f'''
-    <div style="text-align: center; margin-bottom: 0.5rem;">
-        <img src="{MASCOTES_IMG}" alt="Mascotes Copa 2026" style="max-width: 200px; height: auto;">
-    </div>
-    ''', unsafe_allow_html=True)
-    
-    st.markdown('<h1 class="main-header">⚽ Bolão Copa do Mundo 2026</h1>', unsafe_allow_html=True)
+    # Cabeçalho padrão
+    render_page_header()
     
     session = get_session(engine)
     
@@ -1245,6 +1253,7 @@ def page_home():
 # =============================================================================
 def page_palpites_jogos():
     """Página para fazer palpites nos jogos"""
+    render_page_header()
     st.markdown("## 📝 Palpites dos Jogos")
     
     session = get_session(engine)
@@ -1362,6 +1371,7 @@ def page_palpites_jogos():
 # =============================================================================
 def page_palpites_grupos():
     """Página para fazer palpites de classificação dos grupos"""
+    render_page_header()
     st.markdown("## 🏅 Palpites de Classificação dos Grupos")
     
     session = get_session(engine)
@@ -1477,6 +1487,7 @@ def page_palpites_grupos():
 # =============================================================================
 def page_palpites_podio():
     """Página para fazer palpites do pódio"""
+    render_page_header()
     st.markdown("## 🏆 Palpites do Pódio")
     
     session = get_session(engine)
@@ -1575,6 +1586,7 @@ def page_palpites_podio():
 # =============================================================================
 def page_dicas():
     """Página de Dicas com Power Ranking FIFA"""
+    render_page_header()
     st.header("💡 Dicas para seus Palpites")
     
     # Texto explicativo sobre o ranking
@@ -1585,11 +1597,41 @@ def page_dicas():
     atualizado mensalmente pela FIFA. Ele considera os resultados das partidas internacionais, 
     a importância dos jogos e a força dos adversários enfrentados.
     
-    > **⚠️ Importante:** Este ranking serve como uma **referência** para auxiliar nos seus palpites, 
-    > mas **não deve ser seguido à risca**! O futebol é imprevisível e grandes surpresas acontecem 
-    > em toda Copa do Mundo. Seleções bem posicionadas podem tropeçar, enquanto equipes menos 
-    > cotadas frequentemente surpreendem. Use estas informações como um **guia**, mas confie 
-    > também na sua **intuição** e **conhecimento do futebol**!
+    """)
+    
+    # Alerta destacado com cores chamativas
+    st.markdown('''
+    <div style="
+        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 50%, #FFD700 100%);
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+        box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+        border-left: 6px solid #E61D25;
+    ">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 2.5rem;">⚠️</span>
+            <div>
+                <h3 style="color: #1E3A5F; margin: 0 0 8px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+                    IMPORTANTE - LEIA ANTES DE PALPITAR!
+                </h3>
+                <p style="color: #2A398D; margin: 0; font-size: 1.1rem; line-height: 1.6;">
+                    Este ranking serve como uma <strong>referência</strong> para auxiliar nos seus palpites, 
+                    mas <strong style="color: #E61D25;">NÃO deve ser seguido à risca</strong>! 
+                    O futebol é imprevisível e grandes surpresas acontecem em toda Copa do Mundo. 
+                    Seleções bem posicionadas podem tropeçar, enquanto equipes menos cotadas frequentemente surpreendem.
+                </p>
+                <p style="color: #1E3A5F; margin: 10px 0 0 0; font-size: 1.05rem; font-weight: 600;">
+                    🎯 Use estas informações como um <strong>guia</strong>, mas confie também na sua 
+                    <strong style="color: #3CAC3B;">intuição</strong> e 
+                    <strong style="color: #3CAC3B;">conhecimento do futebol</strong>!
+                </p>
+            </div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    st.markdown("""
     
     ---
     """)
@@ -1752,6 +1794,7 @@ def page_ranking():
     from db import get_session, get_config_value, set_config_value
     from scoring import get_ranking
     
+    render_page_header()
     st.header("🏆 Ranking do Bolão")
     
     with get_session(engine) as session:
@@ -2268,6 +2311,7 @@ def page_estatisticas():
     import plotly.express as px
     from datetime import datetime, timedelta
     
+    render_page_header()
     st.markdown("## 📈 Suas Estatísticas")
     
     session = get_session(engine)
@@ -2436,6 +2480,7 @@ def page_estatisticas():
 # =============================================================================
 def page_configuracoes():
     """Página de configurações do usuário"""
+    render_page_header()
     st.markdown("## ⚙️ Configurações")
     
     session = get_session(engine)
@@ -2576,6 +2621,7 @@ def page_admin():
         st.error("Acesso negado!")
         return
     
+    render_page_header()
     st.markdown("## 🔧 Painel Administrativo")
     
     session = get_session(engine)
@@ -3620,6 +3666,7 @@ def page_visualizacao_ao_vivo():
         calculate_live_ranking, get_podium_zone_info
     )
     
+    render_page_header()
     st.header("📺 Visualização ao Vivo")
     st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
     
@@ -4142,6 +4189,7 @@ def page_resultados_grupos():
     import pandas as pd
     from group_standings import get_official_group_standings
     
+    render_page_header()
     st.header("🏆 Resultados por Grupo")
     st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
     
