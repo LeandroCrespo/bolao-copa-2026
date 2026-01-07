@@ -2312,22 +2312,40 @@ def admin_resultados(session):
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        gols1 = st.number_input(f"Gols {team1_display}", min_value=0, max_value=20, key=f"res_gols1_{match.id}")
+                        gols1 = st.number_input(f"Gols {team1_display}", min_value=0, max_value=20, value=match.team1_score if match.team1_score is not None else 0, key=f"res_gols1_{match.id}")
                     with col2:
-                        gols2 = st.number_input(f"Gols {team2_display}", min_value=0, max_value=20, key=f"res_gols2_{match.id}")
+                        gols2 = st.number_input(f"Gols {team2_display}", min_value=0, max_value=20, value=match.team2_score if match.team2_score is not None else 0, key=f"res_gols2_{match.id}")
                     
-                    if st.form_submit_button("✅ Confirmar Resultado"):
-                        match.team1_score = gols1
-                        match.team2_score = gols2
-                        match.status = 'finished'
-                        session.commit()
-                        
-                        # Processa pontuação dos palpites
-                        process_match_predictions(session, match.id)
-                        
-                        st.success(f"Resultado registrado: {gols1} x {gols2}")
-                        log_action(session, st.session_state.user['id'], 'resultado_lancado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
-                        st.rerun()
+                    # Mostra placar atual se existir
+                    if match.team1_score is not None and match.team2_score is not None:
+                        st.info(f"🔴 Placar atual: {match.team1_score} x {match.team2_score} (jogo em andamento)")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        if st.form_submit_button("🔄 Atualizar Placar", use_container_width=True):
+                            match.team1_score = gols1
+                            match.team2_score = gols2
+                            # NÃO muda o status, continua 'scheduled'
+                            session.commit()
+                            
+                            st.success(f"🔴 Placar atualizado: {gols1} x {gols2} (jogo em andamento)")
+                            log_action(session, st.session_state.user['id'], 'placar_atualizado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
+                            st.rerun()
+                    
+                    with col_btn2:
+                        if st.form_submit_button("✅ Confirmar Resultado Final", use_container_width=True):
+                            match.team1_score = gols1
+                            match.team2_score = gols2
+                            match.status = 'finished'
+                            session.commit()
+                            
+                            # Processa pontuação dos palpites
+                            process_match_predictions(session, match.id)
+                            
+                            st.success(f"✅ Resultado final confirmado: {gols1} x {gols2}")
+                            log_action(session, st.session_state.user['id'], 'resultado_lancado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
+                            st.rerun()
     
     st.divider()
     
@@ -2927,7 +2945,7 @@ def page_visualizacao_ao_vivo():
         # Seletor de jogo
         st.subheader("🎮 Selecione o Jogo")
         
-        match_options = {}
+        match_options = {0: "🎯 Todos os jogos"}
         for match in started_matches:
             score_display = ""
             if match['team1_score'] is not None and match['team2_score'] is not None:
@@ -2940,19 +2958,83 @@ def page_visualizacao_ao_vivo():
         selected_match_id = st.selectbox(
             "Escolha o jogo:",
             options=list(match_options.keys()),
-            format_func=lambda x: match_options[x]
+            format_func=lambda x: match_options[x],
+            index=0,
+            key="select_match_live"
         )
         
-        if not selected_match_id:
+        # CSS específico para este selectbox
+        st.markdown("""
+        <style>
+            /* Corrige texto do selectbox na visualização ao vivo */
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+                background-color: #ffffff !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
+                color: #1a1a2e !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # Se selecionou "Todos os jogos"
+        if selected_match_id == 0:
+            st.subheader("🎯 Todos os Jogos em Andamento")
+            
+            for selected_match in started_matches:
+                st.markdown(f"### 🎮 Jogo {selected_match['match_number']}: {selected_match['team1']} vs {selected_match['team2']}")
+                
+                # Mostra placar
+                col1, col2, col3 = st.columns([2, 1, 2])
+                
+                with col1:
+                    st.markdown(f"**{selected_match['team1']}**")
+                
+                with col2:
+                    if selected_match['team1_score'] is not None and selected_match['team2_score'] is not None:
+                        st.markdown(f"**<center>{selected_match['team1_score']} x {selected_match['team2_score']}</center>**", unsafe_allow_html=True)
+                    else:
+                        st.markdown("**<center>- x -</center>**", unsafe_allow_html=True)
+                
+                with col3:
+                    st.markdown(f"**{selected_match['team2']}**")
+                
+                # Status
+                if selected_match['is_live']:
+                    st.success("🔴 Jogo em andamento")
+                elif selected_match['status'] == 'finished':
+                    st.info("✅ Jogo finalizado")
+                
+                # Pega palpites
+                predictions = get_live_match_predictions(session, selected_match['id'])
+                
+                if predictions:
+                    # Mostra top 3 pontuadores deste jogo
+                    st.markdown("**🏆 Top 3 neste jogo:**")
+                    for i, pred in enumerate(predictions[:3]):
+                        medal = ["🥇", "🥈", "🥉"][i]
+                        st.markdown(f"{medal} {pred['user_name']}: {pred['prediction']} - {pred['points']} pts")
+                
+                st.divider()
+            
+            # Botão de atualização
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("🔄 Atualizar", use_container_width=True, key="refresh_all"):
+                    st.rerun()
+            
             return
         
-        # Pega informações do jogo selecionado
+        # Pega informações do jogo selecionado (jogo único)
         selected_match = next((m for m in started_matches if m['id'] == selected_match_id), None)
         
         if not selected_match:
             return
-        
-        st.divider()
         
         # Mostra placar atual
         st.subheader("⚽ Placar Atual")
@@ -3277,7 +3359,8 @@ def page_resumo_diario():
             with col3:
                 # Link para WhatsApp Web (abre com texto pré-preenchido)
                 import urllib.parse
-                whatsapp_text = urllib.parse.quote(st.session_state['daily_summary'])
+                # Usa safe='' para não codificar emojis
+                whatsapp_text = urllib.parse.quote(st.session_state['daily_summary'], safe='')
                 whatsapp_url = f"https://wa.me/?text={whatsapp_text}"
                 
                 st.markdown(
