@@ -167,20 +167,46 @@ st.markdown("""
     }
     
     [data-testid="stSidebar"] .stButton > button {
-        background: linear-gradient(90deg, #3498db 0%, #2980b9 100%) !important;
+        background: linear-gradient(135deg, #3498db 0%, #2575fc 50%, #1e88e5 100%) !important;
         color: #ffffff !important;
         border: none;
-        border-radius: 8px;
-        padding: 0.6rem 1rem;
+        border-radius: 12px;
+        padding: 0.7rem 1.2rem;
         font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        font-size: 0.95rem;
+        letter-spacing: 0.3px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3),
+                    0 2px 4px rgba(0, 0, 0, 0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: left 0.5s ease;
     }
     
     [data-testid="stSidebar"] .stButton > button:hover {
-        background: linear-gradient(90deg, #2980b9 0%, #1f5f8b 100%) !important;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        background: linear-gradient(135deg, #2980b9 0%, #1e5799 50%, #1565c0 100%) !important;
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4),
+                    0 4px 10px rgba(0, 0, 0, 0.15);
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:hover::before {
+        left: 100%;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:active {
+        transform: translateY(-1px) scale(0.98);
+        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.3);
     }
     
     /* Ícone de colapsar sidebar (<<) - BRANCO */
