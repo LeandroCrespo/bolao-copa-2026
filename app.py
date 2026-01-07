@@ -2275,6 +2275,33 @@ def admin_jogos(session):
                     st.rerun()
 
 
+def _auto_update_group_result(session, group_name):
+    """
+    Atualiza automaticamente o resultado do grupo baseado nos resultados dos jogos.
+    Chamada sempre que um resultado de jogo da fase de grupos é atualizado.
+    """
+    from group_standings import get_official_group_standings
+    
+    standings = get_official_group_standings(session, group_name)
+    if standings and len(standings) >= 2:
+        result = session.query(GroupResult).filter_by(group_name=group_name).first()
+        if result:
+            result.first_place_team_id = standings[0]['team'].id
+            result.second_place_team_id = standings[1]['team'].id
+        else:
+            result = GroupResult(
+                group_name=group_name,
+                first_place_team_id=standings[0]['team'].id,
+                second_place_team_id=standings[1]['team'].id
+            )
+            session.add(result)
+        
+        session.commit()
+        
+        # Processa pontuação dos palpites de grupo
+        process_group_predictions(session, group_name)
+
+
 def admin_resultados(session):
     """Lançamento de resultados"""
     st.subheader("📝 Lançar Resultados")
@@ -2329,6 +2356,10 @@ def admin_resultados(session):
                             # NÃO muda o status, continua 'scheduled'
                             session.commit()
                             
+                            # Atualiza automaticamente a classificação do grupo
+                            if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                                _auto_update_group_result(session, match.team1.group)
+                            
                             st.success(f"🔴 Placar atualizado: {gols1} x {gols2} (jogo em andamento)")
                             log_action(session, st.session_state.user['id'], 'placar_atualizado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
                             st.rerun()
@@ -2342,6 +2373,10 @@ def admin_resultados(session):
                             
                             # Processa pontuação dos palpites
                             process_match_predictions(session, match.id)
+                            
+                            # Atualiza automaticamente a classificação do grupo
+                            if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                                _auto_update_group_result(session, match.team1.group)
                             
                             st.success(f"✅ Resultado final confirmado: {gols1} x {gols2}")
                             log_action(session, st.session_state.user['id'], 'resultado_lancado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
@@ -2387,11 +2422,18 @@ def admin_resultados(session):
                         # Reprocessa pontuação dos palpites
                         process_match_predictions(session, match.id)
                         
+                        # Atualiza automaticamente a classificação do grupo
+                        if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                            _auto_update_group_result(session, match.team1.group)
+                        
                         st.success(f"Resultado atualizado: {gols1_edit} x {gols2_edit}")
                         log_action(session, st.session_state.user['id'], 'resultado_editado', details=f"Jogo #{match.match_number}: {gols1_edit}x{gols2_edit}")
                         st.rerun()
                     
                     if delete_result:
+                        # Guarda o grupo antes de apagar
+                        grupo_do_jogo = match.team1.group if match.team1 else None
+                        
                         # Apagar resultado e voltar jogo para status 'scheduled'
                         match.team1_score = None
                         match.team2_score = None
@@ -2400,6 +2442,10 @@ def admin_resultados(session):
                         
                         # Reprocessa pontuação dos palpites (zera pontos deste jogo)
                         process_match_predictions(session, match.id)
+                        
+                        # Atualiza automaticamente a classificação do grupo
+                        if match.phase == 'Fase de Grupos' and grupo_do_jogo:
+                            _auto_update_group_result(session, grupo_do_jogo)
                         
                         st.success(f"Resultado apagado! Jogo voltou para status 'Agendado'.")
                         log_action(session, st.session_state.user['id'], 'resultado_apagado', details=f"Jogo #{match.match_number}")

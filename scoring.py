@@ -381,9 +381,10 @@ def get_ranking(session) -> list:
     3. Maior número de acerto de Vencedores com gols corretos (15 pts)
     4. Maior número de acerto de Vencedores (10 pts)
     5. Maior número de acerto de classificados no grupo
-    6. Maior número de acerto de gols de um time (5 pts)
-    7. Menos palpites zerados
-    8. Ordem de inscrição (quem se inscreveu primeiro)
+    6. Maior número de acerto de pódio
+    7. Maior número de acerto de gols de um time (5 pts)
+    8. Menos palpites zerados
+    9. Ordem de inscrição (quem se inscreveu primeiro)
     
     IMPORTANTE: Só considera pontos de jogos que JÁ COMEÇARAM (horário passou)
     """
@@ -472,11 +473,23 @@ def get_ranking(session) -> list:
         # Pontos de pódio - só conta se o pódio foi definido
         podium_pred = session.query(PodiumPrediction).filter_by(user_id=user.id).first()
         pontos_podio = 0
+        podio_corretos = 0  # Conta quantos acertos de pódio
         if podium_pred:
             # Verifica se o pódio foi definido
             campeao = session.query(TournamentResult).filter_by(result_type='champion').first()
+            vice = session.query(TournamentResult).filter_by(result_type='runner_up').first()
+            terceiro = session.query(TournamentResult).filter_by(result_type='third_place').first()
+            
             if campeao and campeao.team_id:
                 pontos_podio = podium_pred.points_awarded or 0
+                
+                # Conta acertos de pódio
+                if podium_pred.champion_team_id == campeao.team_id:
+                    podio_corretos += 1
+                if vice and podium_pred.runner_up_team_id == vice.team_id:
+                    podio_corretos += 1
+                if terceiro and podium_pred.third_place_team_id == terceiro.team_id:
+                    podio_corretos += 1
         
         total_pontos = pontos_jogos + pontos_grupos + pontos_podio
         
@@ -490,6 +503,7 @@ def get_ranking(session) -> list:
             'gols': gols,
             'zeros': zeros,
             'grupos_corretos': grupos_corretos,
+            'podio_corretos': podio_corretos,
             'resultados_corretos': placares_exatos + resultado_gols + resultado,
             'created_at': user.created_at
         })
@@ -501,18 +515,20 @@ def get_ranking(session) -> list:
     # 3. Maior número de acerto de Vencedores com gols corretos (15 pts)
     # 4. Maior número de acerto de Vencedores (10 pts)
     # 5. Maior número de acerto de classificados no grupo
-    # 6. Maior número de acerto de gols de um time (5 pts)
-    # 7. Menos palpites zerados
-    # 8. Ordem de inscrição (quem se inscreveu primeiro)
+    # 6. Maior número de acerto de pódio
+    # 7. Maior número de acerto de gols de um time (5 pts)
+    # 8. Menos palpites zerados
+    # 9. Ordem de inscrição (quem se inscreveu primeiro)
     ranking.sort(key=lambda x: (
         -x['total_pontos'],        # 1. Maior pontuação total
         -x['placares_exatos'],     # 2. Mais placares exatos (20 pts)
         -x['resultado_gols'],      # 3. Mais resultado + gols (15 pts)
         -x['resultado'],           # 4. Mais resultado sem gols (10 pts)
         -x['grupos_corretos'],     # 5. Mais acertos de classificados no grupo
-        -x['gols'],                # 6. Mais gols de um time (5 pts)
-        x['zeros'],                # 7. Menos zeros
-        x['user_id']               # 8. Ordem de inscrição
+        -x['podio_corretos'],      # 6. Mais acertos de pódio
+        -x['gols'],                # 7. Mais gols de um time (5 pts)
+        x['zeros'],                # 8. Menos zeros
+        x['user_id']               # 9. Ordem de inscrição
     ))
     
     # Adiciona posição
