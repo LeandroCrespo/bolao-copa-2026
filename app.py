@@ -1006,6 +1006,22 @@ def page_home():
     # Imagem dos mascotes embutida em base64
     MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
     
+    # Banner decorativo com ícones dos países sede
+    st.markdown('''
+    <div style="
+        background: linear-gradient(90deg, #E61D25 0%, #3CAC3B 25%, #2A398D 50%, #3CAC3B 75%, #E61D25 100%);
+        padding: 8px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    ">
+        <span style="font-size: 1.3rem; letter-spacing: 8px;">
+            🍁 🇨🇦 • 🦅 🇲🇽 • ⭐ 🇺🇸
+        </span>
+    </div>
+    ''', unsafe_allow_html=True)
+    
     # Imagem dos mascotes (menor na home)
     st.markdown(f'''
     <div style="text-align: center; margin-bottom: 0.5rem;">
@@ -3657,15 +3673,17 @@ def page_visualizacao_ao_vivo():
             }
         )
         
-        # Legenda
-        st.markdown("""  
-        **Legenda de Pontos:**
-        - 🟢 20 pts: Placar exato
-        - 🟢 15 pts: Resultado + gols de um time
-        - 🟡 10 pts: Resultado correto
-        - 🟠 5 pts: Gols de um time
-        - ⚫ 0 pts: Não pontuou
-        """)
+        # Legenda com cores oficiais da Copa 2026
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 15px; border-radius: 10px; border-left: 4px solid #2A398D;">
+            <strong style="color: #2A398D;">Legenda de Pontos:</strong><br>
+            <span style="color: #3CAC3B; font-weight: bold;">⬤ 20 pts:</span> Placar exato<br>
+            <span style="color: #3CAC3B; font-weight: bold;">⬤ 15 pts:</span> Resultado + gols de um time<br>
+            <span style="color: #2A398D; font-weight: bold;">⬤ 10 pts:</span> Resultado correto<br>
+            <span style="color: #E61D25; font-weight: bold;">⬤ 5 pts:</span> Gols de um time<br>
+            <span style="color: #474A4A; font-weight: bold;">⬤ 0 pts:</span> Não pontuou
+        </div>
+        """, unsafe_allow_html=True)
         
         # Botão de atualização
         st.divider()
@@ -4111,6 +4129,39 @@ def main():
         
         page_func = pages.get(st.session_state.page, page_home)
         page_func()
+        
+        # Rodapé com identidade visual da Copa 2026
+        st.markdown("""
+        <div style="
+            margin-top: 50px;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #1E3A5F 0%, #2A398D 100%);
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        ">
+            <div style="font-size: 1.5rem; margin-bottom: 10px;">
+                🇨🇦 🇲🇽 🇺🇸
+            </div>
+            <div style="
+                font-size: 1.8rem;
+                font-weight: 800;
+                color: #FFD700;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                letter-spacing: 3px;
+                margin-bottom: 8px;
+            ">
+                #WeAre26
+            </div>
+            <div style="
+                font-size: 0.9rem;
+                color: #ffffff;
+                opacity: 0.9;
+            ">
+                🏆 FIFA World Cup 2026™ | 🍁 Canadá • 🦅 México • ⭐ Estados Unidos
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
