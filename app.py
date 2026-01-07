@@ -2381,6 +2381,14 @@ def page_estatisticas():
                     acumulado += p
                     pontos_acumulados.append(acumulado)
                 
+                # Calcula limites dinâmicos para os eixos
+                max_acumulado = max(pontos_acumulados) if pontos_acumulados else 0
+                max_dia = max(pontos) if pontos else 0
+                
+                # Adiciona margem de 20% acima do máximo
+                y1_max = max_acumulado * 1.2 if max_acumulado > 0 else 10
+                y2_max = max_dia * 1.2 if max_dia > 0 else 10
+                
                 # Cria gráfico com Plotly
                 fig = go.Figure()
                 
@@ -2408,11 +2416,15 @@ def page_estatisticas():
                 fig.update_layout(
                     title='🏆 Sua Evolução no Bolão',
                     xaxis_title='Data',
-                    yaxis_title='Pontos Acumulados',
+                    yaxis=dict(
+                        title='Pontos Acumulados',
+                        range=[0, y1_max]
+                    ),
                     yaxis2=dict(
                         title='Pontos no Dia',
                         overlaying='y',
-                        side='right'
+                        side='right',
+                        range=[0, y2_max]
                     ),
                     legend=dict(
                         orientation='h',
