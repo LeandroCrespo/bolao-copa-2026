@@ -184,18 +184,28 @@ def calculate_podium_points(pred_champion: int, pred_runner: int, pred_third: in
 
 def process_match_predictions(session, match_id: int):
     """
-    Processa todos os palpites de uma partida finalizada e atribui pontos.
+    Processa todos os palpites de uma partida e atribui pontos.
+    - Se o jogo tem placar (em andamento ou finalizado): calcula pontos
+    - Se o jogo não tem placar (resultado apagado): zera pontos
     """
     match = session.query(Match).filter_by(id=match_id).first()
     
-    if not match or match.status != 'finished':
+    if not match:
         return
     
-    if match.team1_score is None or match.team2_score is None:
-        return
-    
-    config = get_scoring_config(session)
     predictions = session.query(Prediction).filter_by(match_id=match_id).all()
+    
+    # Se o jogo não tem placar, zera os pontos
+    if match.team1_score is None or match.team2_score is None:
+        for pred in predictions:
+            pred.points_awarded = 0
+            pred.points_type = None
+            pred.breakdown = None
+        session.commit()
+        return
+    
+    # Jogo tem placar (em andamento ou finalizado) - calcula pontos
+    config = get_scoring_config(session)
     
     for pred in predictions:
         points, points_type, breakdown = calculate_match_points(
@@ -268,11 +278,32 @@ def process_podium_predictions(session):
 def get_user_stats(session, user_id: int) -> dict:
     """
     Obtém estatísticas detalhadas de um usuário.
+    Só considera jogos que já começaram E têm placar.
     """
-    predictions = session.query(Prediction).filter_by(user_id=user_id).all()
+    from datetime import datetime
+    import pytz
+    
+    # Pega horário atual (Brasília, naive para comparar com banco)
+    brazil_tz = pytz.timezone('America/Sao_Paulo')
+    now_br = datetime.now(brazil_tz)
+    now_naive = now_br.replace(tzinfo=None)
+    
+    # Pega IDs de jogos que já começaram E têm placar
+    started_matches = session.query(Match.id).filter(
+        Match.datetime <= now_naive,
+        Match.team1_score.isnot(None),
+        Match.team2_score.isnot(None)
+    ).all()
+    started_match_ids = {m.id for m in started_matches}
+    
+    # Pega todos os palpites do usuário
+    all_predictions = session.query(Prediction).filter_by(user_id=user_id).all()
+    
+    # Filtra apenas palpites de jogos que já começaram e têm placar
+    predictions = [p for p in all_predictions if p.match_id in started_match_ids]
     
     stats = {
-        'total_palpites': len(predictions),
+        'total_palpites': len(all_predictions),  # Total de palpites feitos
         'placares_exatos': 0,
         'resultados_corretos': 0,
         'gols_corretos': 0,
@@ -335,11 +366,17 @@ def get_ranking(session) -> list:
     
     users = session.query(User).filter_by(active=True).filter(User.role != 'admin').all()
     
-    # Pega horário atual (UTC para comparar com banco)
-    now_utc = datetime.now(pytz.UTC)
+    # Pega horário atual (Brasília, naive para comparar com banco)
+    brazil_tz = pytz.timezone('America/Sao_Paulo')
+    now_br = datetime.now(brazil_tz)
+    now_naive = now_br.replace(tzinfo=None)
     
-    # Pega IDs de jogos que já começaram (horário passou)
-    started_matches = session.query(Match.id).filter(Match.datetime <= now_utc).all()
+    # Pega IDs de jogos que já começaram (horário passou) E TEM PLACAR
+    started_matches = session.query(Match.id).filter(
+        Match.datetime <= now_naive,
+        Match.team1_score.isnot(None),
+        Match.team2_score.isnot(None)
+    ).all()
     started_match_ids = {m.id for m in started_matches}
     
     ranking = []
