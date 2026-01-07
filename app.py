@@ -1844,15 +1844,17 @@ def page_ranking():
                 ">
                     <div style="
                         position: absolute;
-                        top: -10px;
+                        top: 8px;
                         left: 50%;
                         transform: translateX(-50%);
                         background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
                         color: white;
-                        padding: 5px 20px;
-                        border-radius: 20px;
-                        font-size: 0.8rem;
+                        padding: 5px 15px;
+                        border-radius: 15px;
+                        font-size: 0.75rem;
                         font-weight: bold;
+                        white-space: nowrap;
+                        z-index: 10;
                     ">2º LUGAR</div>
                     <div style="font-size: 3rem; margin: 15px 0;">🥈</div>
                     <div style="font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; text-shadow: 1px 1px 2px rgba(255,255,255,0.8);">{ranking[1]['nome']}</div>
@@ -1884,15 +1886,17 @@ def page_ranking():
                 ">
                     <div style="
                         position: absolute;
-                        top: -10px;
+                        top: 8px;
                         left: 50%;
                         transform: translateX(-50%);
                         background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
                         color: white;
-                        padding: 5px 20px;
-                        border-radius: 20px;
-                        font-size: 0.9rem;
+                        padding: 6px 18px;
+                        border-radius: 15px;
+                        font-size: 0.85rem;
                         font-weight: bold;
+                        white-space: nowrap;
+                        z-index: 10;
                     ">🏆 CAMPEÃO</div>
                     <div style="font-size: 4rem; margin: 20px 0; filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));">🥇</div>
                     <div style="font-size: 1.3rem; font-weight: 800; color: #1a1a2e; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(255,255,255,0.8);">{ranking[0]['nome']}</div>
@@ -1926,15 +1930,17 @@ def page_ranking():
                 ">
                     <div style="
                         position: absolute;
-                        top: -10px;
+                        top: 8px;
                         left: 50%;
                         transform: translateX(-50%);
                         background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
                         color: white;
-                        padding: 5px 20px;
-                        border-radius: 20px;
-                        font-size: 0.8rem;
+                        padding: 5px 15px;
+                        border-radius: 15px;
+                        font-size: 0.75rem;
                         font-weight: bold;
+                        white-space: nowrap;
+                        z-index: 10;
                     ">3º LUGAR</div>
                     <div style="font-size: 2.5rem; margin: 15px 0;">🥉</div>
                     <div style="font-size: 1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">{ranking[2]['nome']}</div>
