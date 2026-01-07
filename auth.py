@@ -95,26 +95,34 @@ def create_user(session, name: str, username: str, password: str, role: str = 'p
     return user
 
 
-def change_password(session, user_id: int, new_password: str) -> bool:
+def change_password(session, user, current_password: str, new_password: str) -> bool:
     """
-    Altera a senha de um usuário.
+    Altera a senha de um usuário após verificar a senha atual.
     
     Args:
         session: Sessão do banco de dados
-        user_id: ID do usuário
+        user: Objeto User ou ID do usuário
+        current_password: Senha atual em texto plano
         new_password: Nova senha em texto plano
         
     Returns:
-        True se alterado com sucesso, False caso contrário
+        True se alterado com sucesso, False se senha atual incorreta
     """
-    user = session.query(User).filter_by(id=user_id).first()
+    # Se recebeu ID, busca o usuário
+    if isinstance(user, int):
+        user = session.query(User).filter_by(id=user).first()
     
-    if user:
-        user.password_hash = hash_password(new_password)
-        session.commit()
-        return True
+    if not user:
+        return False
     
-    return False
+    # Verifica se a senha atual está correta
+    if not verify_password(current_password, user.password_hash):
+        return False
+    
+    # Altera a senha
+    user.password_hash = hash_password(new_password)
+    session.commit()
+    return True
 
 
 def deactivate_user(session, user_id: int) -> bool:
