@@ -350,15 +350,21 @@ def get_user_stats(session, user_id: int) -> dict:
         elif points_type == 'nenhum':
             stats['palpites_zerados'] += 1
     
-    # Pontos de grupos
+    # Pontos de grupos - só conta se o grupo tem resultado salvo
     group_preds = session.query(GroupPrediction).filter_by(user_id=user_id).all()
     for gp in group_preds:
-        stats['pontos_grupos'] += gp.points_awarded or 0
+        # Verifica se o grupo tem resultado salvo
+        group_result = session.query(GroupResult).filter_by(group_name=gp.group_name).first()
+        if group_result and group_result.first_place_team_id and group_result.second_place_team_id:
+            stats['pontos_grupos'] += gp.points_awarded or 0
     
-    # Pontos de pódio
+    # Pontos de pódio - só conta se o pódio foi definido
     podium_pred = session.query(PodiumPrediction).filter_by(user_id=user_id).first()
     if podium_pred:
-        stats['pontos_podio'] = podium_pred.points_awarded or 0
+        # Verifica se o pódio foi definido
+        campeao = session.query(TournamentResult).filter_by(result_type='champion').first()
+        if campeao and campeao.team_id:
+            stats['pontos_podio'] = podium_pred.points_awarded or 0
     
     stats['total_pontos'] = stats['pontos_jogos'] + stats['pontos_grupos'] + stats['pontos_podio']
     
@@ -447,11 +453,23 @@ def get_ranking(session) -> list:
             elif points_type == 'nenhum':
                 zeros += 1
         
+        # Pontos de grupos - só conta se o grupo tem resultado salvo
         group_preds = session.query(GroupPrediction).filter_by(user_id=user.id).all()
-        pontos_grupos = sum(gp.points_awarded or 0 for gp in group_preds)
+        pontos_grupos = 0
+        for gp in group_preds:
+            # Verifica se o grupo tem resultado salvo
+            group_result = session.query(GroupResult).filter_by(group_name=gp.group_name).first()
+            if group_result and group_result.first_place_team_id and group_result.second_place_team_id:
+                pontos_grupos += gp.points_awarded or 0
         
+        # Pontos de pódio - só conta se o pódio foi definido
         podium_pred = session.query(PodiumPrediction).filter_by(user_id=user.id).first()
-        pontos_podio = (podium_pred.points_awarded or 0) if podium_pred else 0
+        pontos_podio = 0
+        if podium_pred:
+            # Verifica se o pódio foi definido
+            campeao = session.query(TournamentResult).filter_by(result_type='champion').first()
+            if campeao and campeao.team_id:
+                pontos_podio = podium_pred.points_awarded or 0
         
         total_pontos = pontos_jogos + pontos_grupos + pontos_podio
         

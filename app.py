@@ -2466,7 +2466,12 @@ def admin_grupos(session):
                     key=f"gr_{grupo}_2"
                 )
                 
-                if st.form_submit_button("💾 Salvar"):
+                col_save, col_delete = st.columns([1, 1])
+                
+                with col_save:
+                    save_btn = st.form_submit_button("💾 Salvar")
+                
+                if save_btn:
                     if primeiro and segundo and primeiro != segundo:
                         if result:
                             result.first_place_team_id = primeiro
@@ -2489,6 +2494,23 @@ def admin_grupos(session):
                         st.rerun()
                     else:
                         st.error("Selecione dois times diferentes!")
+            
+            # Botão de apagar fora do form
+            if result:
+                if st.button(f"🗑️ Apagar Grupo {grupo}", key=f"del_gr_{grupo}"):
+                    # Zera pontos dos palpites de grupo
+                    group_preds = session.query(GroupPrediction).filter_by(group_name=grupo).all()
+                    for gp in group_preds:
+                        gp.points_awarded = 0
+                        gp.breakdown = None
+                    
+                    # Remove o resultado do grupo
+                    session.delete(result)
+                    session.commit()
+                    
+                    st.success(f"Resultado do Grupo {grupo} apagado!")
+                    log_action(session, st.session_state.user['id'], 'grupo_apagado', details=f"Grupo {grupo}")
+                    st.rerun()
 
 
 def admin_podio(session):
@@ -2555,6 +2577,24 @@ def admin_podio(session):
                 st.rerun()
             else:
                 st.error("Selecione três times diferentes!")
+    
+    # Botão de apagar pódio fora do form
+    if campeao or vice or terceiro:
+        st.divider()
+        if st.button("🗑️ Apagar Pódio", key="del_podio"):
+            # Zera pontos dos palpites de pódio
+            podium_preds = session.query(PodiumPrediction).all()
+            for pp in podium_preds:
+                pp.points_awarded = 0
+                pp.breakdown = None
+            
+            # Remove os resultados do pódio
+            session.query(TournamentResult).delete()
+            session.commit()
+            
+            st.success("Pódio apagado!")
+            log_action(session, st.session_state.user['id'], 'podio_apagado')
+            st.rerun()
 
 
 def admin_pontuacao(session):
