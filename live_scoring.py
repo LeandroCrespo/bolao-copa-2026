@@ -161,7 +161,8 @@ def calculate_live_ranking(session, match_id: int = None) -> list:
 
 def get_ongoing_matches(session) -> list:
     """
-    Retorna lista de jogos em andamento ou finalizados hoje.
+    Retorna lista de jogos do dia atual (em andamento ou finalizados).
+    Só mostra jogos cujo horário de início seja no dia de hoje.
     
     Returns:
         Lista de jogos com status e informações
@@ -173,9 +174,19 @@ def get_ongoing_matches(session) -> list:
     brazil_tz = pytz.timezone('America/Sao_Paulo')
     now = datetime.now(brazil_tz)
     
-    # Pega jogos de hoje ou que já começaram
+    # Início e fim do dia atual (meia-noite a meia-noite)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+    
+    # Converte para UTC para comparar com banco
+    today_start_utc = today_start.astimezone(pytz.UTC)
+    today_end_utc = today_end.astimezone(pytz.UTC)
+    
+    # Pega apenas jogos do dia atual que já começaram
     matches = session.query(Match).filter(
-        Match.datetime <= now
+        Match.datetime >= today_start_utc,
+        Match.datetime < today_end_utc,
+        Match.datetime <= now.astimezone(pytz.UTC)  # Já começou
     ).order_by(Match.datetime.desc()).all()
     
     result = []
@@ -195,6 +206,9 @@ def get_ongoing_matches(session) -> list:
             match.status != 'finished'
         )
         
+        # Status: finalizado ou em andamento
+        is_finished = match.status == 'finished'
+        
         result.append({
             'id': match.id,
             'match_number': match.match_number,
@@ -207,6 +221,7 @@ def get_ongoing_matches(session) -> list:
             'group': match.group,
             'status': match.status,
             'is_live': is_live,
+            'is_finished': is_finished,
             'has_started': time_since_start.total_seconds() > 0
         })
     

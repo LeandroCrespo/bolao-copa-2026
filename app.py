@@ -3000,19 +3000,33 @@ def page_visualizacao_ao_vivo():
         
         # Se selecionou "Todos os jogos"
         if selected_match_id == 0:
-            st.subheader("🎯 Jogos em Andamento")
+            # Separa jogos em andamento e finalizados
+            jogos_em_andamento = [m for m in started_matches if m['is_live']]
+            jogos_finalizados = [m for m in started_matches if m.get('is_finished', False)]
             
-            # Lista de jogos em andamento
-            st.markdown("**⚽ Jogos:**")
-            for match in started_matches:
-                score = f"{match['team1_score']} x {match['team2_score']}" if match['team1_score'] is not None else "- x -"
-                status_icon = "🔴" if match['is_live'] else "✅"
-                st.markdown(f"{status_icon} **Jogo {match['match_number']}:** {match['team1']} **{score}** {match['team2']}")
+            # Mostra jogos em andamento
+            if jogos_em_andamento:
+                st.subheader("🔴 Jogos em Andamento")
+                for match in jogos_em_andamento:
+                    score = f"{match['team1_score']} x {match['team2_score']}" if match['team1_score'] is not None else "- x -"
+                    st.markdown(f"🔴 **Jogo {match['match_number']}:** {match['team1']} **{score}** {match['team2']}")
+            
+            # Mostra jogos finalizados
+            if jogos_finalizados:
+                st.subheader("✅ Jogos Finalizados")
+                for match in jogos_finalizados:
+                    score = f"{match['team1_score']} x {match['team2_score']}" if match['team1_score'] is not None else "- x -"
+                    st.markdown(f"✅ **Jogo {match['match_number']}:** {match['team1']} **{score}** {match['team2']} - **FINALIZADO**")
+            
+            # Se não há jogos em andamento nem finalizados
+            if not jogos_em_andamento and not jogos_finalizados:
+                st.info("Nenhum jogo do dia ainda.")
             
             st.divider()
             
-            # Calcula soma total de pontos por participante em todos os jogos
-            st.subheader("🏆 Pontuação Total (Jogos em Andamento)")
+            # Calcula soma total de pontos por participante em todos os jogos do dia
+            titulo_pontuacao = "🏆 Pontuação Total (Jogos do Dia)" if jogos_finalizados else "🏆 Pontuação Total (Jogos em Andamento)"
+            st.subheader(titulo_pontuacao)
             
             # Dicionário para somar pontos de cada usuário
             total_points_by_user = {}
@@ -3039,57 +3053,10 @@ def page_visualizacao_ao_vivo():
                 total_users = len(live_ranking)
                 rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
                 
-                # CSS para tabela formatada
-                st.markdown("""
-                <style>
-                    .ranking-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin: 10px 0;
-                        background-color: #ffffff;
-                    }
-                    .ranking-table th {
-                        background-color: #1E3A5F;
-                        color: white;
-                        padding: 10px;
-                        text-align: left;
-                        font-weight: bold;
-                    }
-                    .ranking-table td {
-                        padding: 8px 10px;
-                        border-bottom: 1px solid #dee2e6;
-                        background-color: #ffffff;
-                        color: #1a1a2e;
-                    }
-                    .ranking-table tr:hover {
-                        background-color: #f8f9fa;
-                    }
-                    .pos-col { width: 60px; text-align: center; }
-                    .name-col { width: 200px; }
-                    .points-col { width: 80px; text-align: center; font-weight: bold; }
-                    .var-col { width: 100px; text-align: center; }
-                    .status-col { width: 120px; text-align: center; }
-                    .var-up { color: #28a745; }
-                    .var-down { color: #dc3545; }
-                    .var-same { color: #6c757d; }
-                </style>
-                """, unsafe_allow_html=True)
+                # Prepara dados para st.dataframe
+                import pandas as pd
                 
-                # Constrói tabela HTML
-                table_html = """
-                <table class="ranking-table">
-                    <thead>
-                        <tr>
-                            <th class="pos-col">Pos</th>
-                            <th class="name-col">Participante</th>
-                            <th class="points-col">Pontos</th>
-                            <th class="var-col">Variação</th>
-                            <th class="status-col">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                """
-                
+                table_data = []
                 for i, (user_name, data) in enumerate(sorted_users):
                     pos = i + 1
                     points = data['points']
@@ -3102,13 +3069,10 @@ def page_visualizacao_ao_vivo():
                     
                     if variacao > 0:
                         var_text = f"⬆️ +{variacao}"
-                        var_class = "var-up"
                     elif variacao < 0:
                         var_text = f"⬇️ {variacao}"
-                        var_class = "var-down"
                     else:
                         var_text = "➡️ 0"
-                        var_class = "var-same"
                     
                     # Status especial
                     status = ""
@@ -3127,22 +3091,28 @@ def page_visualizacao_ao_vivo():
                     else:
                         pos_display = f"{pos}º"
                     
-                    table_html += f"""
-                        <tr>
-                            <td class="pos-col">{pos_display}</td>
-                            <td class="name-col">{user_name}</td>
-                            <td class="points-col">{points} pts</td>
-                            <td class="var-col {var_class}">{var_text}</td>
-                            <td class="status-col">{status}</td>
-                        </tr>
-                    """
+                    table_data.append({
+                        'Pos': pos_display,
+                        'Participante': user_name,
+                        'Pontos': f"{points} pts",
+                        'Variação': var_text,
+                        'Status': status
+                    })
                 
-                table_html += """
-                    </tbody>
-                </table>
-                """
-                
-                st.markdown(table_html, unsafe_allow_html=True)
+                # Cria DataFrame e exibe
+                df = pd.DataFrame(table_data)
+                st.dataframe(
+                    df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        'Pos': st.column_config.TextColumn('Pos', width='small'),
+                        'Participante': st.column_config.TextColumn('Participante', width='medium'),
+                        'Pontos': st.column_config.TextColumn('Pontos', width='small'),
+                        'Variação': st.column_config.TextColumn('Variação', width='small'),
+                        'Status': st.column_config.TextColumn('Status', width='medium')
+                    }
+                )
             else:
                 st.info("Nenhum palpite registrado para os jogos em andamento.")
             
