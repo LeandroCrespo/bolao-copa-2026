@@ -2426,9 +2426,23 @@ def page_estatisticas():
                     paper_bgcolor='white'
                 )
                 
-                # Atualiza cores dos eixos separadamente para compatibilidade
-                fig.update_xaxes(title_font_color='black', tickfont_color='black')
-                fig.update_yaxes(title_font_color='black', tickfont_color='black')
+                # Atualiza cores dos eixos e linhas de grade
+                fig.update_xaxes(
+                    title_font_color='black', 
+                    tickfont_color='black',
+                    showgrid=True,
+                    gridcolor='rgba(200, 200, 200, 0.3)',
+                    gridwidth=1
+                )
+                fig.update_yaxes(
+                    title_font_color='black', 
+                    tickfont_color='black',
+                    showgrid=True,
+                    gridcolor='rgba(200, 200, 200, 0.3)',
+                    gridwidth=1
+                )
+                # Remove linhas de grade do eixo Y secundário para evitar duplicação
+                fig.update_yaxes(showgrid=False, selector=dict(overlaying='y'))
                 
                 st.plotly_chart(fig, use_container_width=True)
             else:
