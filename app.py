@@ -3039,10 +3039,56 @@ def page_visualizacao_ao_vivo():
                 total_users = len(live_ranking)
                 rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
                 
-                st.markdown("""  
-                | Pos | Participante | Pontos | Variação | Status |
-                |-----|--------------|--------|----------|--------|
-                """)
+                # CSS para tabela formatada
+                st.markdown("""
+                <style>
+                    .ranking-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 10px 0;
+                        background-color: #ffffff;
+                    }
+                    .ranking-table th {
+                        background-color: #1E3A5F;
+                        color: white;
+                        padding: 10px;
+                        text-align: left;
+                        font-weight: bold;
+                    }
+                    .ranking-table td {
+                        padding: 8px 10px;
+                        border-bottom: 1px solid #dee2e6;
+                        background-color: #ffffff;
+                        color: #1a1a2e;
+                    }
+                    .ranking-table tr:hover {
+                        background-color: #f8f9fa;
+                    }
+                    .pos-col { width: 60px; text-align: center; }
+                    .name-col { width: 200px; }
+                    .points-col { width: 80px; text-align: center; font-weight: bold; }
+                    .var-col { width: 100px; text-align: center; }
+                    .status-col { width: 120px; text-align: center; }
+                    .var-up { color: #28a745; }
+                    .var-down { color: #dc3545; }
+                    .var-same { color: #6c757d; }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                # Constrói tabela HTML
+                table_html = """
+                <table class="ranking-table">
+                    <thead>
+                        <tr>
+                            <th class="pos-col">Pos</th>
+                            <th class="name-col">Participante</th>
+                            <th class="points-col">Pontos</th>
+                            <th class="var-col">Variação</th>
+                            <th class="status-col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """
                 
                 for i, (user_name, data) in enumerate(sorted_users):
                     pos = i + 1
@@ -3056,10 +3102,13 @@ def page_visualizacao_ao_vivo():
                     
                     if variacao > 0:
                         var_text = f"⬆️ +{variacao}"
+                        var_class = "var-up"
                     elif variacao < 0:
                         var_text = f"⬇️ {variacao}"
+                        var_class = "var-down"
                     else:
                         var_text = "➡️ 0"
+                        var_class = "var-same"
                     
                     # Status especial
                     status = ""
@@ -3078,7 +3127,22 @@ def page_visualizacao_ao_vivo():
                     else:
                         pos_display = f"{pos}º"
                     
-                    st.markdown(f"**{pos_display}** {user_name} - **{points} pts** {var_text} {status}")
+                    table_html += f"""
+                        <tr>
+                            <td class="pos-col">{pos_display}</td>
+                            <td class="name-col">{user_name}</td>
+                            <td class="points-col">{points} pts</td>
+                            <td class="var-col {var_class}">{var_text}</td>
+                            <td class="status-col">{status}</td>
+                        </tr>
+                    """
+                
+                table_html += """
+                    </tbody>
+                </table>
+                """
+                
+                st.markdown(table_html, unsafe_allow_html=True)
             else:
                 st.info("Nenhum palpite registrado para os jogos em andamento.")
             
@@ -3146,165 +3210,63 @@ def page_visualizacao_ao_vivo():
         # Mostra tabela de palpites e pontos
         st.subheader("📊 Palpites e Pontuação")
         
-        # CSS para a tabela
-        st.markdown("""
-        <style>
-            .live-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin: 20px 0;
-                background-color: #ffffff !important;
-            }
-            .live-table th {
-                background-color: #1E3A5F;
-                color: white;
-                padding: 12px;
-                text-align: left;
-                font-weight: bold;
-            }
-            .live-table td {
-                padding: 10px 12px;
-                border-bottom: 1px solid #dee2e6;
-                background-color: #ffffff !important;
-                color: #1a1a2e !important;
-            }
-            .live-table tr {
-                background-color: #ffffff !important;
-            }
-            .live-table tr:hover {
-                background-color: #f8f9fa !important;
-            }
-            .points-badge {
-                display: inline-block;
-                padding: 4px 12px;
-                border-radius: 12px;
-                font-weight: bold;
-                color: white;
-            }
-            .points-20 { background-color: #28a745; }
-            .points-15 { background-color: #17a2b8; }
-            .points-10 { background-color: #ffc107; color: #000; }
-            .points-5 { background-color: #fd7e14; }
-            .points-0 { background-color: #6c757d; }
-            .variation-up {
-                color: #28a745;
-                font-weight: bold;
-            }
-            .variation-down {
-                color: #dc3545;
-                font-weight: bold;
-            }
-            .variation-same {
-                color: #6c757d;
-            }
-            .zone-podio {
-                background-color: #fff3cd;
-            }
-            .zone-rebaixamento {
-                background-color: #f8d7da;
-            }
-        </style>
-        """, unsafe_allow_html=True)
+        # Prepara dados para exibição
+        import pandas as pd
         
-        # Constrói tabela HTML
-        table_html = """
-        <table class="live-table">
-            <thead>
-                <tr>
-                    <th>Participante</th>
-                    <th>Palpite</th>
-                    <th>Pontos</th>
-                    <th>Variação no Ranking</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
-        
+        table_data = []
         for pred in predictions:
             user_id = pred['user_id']
             user_rank = variacao_map.get(user_id, {})
             
-            # Determina classe de pontos
-            points = pred['points']
-            if points >= 20:
-                points_class = 'points-20'
-            elif points >= 15:
-                points_class = 'points-15'
-            elif points >= 10:
-                points_class = 'points-10'
-            elif points >= 5:
-                points_class = 'points-5'
-            else:
-                points_class = 'points-0'
-            
             # Variação de posição
             variacao = user_rank.get('variacao', 0)
             posicao_atual = user_rank.get('posicao_atual', '-')
-            posicao_anterior = user_rank.get('posicao_anterior', '-')
             
             if variacao > 0:
-                variacao_html = f'<span class="variation-up">⬆️ +{variacao} (→ {posicao_atual}º)</span>'
+                var_text = f"⬆️ +{variacao} (→ {posicao_atual}º)"
             elif variacao < 0:
-                variacao_html = f'<span class="variation-down">⬇️ {variacao} (→ {posicao_atual}º)</span>'
+                var_text = f"⬇️ {variacao} (→ {posicao_atual}º)"
             else:
-                variacao_html = f'<span class="variation-same">➡️ Mantém {posicao_atual}º</span>'
+                var_text = f"➡️ Mantém {posicao_atual}º"
             
-            # Status especial (pódio/rebaixamento)
-            status_html = ""
+            # Status especial
+            status = ""
+            if isinstance(posicao_atual, int):
+                if posicao_atual <= 3:
+                    status = "🏆 Pódio"
+                elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
+                    status = "⚠️ Rebaixamento"
             
-            # Verifica se está entrando ou saindo do pódio
-            estava_podio = posicao_anterior in zone_info['podio_posicoes']
-            esta_podio = posicao_atual in zone_info['podio_posicoes']
-            
-            if esta_podio and not estava_podio:
-                status_html = '🏆 <strong>Entrando no pódio!</strong>'
-            elif estava_podio and not esta_podio:
-                status_html = '📉 <strong>Saindo do pódio</strong>'
-            elif esta_podio:
-                status_html = '🥇 <strong>No pódio</strong>'
-            
-            # Verifica zona de rebaixamento
-            if rebaixamento_inicio:
-                estava_rebaixamento = posicao_anterior >= rebaixamento_inicio
-                esta_rebaixamento = posicao_atual >= rebaixamento_inicio
-                
-                if esta_rebaixamento and not estava_rebaixamento:
-                    status_html = '⚠️ <strong>Entrando na zona de rebaixamento!</strong>'
-                elif estava_rebaixamento and not esta_rebaixamento:
-                    status_html = '✅ <strong>Saindo da zona de rebaixamento!</strong>'
-                elif esta_rebaixamento:
-                    status_html = '⚠️ <strong>Zona de rebaixamento</strong>'
-            
-            # Determina classe da linha
-            row_class = ""
-            if esta_podio:
-                row_class = 'zone-podio'
-            elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
-                row_class = 'zone-rebaixamento'
-            
-            table_html += f"""
-                <tr class="{row_class}">
-                    <td><strong>{pred['user_name']}</strong></td>
-                    <td>{pred['prediction']}</td>
-                    <td><span class="points-badge {points_class}">{points} pts</span></td>
-                    <td>{variacao_html}</td>
-                    <td>{status_html}</td>
-                </tr>
-            """
+            table_data.append({
+                'Participante': pred['user_name'],
+                'Palpite': pred['prediction'],
+                'Pontos': f"{pred['points']} pts",
+                'Variação': var_text,
+                'Status': status
+            })
         
-        table_html += """
-            </tbody>
-        </table>
-        """
+        # Cria DataFrame
+        df = pd.DataFrame(table_data)
         
-        st.markdown(table_html, unsafe_allow_html=True)
+        # Exibe usando st.dataframe (tem fundo branco automático)
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Participante': st.column_config.TextColumn('Participante', width='medium'),
+                'Palpite': st.column_config.TextColumn('Palpite', width='small'),
+                'Pontos': st.column_config.TextColumn('Pontos', width='small'),
+                'Variação': st.column_config.TextColumn('Variação', width='medium'),
+                'Status': st.column_config.TextColumn('Status', width='medium')
+            }
+        )
         
         # Legenda
         st.markdown("""  
         **Legenda de Pontos:**
         - 🟢 20 pts: Placar exato
-        - 🔵 15 pts: Resultado + gols de um time
+        - 🟢 15 pts: Resultado + gols de um time
         - 🟡 10 pts: Resultado correto
         - 🟠 5 pts: Gols de um time
         - ⚫ 0 pts: Não pontuou
@@ -3427,11 +3389,11 @@ def page_resumo_diario():
             with col3:
                 # Link para WhatsApp Web (abre com texto pré-preenchido)
                 import urllib.parse
-                # Codifica o texto preservando emojis
-                # WhatsApp aceita texto URL-encoded em UTF-8
+                # Codifica o texto para URL - WhatsApp aceita UTF-8 encoded
                 summary_text = st.session_state['daily_summary']
-                # Codifica para bytes UTF-8 e depois para URL
-                whatsapp_text = urllib.parse.quote(summary_text.encode('utf-8'), safe='')
+                # Usa quote diretamente na string (não em bytes)
+                # O quote converte caracteres especiais e emojis corretamente
+                whatsapp_text = urllib.parse.quote(summary_text)
                 whatsapp_url = f"https://wa.me/?text={whatsapp_text}"
                 
                 st.markdown(
