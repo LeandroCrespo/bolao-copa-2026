@@ -3567,7 +3567,7 @@ def page_resultados_grupos():
     st.header("🏆 Resultados por Grupo")
     st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
     
-    with get_session() as session:
+    with get_session(engine) as session:
         # Seletor de grupo
         grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
         
