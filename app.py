@@ -2003,6 +2003,49 @@ def page_ranking():
             }
             
             /* CSS da zona de rebaixamento removido - usando estilo inline */
+            
+            /* ========================================
+               PÓDIO RESPONSIVO - MOBILE
+               ======================================== */
+            @media (max-width: 768px) {
+                .podio-container {
+                    flex-direction: column !important;
+                    align-items: center !important;
+                    gap: 15px !important;
+                }
+                
+                .podio-item {
+                    width: 90% !important;
+                    max-width: 300px !important;
+                    min-width: auto !important;
+                    height: auto !important;
+                    padding: 15px !important;
+                }
+                
+                .podio-1 {
+                    order: 1 !important;
+                }
+                
+                .podio-2 {
+                    order: 2 !important;
+                }
+                
+                .podio-3 {
+                    order: 3 !important;
+                }
+                
+                .podio-posicao {
+                    font-size: 1.8rem !important;
+                }
+                
+                .podio-nome {
+                    font-size: 1rem !important;
+                }
+                
+                .podio-pontos {
+                    font-size: 1.1rem !important;
+                }
+            }
         
     /* ========================================
        ÍCONE DA SIDEBAR - FORÇAR BRANCO
