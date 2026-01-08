@@ -2019,15 +2019,30 @@ def page_ranking():
                 }
             }
             
-            /* Mobile: espaçamento uniforme */
+            /* Mobile: espaçamento uniforme e altura adequada */
             @media (max-width: 768px) {
                 .podio-card {
                     margin-top: 0 !important;
                     margin-bottom: 15px !important;
+                    min-height: auto !important;
+                    height: auto !important;
+                    padding-bottom: 20px !important;
+                    overflow: visible !important;
                 }
                 
                 .podio-1, .podio-2, .podio-3 {
                     margin-top: 0 !important;
+                    min-height: auto !important;
+                    height: auto !important;
+                }
+                
+                /* Garantir que o conteúdo não seja cortado */
+                [data-testid="column"] {
+                    overflow: visible !important;
+                }
+                
+                [data-testid="column"] > div {
+                    overflow: visible !important;
                 }
             }
         
