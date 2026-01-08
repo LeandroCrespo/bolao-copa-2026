@@ -91,12 +91,19 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
         # Determina os gols
         if is_prediction and matches_results and match.id in matches_results:
             gols1, gols2 = matches_results[match.id]
-        elif not is_prediction and match.status in ('finished', 'live'):
-            # Inclui jogos finalizados E jogos em andamento
-            if match.team1_score is not None and match.team2_score is not None:
+        elif not is_prediction:
+            # Verifica se o jogo já começou (status finalizado OU jogo com placar definido)
+            # Considera jogos finalizados, em andamento (live), ou que já têm placar
+            if match.status == 'finished' or match.status == 'live':
+                if match.team1_score is not None and match.team2_score is not None:
+                    gols1, gols2 = match.team1_score, match.team2_score
+                else:
+                    continue  # Jogo sem placar definido
+            elif match.team1_score is not None and match.team2_score is not None:
+                # Jogo com placar definido (mesmo que status não seja 'live')
                 gols1, gols2 = match.team1_score, match.team2_score
             else:
-                continue  # Jogo sem placar definido
+                continue  # Jogo sem resultado ainda
         else:
             continue  # Jogo sem resultado ainda
         
