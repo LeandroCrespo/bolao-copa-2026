@@ -2190,7 +2190,6 @@ def page_ranking():
             </style>
             
             <div class="podio-flex-container">
-                <!-- 1º Lugar -->
                 <div class="podio-card podio-card-1" style="
                     background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%);
                     border-radius: 20px;
@@ -2229,8 +2228,7 @@ def page_ranking():
                         display: inline-block;
                     ">{ranking[0]['total_pontos']} pts</div>
                 </div>
-                
-                <!-- 2º Lugar -->
+
                 <div class="podio-card podio-card-2" style="
                     background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
                     border-radius: 20px;
@@ -2269,8 +2267,7 @@ def page_ranking():
                         display: inline-block;
                     ">{ranking[1]['total_pontos']} pts</div>
                 </div>
-                
-                <!-- 3º Lugar -->
+
                 <div class="podio-card podio-card-3" style="
                     background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
                     border-radius: 20px;
