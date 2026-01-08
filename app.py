@@ -2166,13 +2166,15 @@ def page_ranking():
                 <div class="podio-card podio-2" style="
                     background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
                     border-radius: 20px;
-                    padding: 30px 20px 25px 20px;
+                    padding: 35px 20px 25px 20px;
                     text-align: center;
                     box-shadow: 0 8px 30px rgba(192,192,192,0.4), inset 0 2px 10px rgba(255,255,255,0.5);
                     border: 3px solid #d4d4d4;
                     position: relative;
-                    overflow: visible;
-                    min-height: 200px;
+                    min-height: 220px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
                 ">
                     <div style="
                         position: absolute;
@@ -2187,8 +2189,8 @@ def page_ranking():
                         font-weight: bold;
                         white-space: nowrap;
                     ">2º LUGAR</div>
-                    <div style="font-size: 3rem; margin: 15px 0;">🥈</div>
-                    <div style="font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 8px;">{ranking[1]['nome']}</div>
+                    <div style="font-size: 3rem; margin: 15px 0 10px 0;">🥈</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-bottom: 12px;">{ranking[1]['nome']}</div>
                     <div style="
                         font-size: 1.5rem;
                         font-weight: 800;
@@ -2197,6 +2199,7 @@ def page_ranking():
                         padding: 8px 15px;
                         border-radius: 10px;
                         display: inline-block;
+                        margin: 0 auto;
                     ">{ranking[1]['total_pontos']} pts</div>
                 </div>
                 ''', unsafe_allow_html=True)
@@ -2207,13 +2210,15 @@ def page_ranking():
                 <div class="podio-card podio-1" style="
                     background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%);
                     border-radius: 20px;
-                    padding: 35px 25px 30px 25px;
+                    padding: 40px 25px 30px 25px;
                     text-align: center;
                     box-shadow: 0 10px 40px rgba(255,215,0,0.5), inset 0 2px 15px rgba(255,255,255,0.6);
                     border: 4px solid #FFD700;
                     position: relative;
-                    overflow: visible;
-                    min-height: 220px;
+                    min-height: 240px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
                 ">
                     <div style="
                         position: absolute;
@@ -2228,8 +2233,8 @@ def page_ranking():
                         font-weight: bold;
                         white-space: nowrap;
                     ">🏆 CAMPEÃO</div>
-                    <div style="font-size: 4rem; margin: 20px 0;">🥇</div>
-                    <div style="font-size: 1.3rem; font-weight: 800; color: #1a1a2e; margin-bottom: 10px;">{ranking[0]['nome']}</div>
+                    <div style="font-size: 4rem; margin: 20px 0 10px 0;">🥇</div>
+                    <div style="font-size: 1.3rem; font-weight: 800; color: #1a1a2e; margin-bottom: 12px;">{ranking[0]['nome']}</div>
                     <div style="
                         font-size: 1.8rem;
                         font-weight: 900;
@@ -2238,6 +2243,7 @@ def page_ranking():
                         padding: 10px 20px;
                         border-radius: 12px;
                         display: inline-block;
+                        margin: 0 auto;
                     ">{ranking[0]['total_pontos']} pts</div>
                 </div>
                 ''', unsafe_allow_html=True)
@@ -2248,13 +2254,15 @@ def page_ranking():
                 <div class="podio-card podio-3" style="
                     background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
                     border-radius: 20px;
-                    padding: 30px 15px 25px 15px;
+                    padding: 35px 15px 25px 15px;
                     text-align: center;
                     box-shadow: 0 8px 30px rgba(205,127,50,0.4), inset 0 2px 10px rgba(255,255,255,0.4);
                     border: 3px solid #CD7F32;
                     position: relative;
-                    overflow: visible;
-                    min-height: 200px;
+                    min-height: 220px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
                 ">
                     <div style="
                         position: absolute;
@@ -2269,8 +2277,8 @@ def page_ranking():
                         font-weight: bold;
                         white-space: nowrap;
                     ">3º LUGAR</div>
-                    <div style="font-size: 2.5rem; margin: 15px 0;">🥉</div>
-                    <div style="font-size: 1rem; font-weight: 700; color: #ffffff; margin-bottom: 8px;">{ranking[2]['nome']}</div>
+                    <div style="font-size: 2.5rem; margin: 15px 0 10px 0;">🥉</div>
+                    <div style="font-size: 1rem; font-weight: 700; color: #ffffff; margin-bottom: 12px;">{ranking[2]['nome']}</div>
                     <div style="
                         font-size: 1.3rem;
                         font-weight: 800;
@@ -2279,6 +2287,7 @@ def page_ranking():
                         padding: 8px 15px;
                         border-radius: 10px;
                         display: inline-block;
+                        margin: 0 auto;
                     ">{ranking[2]['total_pontos']} pts</div>
                 </div>
                 ''', unsafe_allow_html=True)
