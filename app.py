@@ -2385,9 +2385,8 @@ def page_estatisticas():
                 max_acumulado = max(pontos_acumulados) if pontos_acumulados else 0
                 max_dia = max(pontos) if pontos else 0
                 
-                # Adiciona margem de 20% acima do máximo
-                y1_max = max_acumulado * 1.2 if max_acumulado > 0 else 10
-                y2_max = max_dia * 1.2 if max_dia > 0 else 10
+                # Usa o maior valor entre os dois para ter a mesma escala
+                y_max = max(max_acumulado, max_dia) * 1.2 if max(max_acumulado, max_dia) > 0 else 10
                 
                 # Cria gráfico com Plotly
                 fig = go.Figure()
@@ -2420,13 +2419,13 @@ def page_estatisticas():
                     xaxis_title='Data',
                     yaxis=dict(
                         title='Pontos Acumulados',
-                        range=[0, y1_max]
+                        range=[0, y_max]
                     ),
                     yaxis2=dict(
                         title='Pontos no Dia',
                         overlaying='y',
                         side='right',
-                        range=[0, y2_max]
+                        range=[0, y_max]  # Mesma escala do eixo esquerdo
                     ),
                     legend=dict(
                         orientation='h',
