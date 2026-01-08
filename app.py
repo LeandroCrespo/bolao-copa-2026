@@ -2556,17 +2556,36 @@ def page_estatisticas():
         st.subheader("🎯 Distribuição de Acertos")
         
         # Conta tipos de acertos baseado no campo points_type
+        # SÓ considera jogos que já começaram E têm placar registrado
         from sqlalchemy import func
+        from datetime import datetime
+        import pytz
         
-        # Busca contagem por tipo de acerto
-        tipos_acertos = session.query(
-            Prediction.points_type,
-            func.count(Prediction.id).label('count')
-        ).filter(
-            Prediction.user_id == st.session_state.user['id'],
-            Prediction.points_awarded > 0,
-            Prediction.points_type.isnot(None)
-        ).group_by(Prediction.points_type).all()
+        brazil_tz = pytz.timezone('America/Sao_Paulo')
+        now_br = datetime.now(brazil_tz)
+        now_naive = now_br.replace(tzinfo=None)
+        
+        # Busca IDs de jogos que já começaram E têm placar registrado
+        jogos_com_resultado = session.query(Match.id).filter(
+            Match.datetime <= now_naive,
+            Match.team1_score.isnot(None),
+            Match.team2_score.isnot(None)
+        ).all()
+        jogos_com_resultado_ids = [j[0] for j in jogos_com_resultado]
+        
+        # Busca contagem por tipo de acerto apenas de jogos com resultado
+        if jogos_com_resultado_ids:
+            tipos_acertos = session.query(
+                Prediction.points_type,
+                func.count(Prediction.id).label('count')
+            ).filter(
+                Prediction.user_id == st.session_state.user['id'],
+                Prediction.match_id.in_(jogos_com_resultado_ids),
+                Prediction.points_awarded > 0,
+                Prediction.points_type.isnot(None)
+            ).group_by(Prediction.points_type).all()
+        else:
+            tipos_acertos = []
         
         # Mapeamento de tipos para labels e cores
         tipo_config = {
