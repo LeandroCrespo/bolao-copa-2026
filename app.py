@@ -381,6 +381,37 @@ st.markdown("""
         stroke: #ffffff !important;
     }
     
+    /* Botão do sidebar no mobile - garantir visibilidade */
+    @media (max-width: 768px) {
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            position: fixed !important;
+            top: 70px !important;
+            left: 10px !important;
+            z-index: 999999 !important;
+            background: #1E3A5F !important;
+            border-radius: 8px !important;
+            padding: 8px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+        }
+        
+        [data-testid="collapsedControl"] button {
+            background: #1E3A5F !important;
+            color: white !important;
+            border: none !important;
+            padding: 8px !important;
+        }
+        
+        [data-testid="collapsedControl"] svg {
+            fill: white !important;
+            stroke: white !important;
+            width: 24px !important;
+            height: 24px !important;
+        }
+    }
+    
     /* ========================================
        HEADERS E TÍTULOS
        ======================================== */
