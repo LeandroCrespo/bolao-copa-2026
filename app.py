@@ -2006,44 +2006,26 @@ def page_ranking():
             
             /* ========================================
                PÓDIO RESPONSIVO - MOBILE
+               Reordena as colunas do Streamlit para mostrar
+               1º, 2º, 3º em vez de 2º, 1º, 3º no mobile
                ======================================== */
             @media (max-width: 768px) {
-                .podio-container {
-                    flex-direction: column !important;
-                    align-items: center !important;
-                    gap: 15px !important;
-                }
-                
-                .podio-item {
-                    width: 90% !important;
-                    max-width: 300px !important;
-                    min-width: auto !important;
-                    height: auto !important;
-                    padding: 15px !important;
-                }
-                
-                .podio-1 {
+                /* Container de colunas do Streamlit - usar flexbox com direção coluna */
+                [data-testid="column"]:has(div[style*="#FFD700"]) {
                     order: 1 !important;
                 }
                 
-                .podio-2 {
+                [data-testid="column"]:has(div[style*="#C0C0C0"]) {
                     order: 2 !important;
                 }
                 
-                .podio-3 {
+                [data-testid="column"]:has(div[style*="#CD7F32"]) {
                     order: 3 !important;
                 }
                 
-                .podio-posicao {
-                    font-size: 1.8rem !important;
-                }
-                
-                .podio-nome {
-                    font-size: 1rem !important;
-                }
-                
-                .podio-pontos {
-                    font-size: 1.1rem !important;
+                /* Remover margin-top nos cards do pódio no mobile */
+                [data-testid="column"] > div > div > div[style*="margin-top"] {
+                    margin-top: 10px !important;
                 }
             }
         
