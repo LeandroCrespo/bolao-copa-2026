@@ -383,32 +383,50 @@ st.markdown("""
     
     /* Botão do sidebar no mobile - garantir visibilidade */
     @media (max-width: 768px) {
+        /* Esconder o header fixo no mobile para não cobrir o botão */
+        .fixed-header {
+            display: none !important;
+        }
+        
+        /* Ajustar padding do conteúdo principal no mobile */
+        .main .block-container {
+            padding-top: 1rem !important;
+        }
+        
         [data-testid="collapsedControl"] {
             display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
             position: fixed !important;
-            top: 70px !important;
+            top: 10px !important;
             left: 10px !important;
-            z-index: 999999 !important;
-            background: #1E3A5F !important;
-            border-radius: 8px !important;
-            padding: 8px !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+            z-index: 9999999 !important;
+            background: linear-gradient(135deg, #1E3A5F 0%, #2A398D 100%) !important;
+            border-radius: 10px !important;
+            padding: 10px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+            border: 2px solid #FFD700 !important;
         }
         
         [data-testid="collapsedControl"] button {
-            background: #1E3A5F !important;
+            background: transparent !important;
             color: white !important;
             border: none !important;
-            padding: 8px !important;
+            padding: 4px !important;
+            min-width: auto !important;
+            min-height: auto !important;
         }
         
         [data-testid="collapsedControl"] svg {
-            fill: white !important;
-            stroke: white !important;
-            width: 24px !important;
-            height: 24px !important;
+            fill: #FFD700 !important;
+            stroke: #FFD700 !important;
+            width: 28px !important;
+            height: 28px !important;
+        }
+        
+        /* Garantir que o sidebar abra por cima de tudo */
+        [data-testid="stSidebar"] {
+            z-index: 99999999 !important;
         }
     }
     
