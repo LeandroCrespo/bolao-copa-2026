@@ -2166,12 +2166,13 @@ def page_ranking():
                 <div class="podio-card podio-2" style="
                     background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
                     border-radius: 20px;
-                    padding: 25px 20px;
+                    padding: 30px 20px 25px 20px;
                     text-align: center;
                     box-shadow: 0 8px 30px rgba(192,192,192,0.4), inset 0 2px 10px rgba(255,255,255,0.5);
                     border: 3px solid #d4d4d4;
                     position: relative;
-                    overflow: hidden;
+                    overflow: visible;
+                    min-height: 200px;
                 ">
                     <div style="
                         position: absolute;
@@ -2206,12 +2207,13 @@ def page_ranking():
                 <div class="podio-card podio-1" style="
                     background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%);
                     border-radius: 20px;
-                    padding: 30px 25px;
+                    padding: 35px 25px 30px 25px;
                     text-align: center;
                     box-shadow: 0 10px 40px rgba(255,215,0,0.5), inset 0 2px 15px rgba(255,255,255,0.6);
                     border: 4px solid #FFD700;
                     position: relative;
-                    overflow: hidden;
+                    overflow: visible;
+                    min-height: 220px;
                 ">
                     <div style="
                         position: absolute;
@@ -2246,12 +2248,13 @@ def page_ranking():
                 <div class="podio-card podio-3" style="
                     background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
                     border-radius: 20px;
-                    padding: 20px 15px;
+                    padding: 30px 15px 25px 15px;
                     text-align: center;
                     box-shadow: 0 8px 30px rgba(205,127,50,0.4), inset 0 2px 10px rgba(255,255,255,0.4);
                     border: 3px solid #CD7F32;
                     position: relative;
-                    overflow: hidden;
+                    overflow: visible;
+                    min-height: 200px;
                 ">
                     <div style="
                         position: absolute;
