@@ -2008,19 +2008,25 @@ def page_ranking():
                PÓDIO RESPONSIVO - MOBILE
                Espaçamento uniforme entre os cards
                ======================================== */
-            @media (max-width: 768px) {
-                /* Remover margin-top nos cards do pódio no mobile para espaçamento uniforme */
-                [data-testid="column"] > div > div > div[style*="margin-top"] {
-                    margin-top: 0 !important;
+            
+            /* Desktop: manter efeito de pódio escalonado */
+            @media (min-width: 769px) {
+                .podio-2 {
+                    margin-top: 50px !important;
                 }
-                
-                /* Espaçamento uniforme entre colunas */
-                [data-testid="column"] {
+                .podio-3 {
+                    margin-top: 80px !important;
+                }
+            }
+            
+            /* Mobile: espaçamento uniforme */
+            @media (max-width: 768px) {
+                .podio-card {
+                    margin-top: 0 !important;
                     margin-bottom: 15px !important;
                 }
                 
-                /* Cards do pódio - padding uniforme */
-                [data-testid="column"] > div > div > div {
+                .podio-1, .podio-2, .podio-3 {
                     margin-top: 0 !important;
                 }
             }
@@ -2142,13 +2148,12 @@ def page_ranking():
             # 2º lugar (esquerda no desktop)
             with col2:
                 st.markdown(f'''
-                <div style="
+                <div class="podio-card podio-2" style="
                     background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
                     border-radius: 20px;
                     padding: 25px 20px;
                     text-align: center;
                     box-shadow: 0 8px 30px rgba(192,192,192,0.4), inset 0 2px 10px rgba(255,255,255,0.5);
-                    margin-top: 50px;
                     border: 3px solid #d4d4d4;
                     position: relative;
                     overflow: hidden;
@@ -2183,7 +2188,7 @@ def page_ranking():
             # 1º lugar (centro, mais alto)
             with col1:
                 st.markdown(f'''
-                <div style="
+                <div class="podio-card podio-1" style="
                     background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%);
                     border-radius: 20px;
                     padding: 30px 25px;
@@ -2223,13 +2228,12 @@ def page_ranking():
             # 3º lugar (direita no desktop)
             with col3:
                 st.markdown(f'''
-                <div style="
+                <div class="podio-card podio-3" style="
                     background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
                     border-radius: 20px;
                     padding: 20px 15px;
                     text-align: center;
                     box-shadow: 0 8px 30px rgba(205,127,50,0.4), inset 0 2px 10px rgba(255,255,255,0.4);
-                    margin-top: 80px;
                     border: 3px solid #CD7F32;
                     position: relative;
                     overflow: hidden;
