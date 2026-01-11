@@ -2027,18 +2027,40 @@ def page_ranking():
                Espaçamento uniforme entre os cards
                ======================================== */
             
-            /* Desktop: manter efeito de pódio escalonado */
+            /* Desktop: manter efeito de pódio escalonado - 2º e 3º na mesma altura */
             @media (min-width: 769px) {
                 .podio-2 {
                     margin-top: 50px !important;
                 }
                 .podio-3 {
-                    margin-top: 80px !important;
+                    margin-top: 50px !important;
                 }
             }
             
-            /* Mobile: espaçamento uniforme e altura adequada */
+            /* Mobile: espaçamento uniforme, altura adequada e ordem 1º, 2º, 3º */
             @media (max-width: 768px) {
+                /* Container flex para reordenar */
+                .stColumns {
+                    display: flex !important;
+                    flex-direction: column !important;
+                }
+                
+                /* Reordenar colunas: 1º lugar primeiro, depois 2º, depois 3º */
+                [data-testid="column"]:has(.podio-1) {
+                    order: 1 !important;
+                }
+                [data-testid="column"]:has(.podio-2) {
+                    order: 2 !important;
+                }
+                [data-testid="column"]:has(.podio-3) {
+                    order: 3 !important;
+                }
+                
+                /* Esconder colunas de espaçamento */
+                [data-testid="column"]:empty {
+                    display: none !important;
+                }
+                
                 .podio-card {
                     margin-top: 0 !important;
                     margin-bottom: 15px !important;
