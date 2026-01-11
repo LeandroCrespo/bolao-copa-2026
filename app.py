@@ -4227,9 +4227,17 @@ def page_visualizacao_ao_vivo():
         # Mostra tabela de palpites e pontos
         st.subheader("📊 Palpites e Pontuação")
         
-        # CSS para cards de palpites
+        # CSS global para forçar fundo branco
         st.markdown("""
         <style>
+        /* Força fundo branco em todos os containers do Streamlit */
+        div[data-testid="stVerticalBlock"] > div:has(.palpites-grid),
+        div[data-testid="stVerticalBlock"] > div:has(.ranking-cards-container) {
+            background: transparent !important;
+        }
+        div[data-testid="stMarkdownContainer"] {
+            background: transparent !important;
+        }
         .palpite-card {
             background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
             border-radius: 15px !important;
