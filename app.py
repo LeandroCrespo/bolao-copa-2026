@@ -4009,90 +4009,93 @@ def page_visualizacao_ao_vivo():
                 st.markdown("""
                 <style>
                 .ranking-card {
-                    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-                    border-radius: 15px;
-                    padding: 15px 20px;
-                    margin: 8px 0;
-                    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    flex-wrap: wrap;
-                    gap: 10px;
-                    transition: transform 0.2s, box-shadow 0.2s;
+                    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+                    border-radius: 15px !important;
+                    padding: 15px 20px !important;
+                    margin: 8px 0 !important;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.08) !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: space-between !important;
+                    flex-wrap: wrap !important;
+                    gap: 10px !important;
+                    transition: transform 0.2s, box-shadow 0.2s !important;
+                    color: #1a1a2e !important;
                 }
                 .ranking-card:hover {
-                    transform: translateX(5px);
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.12);
+                    transform: translateX(5px) !important;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.12) !important;
                 }
                 .ranking-card.top1 {
-                    background: linear-gradient(135deg, #fff9e6 0%, #ffe066 100%);
-                    border: 2px solid #FFD700;
+                    background: linear-gradient(135deg, #fff9e6 0%, #ffe066 100%) !important;
+                    border: 2px solid #FFD700 !important;
                 }
                 .ranking-card.top2 {
-                    background: linear-gradient(135deg, #f8f9fa 0%, #e0e0e0 100%);
-                    border: 2px solid #C0C0C0;
+                    background: linear-gradient(135deg, #f8f9fa 0%, #e0e0e0 100%) !important;
+                    border: 2px solid #C0C0C0 !important;
                 }
                 .ranking-card.top3 {
-                    background: linear-gradient(135deg, #fff5eb 0%, #ffd9b3 100%);
-                    border: 2px solid #CD7F32;
+                    background: linear-gradient(135deg, #fff5eb 0%, #ffd9b3 100%) !important;
+                    border: 2px solid #CD7F32 !important;
                 }
                 .ranking-card.rebaixamento {
-                    background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
-                    border-left: 4px solid #E61D25;
+                    background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%) !important;
+                    border-left: 4px solid #E61D25 !important;
                 }
                 .ranking-card .posicao {
-                    font-size: 1.5em;
-                    font-weight: bold;
-                    min-width: 50px;
-                    text-align: center;
+                    font-size: 1.5em !important;
+                    font-weight: bold !important;
+                    min-width: 50px !important;
+                    text-align: center !important;
+                    color: #1a1a2e !important;
                 }
                 .ranking-card .info {
-                    flex: 1;
-                    min-width: 150px;
+                    flex: 1 !important;
+                    min-width: 150px !important;
                 }
                 .ranking-card .nome {
-                    font-size: 1.1em;
-                    font-weight: bold;
-                    color: #1a1a2e;
+                    font-size: 1.1em !important;
+                    font-weight: bold !important;
+                    color: #1a1a2e !important;
                 }
                 .ranking-card .pontos-valor {
-                    background: #2A398D;
-                    color: white;
-                    padding: 8px 20px;
-                    border-radius: 25px;
-                    font-weight: bold;
-                    font-size: 1.1em;
+                    background: #2A398D !important;
+                    color: white !important;
+                    padding: 8px 20px !important;
+                    border-radius: 25px !important;
+                    font-weight: bold !important;
+                    font-size: 1.1em !important;
                 }
                 .ranking-card .variacao-badge {
-                    padding: 5px 12px;
-                    border-radius: 15px;
-                    font-size: 0.9em;
-                    font-weight: bold;
+                    padding: 5px 12px !important;
+                    border-radius: 15px !important;
+                    font-size: 0.9em !important;
+                    font-weight: bold !important;
                 }
-                .ranking-card .variacao-badge.up { background: #d4edda; color: #155724; }
-                .ranking-card .variacao-badge.down { background: #f8d7da; color: #721c24; }
-                .ranking-card .variacao-badge.same { background: #e2e3e5; color: #383d41; }
+                .ranking-card .variacao-badge.up { background: #d4edda !important; color: #155724 !important; }
+                .ranking-card .variacao-badge.down { background: #f8d7da !important; color: #721c24 !important; }
+                .ranking-card .variacao-badge.same { background: #e2e3e5 !important; color: #383d41 !important; }
                 .ranking-card .status-badge {
-                    padding: 5px 12px;
-                    border-radius: 15px;
-                    font-size: 0.85em;
-                    font-weight: bold;
+                    padding: 5px 12px !important;
+                    border-radius: 15px !important;
+                    font-size: 0.85em !important;
+                    font-weight: bold !important;
                 }
-                .ranking-card .status-badge.podio { background: #FFD700; color: #333; }
-                .ranking-card .status-badge.rebaixamento { background: #E61D25; color: white; }
+                .ranking-card .status-badge.podio { background: #FFD700 !important; color: #333 !important; }
+                .ranking-card .status-badge.rebaixamento { background: #E61D25 !important; color: white !important; }
                 .ranking-cards-container {
-                    max-height: 500px;
-                    overflow-y: auto;
-                    padding: 5px;
+                    max-height: 500px !important;
+                    overflow-y: auto !important;
+                    padding: 5px !important;
+                    background: transparent !important;
                 }
                 @media (max-width: 768px) {
                     .ranking-card {
-                        flex-direction: column;
-                        text-align: center;
+                        flex-direction: column !important;
+                        text-align: center !important;
                     }
                     .ranking-card .posicao {
-                        margin-bottom: 5px;
+                        margin-bottom: 5px !important;
                     }
                 }
                 </style>
@@ -4228,77 +4231,79 @@ def page_visualizacao_ao_vivo():
         st.markdown("""
         <style>
         .palpite-card {
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border-radius: 15px;
-            padding: 15px;
-            margin: 10px 5px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            border-left: 5px solid #2A398D;
-            transition: transform 0.2s, box-shadow 0.2s;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+            border-radius: 15px !important;
+            padding: 15px !important;
+            margin: 10px 5px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+            border-left: 5px solid #2A398D !important;
+            transition: transform 0.2s, box-shadow 0.2s !important;
+            color: #1a1a2e !important;
         }
         .palpite-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            transform: translateY(-3px) !important;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15) !important;
         }
         .palpite-card.podio {
-            border-left-color: #FFD700;
-            background: linear-gradient(135deg, #fffef5 0%, #fff9e6 100%);
+            border-left-color: #FFD700 !important;
+            background: linear-gradient(135deg, #fffef5 0%, #fff9e6 100%) !important;
         }
         .palpite-card.rebaixamento {
-            border-left-color: #E61D25;
-            background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
+            border-left-color: #E61D25 !important;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%) !important;
         }
         .palpite-card .nome {
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #1a1a2e;
-            margin-bottom: 8px;
+            font-size: 1.1em !important;
+            font-weight: bold !important;
+            color: #1a1a2e !important;
+            margin-bottom: 8px !important;
         }
         .palpite-card .palpite-valor {
-            display: inline-block;
-            background: #2A398D;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-weight: bold;
-            font-size: 1.2em;
+            display: inline-block !important;
+            background: #2A398D !important;
+            color: white !important;
+            padding: 5px 15px !important;
+            border-radius: 20px !important;
+            font-weight: bold !important;
+            font-size: 1.2em !important;
         }
         .palpite-card .pontos {
-            display: inline-block;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-weight: bold;
-            margin-left: 10px;
+            display: inline-block !important;
+            padding: 5px 12px !important;
+            border-radius: 15px !important;
+            font-weight: bold !important;
+            margin-left: 10px !important;
         }
-        .palpite-card .pontos.pts-20 { background: #28a745; color: white; }
-        .palpite-card .pontos.pts-15 { background: #20c997; color: white; }
-        .palpite-card .pontos.pts-10 { background: #2A398D; color: white; }
-        .palpite-card .pontos.pts-5 { background: #fd7e14; color: white; }
-        .palpite-card .pontos.pts-0 { background: #6c757d; color: white; }
+        .palpite-card .pontos.pts-20 { background: #28a745 !important; color: white !important; }
+        .palpite-card .pontos.pts-15 { background: #20c997 !important; color: white !important; }
+        .palpite-card .pontos.pts-10 { background: #2A398D !important; color: white !important; }
+        .palpite-card .pontos.pts-5 { background: #fd7e14 !important; color: white !important; }
+        .palpite-card .pontos.pts-0 { background: #6c757d !important; color: white !important; }
         .palpite-card .variacao {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 8px;
+            font-size: 0.9em !important;
+            color: #666 !important;
+            margin-top: 8px !important;
         }
         .palpite-card .status-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 10px;
-            font-size: 0.85em;
-            font-weight: bold;
-            margin-left: 10px;
+            display: inline-block !important;
+            padding: 3px 10px !important;
+            border-radius: 10px !important;
+            font-size: 0.85em !important;
+            font-weight: bold !important;
+            margin-left: 10px !important;
         }
-        .palpite-card .status-badge.podio { background: #FFD700; color: #333; }
-        .palpite-card .status-badge.rebaixamento { background: #E61D25; color: white; }
+        .palpite-card .status-badge.podio { background: #FFD700 !important; color: #333 !important; }
+        .palpite-card .status-badge.rebaixamento { background: #E61D25 !important; color: white !important; }
         .palpites-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+            gap: 15px !important;
+            margin: 20px 0 !important;
+            background: transparent !important;
         }
         @media (max-width: 768px) {
             .palpites-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr !important;
             }
         }
         </style>
