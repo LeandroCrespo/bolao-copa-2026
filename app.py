@@ -4274,8 +4274,8 @@ def page_visualizacao_ao_vivo():
             align-items: center;
         }
         .palpite-card-light .palpite-badge {
-            background: #2A398D;
-            color: white;
+            background: #2A398D !important;
+            color: #ffffff !important;
             padding: 4px 12px;
             border-radius: 6px;
             font-weight: bold;
@@ -4304,8 +4304,19 @@ def page_visualizacao_ao_vivo():
             font-size: 0.85em;
             font-weight: 600;
         }
-        .palpite-card-light .status-badge.podio { background: #FFF3CD; color: #856404; }
-        .palpite-card-light .status-badge.rebaixamento { background: #F8D7DA; color: #721C24; }
+        .palpite-card-light .status-badge.podio { background: #FFF3CD !important; color: #856404 !important; }
+        .palpite-card-light .status-badge.rebaixamento { background: #F8D7DA !important; color: #721C24 !important; }
+        
+        /* Esconde elementos vazios e garante fundo transparente */
+        .palpite-card-light .status-badge:empty { display: none !important; }
+        .palpite-card-light .info-row:empty { display: none !important; }
+        div[data-testid="stMarkdownContainer"]:has(.palpite-card-light) {
+            background: transparent !important;
+            background-color: transparent !important;
+        }
+        .stMarkdown:has(.palpite-card-light) {
+            background: transparent !important;
+        }
         .palpites-container {
             display: flex;
             flex-direction: column;
