@@ -1999,6 +1999,24 @@ def page_ranking():
                 box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             }
             
+            .ranking-row-1 {
+                background: linear-gradient(90deg, rgba(255,215,0,0.15) 0%, #ffffff 100%);
+                border: 2px solid #FFD700;
+                box-shadow: 0 3px 10px rgba(255,215,0,0.3);
+            }
+            
+            .ranking-row-2 {
+                background: linear-gradient(90deg, rgba(192,192,192,0.15) 0%, #ffffff 100%);
+                border: 2px solid #C0C0C0;
+                box-shadow: 0 3px 10px rgba(192,192,192,0.3);
+            }
+            
+            .ranking-row-3 {
+                background: linear-gradient(90deg, rgba(205,127,50,0.15) 0%, #ffffff 100%);
+                border: 2px solid #CD7F32;
+                box-shadow: 0 3px 10px rgba(205,127,50,0.3);
+            }
+            
             .ranking-row-rebaixado {
                 background: linear-gradient(90deg, #ffebee 0%, #ffffff 100%);
                 border-left: 4px solid #E63946;
@@ -2201,115 +2219,83 @@ def page_ranking():
         st.subheader("🥇 Pódio")
         
         if len(ranking) >= 3:
-            # Pódio visual usando st.columns com st.markdown individual
-            # Cada card é renderizado separadamente para evitar container escuro
+            # Pódio visual usando HTML puro com flexbox
+            # Garante layout horizontal em todas as telas (desktop e mobile)
             
             primeiro = ranking[0]
             segundo = ranking[1]
             terceiro = ranking[2]
             
-            # Função para gerar HTML de um card do pódio
-            def gerar_podio_card(posicao, dados):
-                configs = {
-                    1: {
-                        "bg": "linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%)",
-                        "border": "#FFD700",
-                        "shadow": "rgba(255,215,0,0.5)",
-                        "label": "🏆 CAMPEÃO",
-                        "emoji": "🥇",
-                        "emoji_size": "2.5rem",
-                        "nome_size": "0.95rem",
-                        "pts_size": "1.1rem",
-                        "nome_color": "#1a1a2e",
-                        "min_height": "190px",
-                    },
-                    2: {
-                        "bg": "linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)",
-                        "border": "#d4d4d4",
-                        "shadow": "rgba(192,192,192,0.4)",
-                        "label": "2º LUGAR",
-                        "emoji": "🥈",
-                        "emoji_size": "2rem",
-                        "nome_size": "0.85rem",
-                        "pts_size": "1rem",
-                        "nome_color": "#1a1a2e",
-                        "min_height": "160px",
-                    },
-                    3: {
-                        "bg": "linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%)",
-                        "border": "#CD7F32",
-                        "shadow": "rgba(205,127,50,0.4)",
-                        "label": "3º LUGAR",
-                        "emoji": "🥉",
-                        "emoji_size": "2rem",
-                        "nome_size": "0.85rem",
-                        "pts_size": "1rem",
-                        "nome_color": "#ffffff",
-                        "min_height": "160px",
-                    }
-                }
-                c = configs[posicao]
-                return f'''
-                <div class="podio-card-light" style="
-                    background: {c['bg']} !important;
-                    border-radius: 12px;
-                    padding: 15px 10px;
-                    text-align: center;
-                    box-shadow: 0 6px 20px {c['shadow']};
-                    border: 3px solid {c['border']};
-                    min-height: {c['min_height']};
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: flex-start;
-                    align-items: center;
-                ">
-                    <div style="
-                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
-                        color: white !important;
-                        padding: 4px 10px;
-                        border-radius: 10px;
-                        font-size: 0.65rem;
-                        font-weight: bold;
-                        margin-bottom: 8px;
-                        white-space: nowrap;
-                    ">{c['label']}</div>
-                    <div style="font-size: {c['emoji_size']}; margin: 6px 0;">{c['emoji']}</div>
-                    <div style="
-                        font-size: {c['nome_size']};
-                        font-weight: 700;
-                        color: {c['nome_color']} !important;
-                        margin-bottom: 10px;
-                        word-wrap: break-word;
-                        overflow-wrap: break-word;
-                        max-width: 100%;
-                        line-height: 1.2;
-                    ">{dados['nome']}</div>
-                    <div style="
-                        font-size: {c['pts_size']};
-                        font-weight: 800;
-                        color: #1E3A5F !important;
-                        background: rgba(255,255,255,0.7) !important;
-                        padding: 6px 12px;
-                        border-radius: 8px;
-                    ">{dados['total_pontos']} pts</div>
-                </div>
-                '''
-            
-            # Usar st.columns para layout horizontal
-            # Ordem: 2º | 1º | 3º (formato tradicional de pódio)
-            col2, col1, col3 = st.columns([1, 1.15, 1])
-            
-            # 2º lugar (esquerda) - com margin-top para ficar mais baixo
-            with col2:
-                st.markdown(f'<div style="margin-top: 30px;">{gerar_podio_card(2, segundo)}</div>', unsafe_allow_html=True)
-            
-            # 1º lugar (centro) - mais alto
-            with col1:
-                st.markdown(gerar_podio_card(1, primeiro), unsafe_allow_html=True)
-            
-            # 3º lugar (direita) - com margin-top para ficar mais baixo
-            with col3:
-                st.markdown(f'<div style="margin-top: 30px;">{gerar_podio_card(3, terceiro)}</div>', unsafe_allow_html=True)
+            # Renderizar cada card separadamente para evitar container escuro
+            # Card 2º lugar
+            st.markdown(f'''
+            <div class="podio-card-light" style="
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                width: 30%;
+                max-width: 140px;
+                min-width: 85px;
+                background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
+                border-radius: 10px;
+                padding: 12px 6px;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                border: 3px solid #d4d4d4;
+                margin-top: 25px;
+                vertical-align: bottom;
+            ">
+                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 3px 8px; border-radius: 8px; font-size: 0.6rem; font-weight: bold; margin-bottom: 6px;">2º LUGAR</div>
+                <div style="font-size: 1.8rem; margin: 4px 0;">🥈</div>
+                <div style="font-size: 0.75rem; font-weight: 700; color: #1a1a2e !important; margin-bottom: 8px; word-wrap: break-word; line-height: 1.2;">{segundo['nome']}</div>
+                <div style="font-size: 0.9rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 4px 10px; border-radius: 6px;">{segundo['total_pontos']} pts</div>
+            </div>
+            <div class="podio-card-light" style="
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                width: 34%;
+                max-width: 160px;
+                min-width: 95px;
+                background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
+                border-radius: 10px;
+                padding: 14px 8px;
+                text-align: center;
+                box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+                border: 3px solid #FFD700;
+                margin: 0 2%;
+                vertical-align: bottom;
+            ">
+                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 4px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: bold; margin-bottom: 6px;">🏆 CAMPEÃO</div>
+                <div style="font-size: 2.2rem; margin: 5px 0;">🥇</div>
+                <div style="font-size: 0.85rem; font-weight: 700; color: #1a1a2e !important; margin-bottom: 10px; word-wrap: break-word; line-height: 1.2;">{primeiro['nome']}</div>
+                <div style="font-size: 1rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 5px 12px; border-radius: 6px;">{primeiro['total_pontos']} pts</div>
+            </div>
+            <div class="podio-card-light" style="
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                width: 30%;
+                max-width: 140px;
+                min-width: 85px;
+                background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
+                border-radius: 10px;
+                padding: 12px 6px;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                border: 3px solid #CD7F32;
+                margin-top: 25px;
+                vertical-align: bottom;
+            ">
+                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 3px 8px; border-radius: 8px; font-size: 0.6rem; font-weight: bold; margin-bottom: 6px;">3º LUGAR</div>
+                <div style="font-size: 1.8rem; margin: 4px 0;">🥉</div>
+                <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff !important; margin-bottom: 8px; word-wrap: break-word; line-height: 1.2;">{terceiro['nome']}</div>
+                <div style="font-size: 0.9rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 4px 10px; border-radius: 6px;">{terceiro['total_pontos']} pts</div>
+            </div>
+            ''', unsafe_allow_html=True)
         
         elif len(ranking) > 0:
             # Menos de 3 participantes - mostra o que tem
@@ -2340,8 +2326,13 @@ def page_ranking():
             # Verifica se está na zona de rebaixamento
             is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
             
-            # Classe CSS
-            row_class = "ranking-row-rebaixado" if is_rebaixado else ""
+            # Classe CSS - adiciona classe de posição para os 3 primeiros
+            if is_rebaixado:
+                row_class = "ranking-row-rebaixado"
+            elif posicao <= 3:
+                row_class = f"ranking-row-{posicao}"
+            else:
+                row_class = ""
             
             # Ícone de posição
             if posicao == 1:
