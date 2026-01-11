@@ -4073,8 +4073,8 @@ def page_visualizacao_ao_vivo():
                     color: #1a1a2e;
                 }
                 .ranking-card-light .pontos-badge {
-                    background: #2A398D;
-                    color: white;
+                    background: #2A398D !important;
+                    color: #ffffff !important;
                     padding: 6px 16px;
                     border-radius: 20px;
                     font-weight: bold;
@@ -4285,11 +4285,11 @@ def page_visualizacao_ao_vivo():
             border-radius: 6px;
             font-weight: bold;
         }
-        .palpite-card-light .pontos-badge.pts-20 { background: #28a745; color: white; }
-        .palpite-card-light .pontos-badge.pts-15 { background: #20c997; color: white; }
-        .palpite-card-light .pontos-badge.pts-10 { background: #2A398D; color: white; }
-        .palpite-card-light .pontos-badge.pts-5 { background: #fd7e14; color: white; }
-        .palpite-card-light .pontos-badge.pts-0 { background: #6c757d; color: white; }
+        .palpite-card-light .pontos-badge.pts-20 { background: #28a745 !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-15 { background: #20c997 !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-10 { background: #2A398D !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-5 { background: #fd7e14 !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-0 { background: #6c757d !important; color: #ffffff !important; }
         .palpite-card-light .info-row {
             display: flex;
             justify-content: space-between;
