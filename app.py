@@ -191,6 +191,24 @@ st.markdown("""
         transition: all 0.3s ease;
     }
     
+    /* FORÇA FUNDO TRANSPARENTE nos containers que envolvem HTML customizado */
+    .element-container:has(.palpite-card-light),
+    .element-container:has(.ranking-card-light),
+    .stMarkdown:has(.palpite-card-light),
+    .stMarkdown:has(.ranking-card-light),
+    div[data-testid="stMarkdownContainer"]:has(.palpite-card-light),
+    div[data-testid="stMarkdownContainer"]:has(.ranking-card-light) {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    
+    /* Sobrescreve qualquer fundo escuro em elementos pai */
+    .palpite-card-light,
+    .ranking-card-light {
+        position: relative;
+        z-index: 1;
+    }
+    
     /* Botões com animação de pulse no hover */
     .stButton > button:hover {
         animation: pulse 0.5s ease-in-out;
@@ -4097,9 +4115,7 @@ def page_visualizacao_ao_vivo():
                 </style>
                 """, unsafe_allow_html=True)
                 
-                # Gera cards HTML
-                cards_html = '<div class="ranking-container">'
-                
+                # Gera cards individuais usando st.markdown separado para cada um
                 for i, (user_name, data) in enumerate(sorted_users):
                     pos = i + 1
                     points = data['points']
@@ -4142,7 +4158,8 @@ def page_visualizacao_ao_vivo():
                     else:
                         pos_display = f"{pos}º"
                     
-                    cards_html += f'''
+                    # Renderiza cada card individualmente
+                    st.markdown(f'''
                     <div class="{card_class}">
                         <div class="posicao">{pos_display}</div>
                         <div class="info">
@@ -4152,10 +4169,7 @@ def page_visualizacao_ao_vivo():
                         <span class="variacao-badge {var_class}">{var_text}</span>
                         {status_html}
                     </div>
-                    '''
-                
-                cards_html += '</div>'
-                st.markdown(cards_html, unsafe_allow_html=True)
+                    ''', unsafe_allow_html=True)
             else:
                 st.info("Nenhum palpite registrado para os jogos em andamento.")
             
@@ -4300,9 +4314,7 @@ def page_visualizacao_ao_vivo():
         </style>
         """, unsafe_allow_html=True)
         
-        # Gera cards HTML
-        cards_html = '<div class="palpites-container">'
-        
+        # Gera cards individuais usando st.markdown separado para cada um
         for pred in predictions:
             user_id = pred['user_id']
             user_rank = variacao_map.get(user_id, {})
@@ -4342,7 +4354,8 @@ def page_visualizacao_ao_vivo():
             else:
                 pts_class = "pts-0"
             
-            cards_html += f'''
+            # Renderiza cada card individualmente
+            st.markdown(f'''
             <div class="{card_class}">
                 <div class="header-row">
                     <span class="nome">{pred['user_name']}</span>
@@ -4356,10 +4369,7 @@ def page_visualizacao_ao_vivo():
                     {status_html}
                 </div>
             </div>
-            '''
-        
-        cards_html += '</div>'
-        st.markdown(cards_html, unsafe_allow_html=True)
+            ''', unsafe_allow_html=True)
         
         # Legenda de pontos
         st.markdown("""
