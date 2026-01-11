@@ -3994,7 +3994,7 @@ def page_visualizacao_ao_vivo():
             # Ordena por pontos (maior primeiro)
             sorted_users = sorted(total_points_by_user.items(), key=lambda x: x[1]['points'], reverse=True)
             
-            # Mostra pontuação total em cards
+            # Mostra pontuação total em tabela
             if sorted_users:
                 # Calcula ranking ao vivo para variação
                 live_ranking = calculate_live_ranking(session, started_matches[0]['id'] if started_matches else None)
@@ -4005,105 +4005,10 @@ def page_visualizacao_ao_vivo():
                 total_users = len(live_ranking)
                 rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
                 
-                # CSS para cards de pontuação total
-                st.markdown("""
-                <style>
-                .ranking-card {
-                    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-                    border-radius: 15px !important;
-                    padding: 15px 20px !important;
-                    margin: 8px 0 !important;
-                    box-shadow: 0 3px 10px rgba(0,0,0,0.08) !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: space-between !important;
-                    flex-wrap: wrap !important;
-                    gap: 10px !important;
-                    transition: transform 0.2s, box-shadow 0.2s !important;
-                    color: #1a1a2e !important;
-                }
-                .ranking-card:hover {
-                    transform: translateX(5px) !important;
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.12) !important;
-                }
-                .ranking-card.top1 {
-                    background: linear-gradient(135deg, #fff9e6 0%, #ffe066 100%) !important;
-                    border: 2px solid #FFD700 !important;
-                }
-                .ranking-card.top2 {
-                    background: linear-gradient(135deg, #f8f9fa 0%, #e0e0e0 100%) !important;
-                    border: 2px solid #C0C0C0 !important;
-                }
-                .ranking-card.top3 {
-                    background: linear-gradient(135deg, #fff5eb 0%, #ffd9b3 100%) !important;
-                    border: 2px solid #CD7F32 !important;
-                }
-                .ranking-card.rebaixamento {
-                    background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%) !important;
-                    border-left: 4px solid #E61D25 !important;
-                }
-                .ranking-card .posicao {
-                    font-size: 1.5em !important;
-                    font-weight: bold !important;
-                    min-width: 50px !important;
-                    text-align: center !important;
-                    color: #1a1a2e !important;
-                }
-                .ranking-card .info {
-                    flex: 1 !important;
-                    min-width: 150px !important;
-                }
-                .ranking-card .nome {
-                    font-size: 1.1em !important;
-                    font-weight: bold !important;
-                    color: #1a1a2e !important;
-                }
-                .ranking-card .pontos-valor {
-                    background: #2A398D !important;
-                    color: white !important;
-                    padding: 8px 20px !important;
-                    border-radius: 25px !important;
-                    font-weight: bold !important;
-                    font-size: 1.1em !important;
-                }
-                .ranking-card .variacao-badge {
-                    padding: 5px 12px !important;
-                    border-radius: 15px !important;
-                    font-size: 0.9em !important;
-                    font-weight: bold !important;
-                }
-                .ranking-card .variacao-badge.up { background: #d4edda !important; color: #155724 !important; }
-                .ranking-card .variacao-badge.down { background: #f8d7da !important; color: #721c24 !important; }
-                .ranking-card .variacao-badge.same { background: #e2e3e5 !important; color: #383d41 !important; }
-                .ranking-card .status-badge {
-                    padding: 5px 12px !important;
-                    border-radius: 15px !important;
-                    font-size: 0.85em !important;
-                    font-weight: bold !important;
-                }
-                .ranking-card .status-badge.podio { background: #FFD700 !important; color: #333 !important; }
-                .ranking-card .status-badge.rebaixamento { background: #E61D25 !important; color: white !important; }
-                .ranking-cards-container {
-                    max-height: 500px !important;
-                    overflow-y: auto !important;
-                    padding: 5px !important;
-                    background: transparent !important;
-                }
-                @media (max-width: 768px) {
-                    .ranking-card {
-                        flex-direction: column !important;
-                        text-align: center !important;
-                    }
-                    .ranking-card .posicao {
-                        margin-bottom: 5px !important;
-                    }
-                }
-                </style>
-                """, unsafe_allow_html=True)
+                # Prepara dados para st.dataframe
+                import pandas as pd
                 
-                # Gera cards HTML
-                cards_html = '<div class="ranking-cards-container">'
-                
+                table_data = []
                 for i, (user_name, data) in enumerate(sorted_users):
                     pos = i + 1
                     points = data['points']
@@ -4116,50 +4021,52 @@ def page_visualizacao_ao_vivo():
                     
                     if variacao > 0:
                         var_text = f"⬆️ +{variacao}"
-                        var_class = "up"
                     elif variacao < 0:
                         var_text = f"⬇️ {variacao}"
-                        var_class = "down"
                     else:
                         var_text = "➡️ 0"
-                        var_class = "same"
                     
-                    # Status especial e classe do card
-                    status_html = ""
-                    card_class = "ranking-card"
+                    # Status especial
+                    status = ""
+                    if posicao_atual <= 3:
+                        status = "🏆 Pódio"
+                    elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
+                        status = "⚠️ Rebaixamento"
+                    
+                    # Medalhas para top 3
                     if pos == 1:
-                        card_class = "ranking-card top1"
                         pos_display = "🥇"
-                        status_html = '<span class="status-badge podio">🏆 Pódio</span>'
                     elif pos == 2:
-                        card_class = "ranking-card top2"
                         pos_display = "🥈"
-                        status_html = '<span class="status-badge podio">🏆 Pódio</span>'
                     elif pos == 3:
-                        card_class = "ranking-card top3"
                         pos_display = "🥉"
-                        status_html = '<span class="status-badge podio">🏆 Pódio</span>'
-                    elif rebaixamento_inicio and pos >= rebaixamento_inicio:
-                        card_class = "ranking-card rebaixamento"
-                        pos_display = f"{pos}º"
-                        status_html = '<span class="status-badge rebaixamento">⚠️ Rebaixamento</span>'
                     else:
                         pos_display = f"{pos}º"
                     
-                    cards_html += f'''
-                    <div class="{card_class}">
-                        <div class="posicao">{pos_display}</div>
-                        <div class="info">
-                            <div class="nome">{user_name}</div>
-                        </div>
-                        <div class="pontos-valor">{points} pts</div>
-                        <span class="variacao-badge {var_class}">{var_text}</span>
-                        {status_html}
-                    </div>
-                    '''
+                    table_data.append({
+                        'Pos': pos_display,
+                        'Participante': user_name,
+                        'Pontos': f"{points} pts",
+                        'Variação': var_text,
+                        'Status': status
+                    })
                 
-                cards_html += '</div>'
-                st.markdown(cards_html, unsafe_allow_html=True)
+                # Cria DataFrame e exibe
+                df = pd.DataFrame(table_data)
+                
+                st.dataframe(
+                    df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(400, 50 + len(table_data) * 40),
+                    column_config={
+                        'Pos': st.column_config.TextColumn('Pos', width='small'),
+                        'Participante': st.column_config.TextColumn('Participante', width='medium'),
+                        'Pontos': st.column_config.TextColumn('Pontos', width='small'),
+                        'Variação': st.column_config.TextColumn('Variação', width='small'),
+                        'Status': st.column_config.TextColumn('Status', width='medium')
+                    }
+                )
             else:
                 st.info("Nenhum palpite registrado para os jogos em andamento.")
             
@@ -4227,99 +4134,10 @@ def page_visualizacao_ao_vivo():
         # Mostra tabela de palpites e pontos
         st.subheader("📊 Palpites e Pontuação")
         
-        # CSS global para forçar fundo branco
-        st.markdown("""
-        <style>
-        /* Força fundo branco em todos os containers do Streamlit */
-        div[data-testid="stVerticalBlock"] > div:has(.palpites-grid),
-        div[data-testid="stVerticalBlock"] > div:has(.ranking-cards-container) {
-            background: transparent !important;
-        }
-        div[data-testid="stMarkdownContainer"] {
-            background: transparent !important;
-        }
-        .palpite-card {
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
-            border-radius: 15px !important;
-            padding: 15px !important;
-            margin: 10px 5px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-            border-left: 5px solid #2A398D !important;
-            transition: transform 0.2s, box-shadow 0.2s !important;
-            color: #1a1a2e !important;
-        }
-        .palpite-card:hover {
-            transform: translateY(-3px) !important;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15) !important;
-        }
-        .palpite-card.podio {
-            border-left-color: #FFD700 !important;
-            background: linear-gradient(135deg, #fffef5 0%, #fff9e6 100%) !important;
-        }
-        .palpite-card.rebaixamento {
-            border-left-color: #E61D25 !important;
-            background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%) !important;
-        }
-        .palpite-card .nome {
-            font-size: 1.1em !important;
-            font-weight: bold !important;
-            color: #1a1a2e !important;
-            margin-bottom: 8px !important;
-        }
-        .palpite-card .palpite-valor {
-            display: inline-block !important;
-            background: #2A398D !important;
-            color: white !important;
-            padding: 5px 15px !important;
-            border-radius: 20px !important;
-            font-weight: bold !important;
-            font-size: 1.2em !important;
-        }
-        .palpite-card .pontos {
-            display: inline-block !important;
-            padding: 5px 12px !important;
-            border-radius: 15px !important;
-            font-weight: bold !important;
-            margin-left: 10px !important;
-        }
-        .palpite-card .pontos.pts-20 { background: #28a745 !important; color: white !important; }
-        .palpite-card .pontos.pts-15 { background: #20c997 !important; color: white !important; }
-        .palpite-card .pontos.pts-10 { background: #2A398D !important; color: white !important; }
-        .palpite-card .pontos.pts-5 { background: #fd7e14 !important; color: white !important; }
-        .palpite-card .pontos.pts-0 { background: #6c757d !important; color: white !important; }
-        .palpite-card .variacao {
-            font-size: 0.9em !important;
-            color: #666 !important;
-            margin-top: 8px !important;
-        }
-        .palpite-card .status-badge {
-            display: inline-block !important;
-            padding: 3px 10px !important;
-            border-radius: 10px !important;
-            font-size: 0.85em !important;
-            font-weight: bold !important;
-            margin-left: 10px !important;
-        }
-        .palpite-card .status-badge.podio { background: #FFD700 !important; color: #333 !important; }
-        .palpite-card .status-badge.rebaixamento { background: #E61D25 !important; color: white !important; }
-        .palpites-grid {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
-            gap: 15px !important;
-            margin: 20px 0 !important;
-            background: transparent !important;
-        }
-        @media (max-width: 768px) {
-            .palpites-grid {
-                grid-template-columns: 1fr !important;
-            }
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # Prepara dados para st.dataframe
+        import pandas as pd
         
-        # Gera cards HTML
-        cards_html = '<div class="palpites-grid">'
-        
+        table_data = []
         for pred in predictions:
             user_id = pred['user_id']
             user_rank = variacao_map.get(user_id, {})
@@ -4335,56 +4153,44 @@ def page_visualizacao_ao_vivo():
             else:
                 var_text = f"➡️ Mantém {posicao_atual}º"
             
-            # Status especial e classe CSS
-            status_html = ""
-            card_class = "palpite-card"
+            # Status especial
+            status = ""
             if isinstance(posicao_atual, int):
                 if posicao_atual <= 3:
-                    status_html = '<span class="status-badge podio">🏆 Pódio</span>'
-                    card_class = "palpite-card podio"
+                    status = "🏆 Pódio"
                 elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
-                    status_html = '<span class="status-badge rebaixamento">⚠️ Rebaixamento</span>'
-                    card_class = "palpite-card rebaixamento"
+                    status = "⚠️ Rebaixamento"
             
-            # Classe de pontos
-            points = pred['points']
-            if points >= 20:
-                pts_class = "pts-20"
-            elif points >= 15:
-                pts_class = "pts-15"
-            elif points >= 10:
-                pts_class = "pts-10"
-            elif points >= 5:
-                pts_class = "pts-5"
-            else:
-                pts_class = "pts-0"
-            
-            cards_html += f'''
-            <div class="{card_class}">
-                <div class="nome">{pred['user_name']}</div>
-                <div>
-                    <span class="palpite-valor">{pred['prediction']}</span>
-                    <span class="pontos {pts_class}">{points} pts</span>
-                    {status_html}
-                </div>
-                <div class="variacao">{var_text}</div>
-            </div>
-            '''
+            table_data.append({
+                'Participante': pred['user_name'],
+                'Palpite': pred['prediction'],
+                'Pontos': f"{pred['points']} pts",
+                'Variação': var_text,
+                'Status': status
+            })
         
-        cards_html += '</div>'
-        st.markdown(cards_html, unsafe_allow_html=True)
+        # Cria DataFrame e exibe
+        df = pd.DataFrame(table_data)
         
-        # Legenda com cores oficiais da Copa 2026
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 15px; border-radius: 10px; border-left: 4px solid #2A398D; margin-top: 20px;">
-            <strong style="color: #2A398D;">Legenda de Pontos:</strong><br>
-            <span style="color: #28a745; font-weight: bold;">⬤ 20 pts:</span> Placar exato &nbsp;&nbsp;
-            <span style="color: #20c997; font-weight: bold;">⬤ 15 pts:</span> Resultado + gols &nbsp;&nbsp;
-            <span style="color: #2A398D; font-weight: bold;">⬤ 10 pts:</span> Resultado &nbsp;&nbsp;
-            <span style="color: #fd7e14; font-weight: bold;">⬤ 5 pts:</span> Gols de um time &nbsp;&nbsp;
-            <span style="color: #6c757d; font-weight: bold;">⬤ 0 pts:</span> Não pontuou
-        </div>
-        """, unsafe_allow_html=True)
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            height=min(400, 50 + len(table_data) * 40),
+            column_config={
+                'Participante': st.column_config.TextColumn('Participante', width='medium'),
+                'Palpite': st.column_config.TextColumn('Palpite', width='small'),
+                'Pontos': st.column_config.TextColumn('Pontos', width='small'),
+                'Variação': st.column_config.TextColumn('Variação', width='medium'),
+                'Status': st.column_config.TextColumn('Status', width='medium')
+            }
+        )
+        
+        # Legenda de pontos
+        st.info("""
+        **Legenda de Pontos:**
+        🟢 **20 pts:** Placar exato | 🟢 **15 pts:** Resultado + gols de um time | 🔵 **10 pts:** Resultado correto | 🟠 **5 pts:** Gols de um time | ⚪ **0 pts:** Não pontuou
+        """)
         
         # Botão de atualização
         st.divider()
