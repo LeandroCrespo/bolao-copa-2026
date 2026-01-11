@@ -4273,6 +4273,12 @@ def page_visualizacao_ao_vivo():
             gap: 15px;
             align-items: center;
         }
+        /* Esconde qualquer elemento com fundo escuro dentro dos cards */
+        .palpite-card-light div[style*="background"],
+        .palpite-card-light iframe,
+        .palpite-card-light button {
+            display: none !important;
+        }
         .palpite-card-light .palpite-badge {
             background: #2A398D !important;
             color: #ffffff !important;
@@ -4366,6 +4372,11 @@ def page_visualizacao_ao_vivo():
                 pts_class = "pts-0"
             
             # Renderiza cada card individualmente
+            # Só inclui o status se existir
+            info_row_html = f'<span>{var_text} → {posicao_atual}º lugar</span>'
+            if status_html:
+                info_row_html += f' {status_html}'
+            
             st.markdown(f'''
             <div class="{card_class}">
                 <div class="header-row">
@@ -4376,8 +4387,7 @@ def page_visualizacao_ao_vivo():
                     </div>
                 </div>
                 <div class="info-row">
-                    <span>{var_text} → {posicao_atual}º lugar</span>
-                    {status_html}
+                    {info_row_html}
                 </div>
             </div>
             ''', unsafe_allow_html=True)
