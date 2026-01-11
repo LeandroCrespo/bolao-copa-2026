@@ -210,7 +210,8 @@ st.markdown("""
     
     /* Sobrescreve qualquer fundo escuro em elementos pai */
     .palpite-card-light,
-    .ranking-card-light {
+    .ranking-card-light,
+    .podio-card-light {
         position: relative;
         z-index: 1;
     }
@@ -2200,12 +2201,12 @@ def page_ranking():
         st.subheader("🥇 Pódio")
         
         if len(ranking) >= 3:
-            # Pódio visual com HTML puro para controle total do layout
+            # Pódio visual usando st.columns do Streamlit
             # Desktop: 2º | 1º | 3º (formato tradicional de pódio)
-            # Mobile: 1º, 2º, 3º (ordem vertical)
+            # Mobile: empilha automaticamente
             
-            # Função para gerar card do pódio
-            def gerar_card_podio(posicao, dados, classe_extra=""):
+            # Função para gerar HTML de um card do pódio
+            def gerar_card_podio_html(posicao, dados):
                 configs = {
                     1: {
                         "bg": "linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%)",
@@ -2217,6 +2218,7 @@ def page_ranking():
                         "nome_size": "1.2rem",
                         "pts_size": "1.6rem",
                         "nome_color": "#1a1a2e",
+                        "min_height": "220px",
                     },
                     2: {
                         "bg": "linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)",
@@ -2228,6 +2230,7 @@ def page_ranking():
                         "nome_size": "1rem",
                         "pts_size": "1.4rem",
                         "nome_color": "#1a1a2e",
+                        "min_height": "200px",
                     },
                     3: {
                         "bg": "linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%)",
@@ -2239,87 +2242,62 @@ def page_ranking():
                         "nome_size": "1rem",
                         "pts_size": "1.4rem",
                         "nome_color": "#ffffff",
+                        "min_height": "200px",
                     }
                 }
                 c = configs[posicao]
                 return f'''
-                <div class="podio-item podio-{posicao} {classe_extra}" style="
-                    background: {c['bg']};
+                <div class="podio-card-light podio-{posicao}" style="
+                    background: {c['bg']} !important;
                     border-radius: 16px;
-                    padding: 20px 15px;
+                    padding: 25px 15px 20px 15px;
                     text-align: center;
                     box-shadow: 0 8px 25px {c['shadow']};
                     border: 3px solid {c['border']};
-                    flex: 1;
-                    min-width: 140px;
-                    max-width: 200px;
+                    min-height: {c['min_height']};
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    align-items: center;
                 ">
                     <div style="
-                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
-                        color: white;
-                        padding: 4px 12px;
+                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
+                        color: white !important;
+                        padding: 5px 14px;
                         border-radius: 12px;
-                        font-size: 0.7rem;
+                        font-size: 0.75rem;
                         font-weight: bold;
                         display: inline-block;
-                        margin-bottom: 8px;
+                        margin-bottom: 10px;
                     ">{c['label']}</div>
                     <div style="font-size: {c['emoji_size']}; margin: 8px 0;">{c['emoji']}</div>
-                    <div style="font-size: {c['nome_size']}; font-weight: 700; color: {c['nome_color']}; margin-bottom: 10px; word-wrap: break-word;">{dados['nome']}</div>
+                    <div style="font-size: {c['nome_size']}; font-weight: 700; color: {c['nome_color']} !important; margin-bottom: 12px; word-wrap: break-word;">{dados['nome']}</div>
                     <div style="
                         font-size: {c['pts_size']};
                         font-weight: 800;
-                        color: #1E3A5F;
-                        background: rgba(255,255,255,0.6);
-                        padding: 6px 12px;
-                        border-radius: 8px;
+                        color: #1E3A5F !important;
+                        background: rgba(255,255,255,0.7) !important;
+                        padding: 8px 16px;
+                        border-radius: 10px;
                         display: inline-block;
                     ">{dados['total_pontos']} pts</div>
                 </div>
                 '''
             
-            # Pódio completo em HTML puro
-            st.markdown(f'''
-            <style>
-                .podio-container {{
-                    display: flex;
-                    justify-content: center;
-                    align-items: flex-end;
-                    gap: 15px;
-                    padding: 20px 10px;
-                    flex-wrap: nowrap;
-                }}
-                .podio-item.podio-1 {{
-                    transform: translateY(-20px);
-                }}
-                /* Mobile: empilhar verticalmente na ordem 1, 2, 3 */
-                @media (max-width: 768px) {{
-                    .podio-container {{
-                        flex-direction: column;
-                        align-items: center;
-                    }}
-                    .podio-item {{
-                        max-width: 280px !important;
-                        width: 100%;
-                        transform: none !important;
-                    }}
-                    .podio-item.podio-1 {{
-                        order: 1;
-                    }}
-                    .podio-item.podio-2 {{
-                        order: 2;
-                    }}
-                    .podio-item.podio-3 {{
-                        order: 3;
-                    }}
-                }}
-            </style>
-            <div class="podio-container">
-                {gerar_card_podio(2, ranking[1])}
-                {gerar_card_podio(1, ranking[0])}
-                {gerar_card_podio(3, ranking[2])}
-            </div>
-            ''', unsafe_allow_html=True)
+            # Usar st.columns para layout e st.markdown individual para cada card
+            col_space1, col2, col1, col3, col_space2 = st.columns([0.3, 1, 1.2, 1, 0.3])
+            
+            # 2º lugar (esquerda no desktop)
+            with col2:
+                st.markdown(f'''<div style="margin-top: 40px;">{gerar_card_podio_html(2, ranking[1])}</div>''', unsafe_allow_html=True)
+            
+            # 1º lugar (centro, mais alto)
+            with col1:
+                st.markdown(gerar_card_podio_html(1, ranking[0]), unsafe_allow_html=True)
+            
+            # 3º lugar (direita no desktop)
+            with col3:
+                st.markdown(f'''<div style="margin-top: 40px;">{gerar_card_podio_html(3, ranking[2])}</div>''', unsafe_allow_html=True)
         
         elif len(ranking) > 0:
             # Menos de 3 participantes - mostra o que tem
