@@ -194,10 +194,16 @@ st.markdown("""
     /* FORÇA FUNDO TRANSPARENTE nos containers que envolvem HTML customizado */
     .element-container:has(.palpite-card-light),
     .element-container:has(.ranking-card-light),
+    .element-container:has(.podio-container),
+    .element-container:has(.podio-item),
     .stMarkdown:has(.palpite-card-light),
     .stMarkdown:has(.ranking-card-light),
+    .stMarkdown:has(.podio-container),
+    .stMarkdown:has(.podio-item),
     div[data-testid="stMarkdownContainer"]:has(.palpite-card-light),
-    div[data-testid="stMarkdownContainer"]:has(.ranking-card-light) {
+    div[data-testid="stMarkdownContainer"]:has(.ranking-card-light),
+    div[data-testid="stMarkdownContainer"]:has(.podio-container),
+    div[data-testid="stMarkdownContainer"]:has(.podio-item) {
         background: transparent !important;
         background-color: transparent !important;
     }
