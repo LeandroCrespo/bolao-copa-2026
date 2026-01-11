@@ -2201,143 +2201,115 @@ def page_ranking():
         st.subheader("🥇 Pódio")
         
         if len(ranking) >= 3:
-            # Pódio visual usando HTML puro com flexbox responsivo
-            # Mantém layout horizontal (2º | 1º | 3º) em todas as telas
+            # Pódio visual usando st.columns com st.markdown individual
+            # Cada card é renderizado separadamente para evitar container escuro
             
             primeiro = ranking[0]
             segundo = ranking[1]
             terceiro = ranking[2]
             
-            podio_html = f'''
-            <style>
-                .podio-flex-container {{
-                    display: flex;
-                    justify-content: center;
-                    align-items: flex-end;
-                    gap: 8px;
-                    padding: 10px 5px;
-                    width: 100%;
-                }}
-                .podio-card {{
-                    flex: 1;
-                    max-width: 180px;
-                    min-width: 90px;
+            # Função para gerar HTML de um card do pódio
+            def gerar_podio_card(posicao, dados):
+                configs = {
+                    1: {
+                        "bg": "linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%)",
+                        "border": "#FFD700",
+                        "shadow": "rgba(255,215,0,0.5)",
+                        "label": "🏆 CAMPEÃO",
+                        "emoji": "🥇",
+                        "emoji_size": "2.5rem",
+                        "nome_size": "0.95rem",
+                        "pts_size": "1.1rem",
+                        "nome_color": "#1a1a2e",
+                        "min_height": "190px",
+                    },
+                    2: {
+                        "bg": "linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)",
+                        "border": "#d4d4d4",
+                        "shadow": "rgba(192,192,192,0.4)",
+                        "label": "2º LUGAR",
+                        "emoji": "🥈",
+                        "emoji_size": "2rem",
+                        "nome_size": "0.85rem",
+                        "pts_size": "1rem",
+                        "nome_color": "#1a1a2e",
+                        "min_height": "160px",
+                    },
+                    3: {
+                        "bg": "linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%)",
+                        "border": "#CD7F32",
+                        "shadow": "rgba(205,127,50,0.4)",
+                        "label": "3º LUGAR",
+                        "emoji": "🥉",
+                        "emoji_size": "2rem",
+                        "nome_size": "0.85rem",
+                        "pts_size": "1rem",
+                        "nome_color": "#ffffff",
+                        "min_height": "160px",
+                    }
+                }
+                c = configs[posicao]
+                return f'''
+                <div class="podio-card-light" style="
+                    background: {c['bg']} !important;
                     border-radius: 12px;
-                    padding: 12px 8px;
+                    padding: 15px 10px;
                     text-align: center;
+                    box-shadow: 0 6px 20px {c['shadow']};
+                    border: 3px solid {c['border']};
+                    min-height: {c['min_height']};
                     display: flex;
                     flex-direction: column;
                     justify-content: flex-start;
                     align-items: center;
-                }}
-                .podio-card-1 {{
-                    background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
-                    border: 3px solid #FFD700;
-                    box-shadow: 0 6px 20px rgba(255,215,0,0.5);
-                    min-height: 180px;
-                }}
-                .podio-card-2 {{
-                    background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
-                    border: 3px solid #d4d4d4;
-                    box-shadow: 0 6px 20px rgba(192,192,192,0.4);
-                    min-height: 150px;
-                }}
-                .podio-card-3 {{
-                    background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
-                    border: 3px solid #CD7F32;
-                    box-shadow: 0 6px 20px rgba(205,127,50,0.4);
-                    min-height: 150px;
-                }}
-                .podio-label {{
-                    background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
-                    color: white !important;
-                    padding: 4px 10px;
-                    border-radius: 10px;
-                    font-size: 0.65rem;
-                    font-weight: bold;
-                    margin-bottom: 6px;
-                    white-space: nowrap;
-                }}
-                .podio-emoji {{
-                    margin: 6px 0;
-                }}
-                .podio-emoji-1 {{ font-size: 2.5rem; }}
-                .podio-emoji-2, .podio-emoji-3 {{ font-size: 2rem; }}
-                .podio-nome {{
-                    font-weight: 700;
-                    margin-bottom: 8px;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    max-width: 100%;
-                    line-height: 1.2;
-                }}
-                .podio-nome-1 {{ font-size: 0.9rem; color: #1a1a2e !important; }}
-                .podio-nome-2 {{ font-size: 0.8rem; color: #1a1a2e !important; }}
-                .podio-nome-3 {{ font-size: 0.8rem; color: #ffffff !important; }}
-                .podio-pts {{
-                    font-weight: 800;
-                    color: #1E3A5F !important;
-                    background: rgba(255,255,255,0.7) !important;
-                    padding: 5px 10px;
-                    border-radius: 8px;
-                }}
-                .podio-pts-1 {{ font-size: 1.1rem; }}
-                .podio-pts-2, .podio-pts-3 {{ font-size: 0.95rem; }}
-                
-                /* Responsivo para telas pequenas */
-                @media (max-width: 500px) {{
-                    .podio-flex-container {{
-                        gap: 4px;
-                        padding: 8px 2px;
-                    }}
-                    .podio-card {{
-                        padding: 10px 5px;
-                        min-width: 75px;
+                ">
+                    <div style="
+                        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
+                        color: white !important;
+                        padding: 4px 10px;
                         border-radius: 10px;
-                    }}
-                    .podio-card-1 {{ min-height: 150px; }}
-                    .podio-card-2, .podio-card-3 {{ min-height: 130px; }}
-                    .podio-label {{
-                        font-size: 0.55rem;
-                        padding: 3px 6px;
-                    }}
-                    .podio-emoji-1 {{ font-size: 1.8rem; }}
-                    .podio-emoji-2, .podio-emoji-3 {{ font-size: 1.5rem; }}
-                    .podio-nome-1 {{ font-size: 0.75rem; }}
-                    .podio-nome-2, .podio-nome-3 {{ font-size: 0.7rem; }}
-                    .podio-pts-1 {{ font-size: 0.9rem; padding: 4px 8px; }}
-                    .podio-pts-2, .podio-pts-3 {{ font-size: 0.8rem; padding: 3px 6px; }}
-                }}
-            </style>
+                        font-size: 0.65rem;
+                        font-weight: bold;
+                        margin-bottom: 8px;
+                        white-space: nowrap;
+                    ">{c['label']}</div>
+                    <div style="font-size: {c['emoji_size']}; margin: 6px 0;">{c['emoji']}</div>
+                    <div style="
+                        font-size: {c['nome_size']};
+                        font-weight: 700;
+                        color: {c['nome_color']} !important;
+                        margin-bottom: 10px;
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        max-width: 100%;
+                        line-height: 1.2;
+                    ">{dados['nome']}</div>
+                    <div style="
+                        font-size: {c['pts_size']};
+                        font-weight: 800;
+                        color: #1E3A5F !important;
+                        background: rgba(255,255,255,0.7) !important;
+                        padding: 6px 12px;
+                        border-radius: 8px;
+                    ">{dados['total_pontos']} pts</div>
+                </div>
+                '''
             
-            <div class="podio-flex-container">
-                <!-- 2º Lugar -->
-                <div class="podio-card podio-card-2 podio-card-light">
-                    <div class="podio-label">2º LUGAR</div>
-                    <div class="podio-emoji podio-emoji-2">🥈</div>
-                    <div class="podio-nome podio-nome-2">{segundo['nome']}</div>
-                    <div class="podio-pts podio-pts-2">{segundo['total_pontos']} pts</div>
-                </div>
-                
-                <!-- 1º Lugar (Campeão) -->
-                <div class="podio-card podio-card-1 podio-card-light">
-                    <div class="podio-label">🏆 CAMPEÃO</div>
-                    <div class="podio-emoji podio-emoji-1">🥇</div>
-                    <div class="podio-nome podio-nome-1">{primeiro['nome']}</div>
-                    <div class="podio-pts podio-pts-1">{primeiro['total_pontos']} pts</div>
-                </div>
-                
-                <!-- 3º Lugar -->
-                <div class="podio-card podio-card-3 podio-card-light">
-                    <div class="podio-label">3º LUGAR</div>
-                    <div class="podio-emoji podio-emoji-3">🥉</div>
-                    <div class="podio-nome podio-nome-3">{terceiro['nome']}</div>
-                    <div class="podio-pts podio-pts-3">{terceiro['total_pontos']} pts</div>
-                </div>
-            </div>
-            '''
+            # Usar st.columns para layout horizontal
+            # Ordem: 2º | 1º | 3º (formato tradicional de pódio)
+            col2, col1, col3 = st.columns([1, 1.15, 1])
             
-            st.markdown(podio_html, unsafe_allow_html=True)
+            # 2º lugar (esquerda) - com margin-top para ficar mais baixo
+            with col2:
+                st.markdown(f'<div style="margin-top: 30px;">{gerar_podio_card(2, segundo)}</div>', unsafe_allow_html=True)
+            
+            # 1º lugar (centro) - mais alto
+            with col1:
+                st.markdown(gerar_podio_card(1, primeiro), unsafe_allow_html=True)
+            
+            # 3º lugar (direita) - com margin-top para ficar mais baixo
+            with col3:
+                st.markdown(f'<div style="margin-top: 30px;">{gerar_podio_card(3, terceiro)}</div>', unsafe_allow_html=True)
         
         elif len(ranking) > 0:
             # Menos de 3 participantes - mostra o que tem
