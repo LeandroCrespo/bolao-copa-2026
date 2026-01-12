@@ -1713,17 +1713,43 @@ def page_dicas():
     # Power Ranking das seleções da Copa 2026
     st.subheader("🏆 Power Ranking - Copa do Mundo 2026")
     
+    # Função para renderizar cabeçalho das colunas
+    def render_header():
+        return '''
+        <div class="dicas-card-light" style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1E3A5F !important;
+            border-radius: 10px 10px 0 0;
+            padding: 10px 16px;
+            margin-bottom: 0;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: #ffffff !important; min-width: 30px;">#</span>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #ffffff !important; min-width: 30px;"></span>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #ffffff !important;">Seleção</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: #ffffff !important; min-width: 35px;">FIFA</span>
+                <span style="font-size: 0.75rem; font-weight: 600; color: #ffffff !important; min-width: 55px; text-align: center;">Pontos</span>
+                <span style="font-size: 0.75rem; font-weight: 600; color: #ffffff !important; min-width: 30px; text-align: center;">Grupo</span>
+            </div>
+        </div>
+        '''
+    
     # Função para renderizar card de seleção
-    def render_selecao_card(pos, bandeira, nome, ranking_fifa, pontos, grupo):
+    def render_selecao_card(pos, bandeira, nome, ranking_fifa, pontos, grupo, is_first=False):
+        border_radius = "0" if not is_first else "0"
         return f'''
         <div class="dicas-card-light" style="
             display: flex;
             align-items: center;
             justify-content: space-between;
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-            border-radius: 10px;
+            border-radius: {border_radius};
             padding: 12px 16px;
-            margin-bottom: 8px;
+            margin-bottom: 2px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border-left: 4px solid #1E3A5F;
         ">
@@ -1742,6 +1768,7 @@ def page_dicas():
     
     # Tier 1 - Favoritas
     st.markdown("### ⭐ FAVORITAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
     tier1_data = [
         (1, "🇪🇸", "Espanha", "#1", 1877, "H"),
         (2, "🇦🇷", "Argentina", "#2", 1873, "J"),
@@ -1755,6 +1782,7 @@ def page_dicas():
     
     # Tier 2 - Fortes Candidatas
     st.markdown("### 🥇 FORTES CANDIDATAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
     tier2_data = [
         (6, "🇵🇹", "Portugal", "#6", 1760, "K"),
         (7, "🇳🇱", "Holanda", "#7", 1756, "F"),
@@ -1768,6 +1796,7 @@ def page_dicas():
     
     # Tier 3 - Competitivas
     st.markdown("### 🥈 COMPETITIVAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
     tier3_data = [
         (11, "🇲🇦", "Marrocos", "#11", 1716, "C"),
         (12, "🇨🇴", "Colômbia", "#13", 1701, "K"),
@@ -1786,6 +1815,7 @@ def page_dicas():
     
     # Tier 4 - Médias
     st.markdown("### 🥉 MÉDIAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
     tier4_data = [
         (21, "🇪🇨", "Equador", "#23", 1592, "E"),
         (22, "🇦🇹", "Áustria", "#24", 1586, "J"),
@@ -1804,6 +1834,7 @@ def page_dicas():
     
     # Tier 5 - Zebras Potenciais
     st.markdown("### 🦓 ZEBRAS POTENCIAIS")
+    st.markdown(render_header(), unsafe_allow_html=True)
     tier5_data = [
         (31, "🇹🇳", "Tunísia", "#41", 1495, "F"),
         (32, "🇨🇮", "Costa do Marfim", "#42", 1490, "E"),
