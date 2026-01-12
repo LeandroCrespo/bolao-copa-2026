@@ -25,41 +25,39 @@ from scoring import (
 SELECOES_REPESCAGEM = {
     # Repescagem Europa (4 vagas)
     "EUR_A": [
-        {"code": "UKR", "name": "Ucrânia", "flag": "🇺🇦"},
+        {"code": "ITA", "name": "Itália", "flag": "🇮🇹"},
+        {"code": "NIR", "name": "Irlanda do Norte", "flag": "🇬🇧"},
         {"code": "WAL", "name": "País de Gales", "flag": "🏴󠁧󠁢󠁷󠁬󠁳󠁿"},
-        {"code": "ISL", "name": "Islândia", "flag": "🇮🇸"},
         {"code": "BIH", "name": "Bósnia e Herzegovina", "flag": "🇧🇦"},
     ],
     "EUR_B": [
-        {"code": "ISR", "name": "Israel", "flag": "🇮🇱"},
-        {"code": "IRL", "name": "Irlanda", "flag": "🇮🇪"},
-        {"code": "GEO", "name": "Geórgia", "flag": "🇬🇪"},
-        {"code": "LUX", "name": "Luxemburgo", "flag": "🇱🇺"},
+        {"code": "UKR", "name": "Ucrânia", "flag": "🇺🇦"},
+        {"code": "SWE", "name": "Suécia", "flag": "🇸🇪"},
+        {"code": "POL", "name": "Polônia", "flag": "🇵🇱"},
+        {"code": "ALB", "name": "Albânia", "flag": "🇦🇱"},
     ],
     "EUR_C": [
-        {"code": "NOR", "name": "Noruega", "flag": "🇳🇴"},
-        {"code": "CZE", "name": "República Tcheca", "flag": "🇨🇿"},
-        {"code": "KAZ", "name": "Cazaquistão", "flag": "🇰🇿"},
-        {"code": "BUL", "name": "Bulgária", "flag": "🇧🇬"},
+        {"code": "TUR", "name": "Turquia", "flag": "🇹🇷"},
+        {"code": "ROU", "name": "Romênia", "flag": "🇷🇴"},
+        {"code": "SVK", "name": "Eslováquia", "flag": "🇸🇰"},
+        {"code": "KOS", "name": "Kosovo", "flag": "🇽🇰"},
     ],
     "EUR_D": [
-        {"code": "TUR", "name": "Turquia", "flag": "🇹🇷"},
-        {"code": "GRE", "name": "Grécia", "flag": "🇬🇷"},
-        {"code": "FIN", "name": "Finlândia", "flag": "🇫🇮"},
-        {"code": "KOS", "name": "Kosovo", "flag": "🇽🇰"},
+        {"code": "DEN", "name": "Dinamarca", "flag": "🇩🇰"},
+        {"code": "MKD", "name": "Macedônia do Norte", "flag": "🇲🇰"},
+        {"code": "CZE", "name": "República Tcheca", "flag": "🇨🇿"},
+        {"code": "IRL", "name": "Irlanda", "flag": "🇮🇪"},
     ],
     # Repescagem Intercontinental (2 vagas)
     "INT_1": [
-        {"code": "IDN", "name": "Indonésia", "flag": "🇮🇩"},
-        {"code": "BHR", "name": "Bahrein", "flag": "🇧🇭"},
-        {"code": "TWN", "name": "Taiwan", "flag": "🇹🇼"},
-        {"code": "GUI", "name": "Guiné", "flag": "🇬🇳"},
+        {"code": "COD", "name": "RD Congo", "flag": "🇨🇩"},
+        {"code": "JAM", "name": "Jamaica", "flag": "🇯🇲"},
+        {"code": "NCL", "name": "Nova Caledônia", "flag": "🇳🇨"},
     ],
     "INT_2": [
-        {"code": "NZL", "name": "Nova Zelândia", "flag": "🇳🇿"},
-        {"code": "OMA", "name": "Omã", "flag": "🇴🇲"},
-        {"code": "THA", "name": "Tailândia", "flag": "🇹🇭"},
-        {"code": "MLI", "name": "Mali", "flag": "🇲🇱"},
+        {"code": "BOL", "name": "Bolívia", "flag": "🇧🇴"},
+        {"code": "SUR", "name": "Suriname", "flag": "🇸🇷"},
+        {"code": "IRQ", "name": "Iraque", "flag": "🇮🇶"},
     ],
 }
 
