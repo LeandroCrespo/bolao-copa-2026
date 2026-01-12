@@ -1716,7 +1716,7 @@ def page_dicas():
     # Função para renderizar card de seleção
     def render_selecao_card(pos, bandeira, nome, ranking_fifa, pontos, grupo):
         return f'''
-        <div class="dicas-card" style="
+        <div class="dicas-card-light" style="
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -1728,14 +1728,14 @@ def page_dicas():
             border-left: 4px solid #1E3A5F;
         ">
             <div style="display: flex; align-items: center; gap: 12px;">
-                <span style="font-size: 1.1rem; font-weight: 700; color: #1E3A5F; min-width: 30px;">{pos}</span>
+                <span style="font-size: 1.1rem; font-weight: 700; color: #1E3A5F !important; min-width: 30px;">{pos}</span>
                 <span style="font-size: 1.5rem;">{bandeira}</span>
-                <span style="font-size: 1rem; font-weight: 600; color: #1a1a2e;">{nome}</span>
+                <span style="font-size: 1rem; font-weight: 600; color: #1a1a2e !important;">{nome}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
-                <span style="font-size: 0.85rem; color: #666; min-width: 35px;">{ranking_fifa}</span>
-                <span style="font-size: 0.9rem; font-weight: 700; color: #1E3A5F; background: rgba(30,58,95,0.1); padding: 4px 10px; border-radius: 6px; min-width: 55px; text-align: center;">{pontos}</span>
-                <span style="font-size: 0.9rem; font-weight: 600; color: white; background: #1E3A5F; padding: 4px 10px; border-radius: 6px; min-width: 30px; text-align: center;">{grupo}</span>
+                <span style="font-size: 0.85rem; color: #666 !important; min-width: 35px;">{ranking_fifa}</span>
+                <span style="font-size: 0.9rem; font-weight: 700; color: #1E3A5F !important; background: rgba(30,58,95,0.1) !important; padding: 4px 10px; border-radius: 6px; min-width: 55px; text-align: center;">{pontos}</span>
+                <span style="font-size: 0.9rem; font-weight: 600; color: #ffffff !important; background: #1E3A5F !important; padding: 4px 10px; border-radius: 6px; min-width: 30px; text-align: center;">{grupo}</span>
             </div>
         </div>
         '''
