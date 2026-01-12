@@ -1713,84 +1713,113 @@ def page_dicas():
     # Power Ranking das seleções da Copa 2026
     st.subheader("🏆 Power Ranking - Copa do Mundo 2026")
     
-    # Dados do ranking FIFA (dezembro 2025)
-    import pandas as pd
+    # Função para renderizar card de seleção
+    def render_selecao_card(pos, bandeira, nome, ranking_fifa, pontos, grupo):
+        return f'''
+        <div class="dicas-card" style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-left: 4px solid #1E3A5F;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 1.1rem; font-weight: 700; color: #1E3A5F; min-width: 30px;">{pos}</span>
+                <span style="font-size: 1.5rem;">{bandeira}</span>
+                <span style="font-size: 1rem; font-weight: 600; color: #1a1a2e;">{nome}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size: 0.85rem; color: #666; min-width: 35px;">{ranking_fifa}</span>
+                <span style="font-size: 0.9rem; font-weight: 700; color: #1E3A5F; background: rgba(30,58,95,0.1); padding: 4px 10px; border-radius: 6px; min-width: 55px; text-align: center;">{pontos}</span>
+                <span style="font-size: 0.9rem; font-weight: 600; color: white; background: #1E3A5F; padding: 4px 10px; border-radius: 6px; min-width: 30px; text-align: center;">{grupo}</span>
+            </div>
+        </div>
+        '''
     
     # Tier 1 - Favoritas
     st.markdown("### ⭐ FAVORITAS")
-    tier1 = pd.DataFrame([
-        {"#": 1, "Seleção": "🇪🇸 Espanha", "Ranking FIFA": "#1", "Pontos": 1877, "Grupo": "H"},
-        {"#": 2, "Seleção": "🇦🇷 Argentina", "Ranking FIFA": "#2", "Pontos": 1873, "Grupo": "J"},
-        {"#": 3, "Seleção": "🇫🇷 França", "Ranking FIFA": "#3", "Pontos": 1870, "Grupo": "I"},
-        {"#": 4, "Seleção": "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra", "Ranking FIFA": "#4", "Pontos": 1834, "Grupo": "L"},
-        {"#": 5, "Seleção": "🇧🇷 Brasil", "Ranking FIFA": "#5", "Pontos": 1760, "Grupo": "C"},
-    ])
-    st.dataframe(tier1, use_container_width=True, hide_index=True)
+    tier1_data = [
+        (1, "🇪🇸", "Espanha", "#1", 1877, "H"),
+        (2, "🇦🇷", "Argentina", "#2", 1873, "J"),
+        (3, "🇫🇷", "França", "#3", 1870, "I"),
+        (4, "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Inglaterra", "#4", 1834, "L"),
+        (5, "🇧🇷", "Brasil", "#5", 1760, "C"),
+    ]
+    for item in tier1_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
     st.markdown("---")
     
     # Tier 2 - Fortes Candidatas
     st.markdown("### 🥇 FORTES CANDIDATAS")
-    tier2 = pd.DataFrame([
-        {"#": 6, "Seleção": "🇵🇹 Portugal", "Ranking FIFA": "#6", "Pontos": 1760, "Grupo": "K"},
-        {"#": 7, "Seleção": "🇳🇱 Holanda", "Ranking FIFA": "#7", "Pontos": 1756, "Grupo": "F"},
-        {"#": 8, "Seleção": "🇧🇪 Bélgica", "Ranking FIFA": "#8", "Pontos": 1731, "Grupo": "G"},
-        {"#": 9, "Seleção": "🇩🇪 Alemanha", "Ranking FIFA": "#9", "Pontos": 1724, "Grupo": "E"},
-        {"#": 10, "Seleção": "🇭🇷 Croácia", "Ranking FIFA": "#10", "Pontos": 1717, "Grupo": "L"},
-    ])
-    st.dataframe(tier2, use_container_width=True, hide_index=True)
+    tier2_data = [
+        (6, "🇵🇹", "Portugal", "#6", 1760, "K"),
+        (7, "🇳🇱", "Holanda", "#7", 1756, "F"),
+        (8, "🇧🇪", "Bélgica", "#8", 1731, "G"),
+        (9, "🇩🇪", "Alemanha", "#9", 1724, "E"),
+        (10, "🇭🇷", "Croácia", "#10", 1717, "L"),
+    ]
+    for item in tier2_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
     st.markdown("---")
     
     # Tier 3 - Competitivas
     st.markdown("### 🥈 COMPETITIVAS")
-    tier3 = pd.DataFrame([
-        {"#": 11, "Seleção": "🇲🇦 Marrocos", "Ranking FIFA": "#11", "Pontos": 1716, "Grupo": "C"},
-        {"#": 12, "Seleção": "🇨🇴 Colômbia", "Ranking FIFA": "#13", "Pontos": 1701, "Grupo": "K"},
-        {"#": 13, "Seleção": "🇺🇸 Estados Unidos", "Ranking FIFA": "#14", "Pontos": 1682, "Grupo": "D"},
-        {"#": 14, "Seleção": "🇲🇽 México", "Ranking FIFA": "#15", "Pontos": 1676, "Grupo": "A"},
-        {"#": 15, "Seleção": "🇺🇾 Uruguai", "Ranking FIFA": "#16", "Pontos": 1673, "Grupo": "H"},
-        {"#": 16, "Seleção": "🇨🇭 Suíça", "Ranking FIFA": "#17", "Pontos": 1655, "Grupo": "B"},
-        {"#": 17, "Seleção": "🇯🇵 Japão", "Ranking FIFA": "#18", "Pontos": 1650, "Grupo": "F"},
-        {"#": 18, "Seleção": "🇸🇳 Senegal", "Ranking FIFA": "#19", "Pontos": 1648, "Grupo": "I"},
-        {"#": 19, "Seleção": "🇮🇷 Irã", "Ranking FIFA": "#20", "Pontos": 1617, "Grupo": "G"},
-        {"#": 20, "Seleção": "🇰🇷 Coreia do Sul", "Ranking FIFA": "#22", "Pontos": 1599, "Grupo": "A"},
-    ])
-    st.dataframe(tier3, use_container_width=True, hide_index=True)
+    tier3_data = [
+        (11, "🇲🇦", "Marrocos", "#11", 1716, "C"),
+        (12, "🇨🇴", "Colômbia", "#13", 1701, "K"),
+        (13, "🇺🇸", "Estados Unidos", "#14", 1682, "D"),
+        (14, "🇲🇽", "México", "#15", 1676, "A"),
+        (15, "🇺🇾", "Uruguai", "#16", 1673, "H"),
+        (16, "🇨🇭", "Suíça", "#17", 1655, "B"),
+        (17, "🇯🇵", "Japão", "#18", 1650, "F"),
+        (18, "🇸🇳", "Senegal", "#19", 1648, "I"),
+        (19, "🇮🇷", "Irã", "#20", 1617, "G"),
+        (20, "🇰🇷", "Coreia do Sul", "#22", 1599, "A"),
+    ]
+    for item in tier3_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
     st.markdown("---")
     
     # Tier 4 - Médias
     st.markdown("### 🥉 MÉDIAS")
-    tier4 = pd.DataFrame([
-        {"#": 21, "Seleção": "🇪🇨 Equador", "Ranking FIFA": "#23", "Pontos": 1592, "Grupo": "E"},
-        {"#": 22, "Seleção": "🇦🇹 Áustria", "Ranking FIFA": "#24", "Pontos": 1586, "Grupo": "J"},
-        {"#": 23, "Seleção": "🇦🇺 Austrália", "Ranking FIFA": "#26", "Pontos": 1574, "Grupo": "D"},
-        {"#": 24, "Seleção": "🇨🇦 Canadá", "Ranking FIFA": "#27", "Pontos": 1559, "Grupo": "B"},
-        {"#": 25, "Seleção": "🇳🇴 Noruega", "Ranking FIFA": "#29", "Pontos": 1553, "Grupo": "I"},
-        {"#": 26, "Seleção": "🇵🇦 Panamá", "Ranking FIFA": "#30", "Pontos": 1540, "Grupo": "L"},
-        {"#": 27, "Seleção": "🇩🇿 Argélia", "Ranking FIFA": "#34", "Pontos": 1518, "Grupo": "J"},
-        {"#": 28, "Seleção": "🇪🇬 Egito", "Ranking FIFA": "#35", "Pontos": 1515, "Grupo": "G"},
-        {"#": 29, "Seleção": "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Escócia", "Ranking FIFA": "#36", "Pontos": 1507, "Grupo": "C"},
-        {"#": 30, "Seleção": "🇵🇾 Paraguai", "Ranking FIFA": "#39", "Pontos": 1502, "Grupo": "D"},
-    ])
-    st.dataframe(tier4, use_container_width=True, hide_index=True)
+    tier4_data = [
+        (21, "🇪🇨", "Equador", "#23", 1592, "E"),
+        (22, "🇦🇹", "Áustria", "#24", 1586, "J"),
+        (23, "🇦🇺", "Austrália", "#26", 1574, "D"),
+        (24, "🇨🇦", "Canadá", "#27", 1559, "B"),
+        (25, "🇳🇴", "Noruega", "#29", 1553, "I"),
+        (26, "🇵🇦", "Panamá", "#30", 1540, "L"),
+        (27, "🇩🇿", "Argélia", "#34", 1518, "J"),
+        (28, "🇪🇬", "Egito", "#35", 1515, "G"),
+        (29, "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Escócia", "#36", 1507, "C"),
+        (30, "🇵🇾", "Paraguai", "#39", 1502, "D"),
+    ]
+    for item in tier4_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
     st.markdown("---")
     
     # Tier 5 - Zebras Potenciais
     st.markdown("### 🦓 ZEBRAS POTENCIAIS")
-    tier5 = pd.DataFrame([
-        {"#": 31, "Seleção": "🇹🇳 Tunísia", "Ranking FIFA": "#41", "Pontos": 1495, "Grupo": "F"},
-        {"#": 32, "Seleção": "🇨🇮 Costa do Marfim", "Ranking FIFA": "#42", "Pontos": 1490, "Grupo": "E"},
-        {"#": 33, "Seleção": "🇺🇿 Uzbequistão", "Ranking FIFA": "#50", "Pontos": 1462, "Grupo": "K"},
-        {"#": 34, "Seleção": "🇶🇦 Qatar", "Ranking FIFA": "#54", "Pontos": 1455, "Grupo": "B"},
-        {"#": 35, "Seleção": "🇸🇦 Arábia Saudita", "Ranking FIFA": "#60", "Pontos": 1429, "Grupo": "H"},
-        {"#": 36, "Seleção": "🇿🇦 África do Sul", "Ranking FIFA": "#61", "Pontos": 1427, "Grupo": "A"},
-        {"#": 37, "Seleção": "🇯🇴 Jordânia", "Ranking FIFA": "#64", "Pontos": 1389, "Grupo": "J"},
-        {"#": 38, "Seleção": "🇨🇻 Cabo Verde", "Ranking FIFA": "#67", "Pontos": 1370, "Grupo": "H"},
-        {"#": 39, "Seleção": "🇬🇭 Gana", "Ranking FIFA": "#72", "Pontos": 1351, "Grupo": "L"},
-        {"#": 40, "Seleção": "🇨🇼 Curaçao", "Ranking FIFA": "#82", "Pontos": 1303, "Grupo": "E"},
-        {"#": 41, "Seleção": "🇭🇹 Haiti", "Ranking FIFA": "#84", "Pontos": 1294, "Grupo": "C"},
-        {"#": 42, "Seleção": "🇳🇿 Nova Zelândia", "Ranking FIFA": "#87", "Pontos": 1279, "Grupo": "G"},
-    ])
-    st.dataframe(tier5, use_container_width=True, hide_index=True)
+    tier5_data = [
+        (31, "🇹🇳", "Tunísia", "#41", 1495, "F"),
+        (32, "🇨🇮", "Costa do Marfim", "#42", 1490, "E"),
+        (33, "🇺🇿", "Uzbequestão", "#50", 1462, "K"),
+        (34, "🇶🇦", "Qatar", "#54", 1455, "B"),
+        (35, "🇸🇦", "Arábia Saudita", "#60", 1429, "H"),
+        (36, "🇿🇦", "África do Sul", "#61", 1427, "A"),
+        (37, "🇯🇴", "Jordânia", "#64", 1389, "J"),
+        (38, "🇨🇻", "Cabo Verde", "#67", 1370, "H"),
+        (39, "🇬🇭", "Gana", "#72", 1351, "L"),
+        (40, "🇨🇼", "Curaçao", "#82", 1303, "E"),
+        (41, "🇭🇹", "Haiti", "#84", 1294, "C"),
+        (42, "🇳🇿", "Nova Zelândia", "#87", 1279, "G"),
+    ]
+    for item in tier5_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
     st.markdown("---")
     
     # Seleções da Repescagem
