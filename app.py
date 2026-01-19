@@ -2626,6 +2626,14 @@ def pagina_escalacao():
                     
                     # REOTIMIZAÇÃO: Se sobrou orçamento, verificar se há upgrades possíveis
                     df_ranqueado = escalacao_atualizada.get('df_ranqueado')
+                    
+                    # Fallback: se df_ranqueado não existe, usar mercado
+                    if df_ranqueado is None and mercado is not None:
+                        df_ranqueado = mercado.copy()
+                        # Adicionar coluna score se não existir
+                        if 'score' not in df_ranqueado.columns:
+                            df_ranqueado['score'] = df_ranqueado.get('media_num', df_ranqueado.get('media', 0))
+                    
                     if df_ranqueado is not None and escalacao_atualizada.get('orcamento_restante', 0) > 0:
                         escalacao_atualizada = reotimizar_orcamento(
                             escalacao_atualizada,
@@ -2635,11 +2643,16 @@ def pagina_escalacao():
                     
                     # RECALCULAR RESERVAS: Após substituições, recalcular reservas e reserva de luxo
                     if df_ranqueado is not None:
-                        escalacao_atualizada = recalcular_reservas(
-                            escalacao_atualizada,
-                            df_ranqueado,
-                            estrategia=st.session_state.get('estrategia_atual')
-                        )
+                        try:
+                            escalacao_atualizada = recalcular_reservas(
+                                escalacao_atualizada,
+                                df_ranqueado,
+                                estrategia=st.session_state.get('estrategia_atual')
+                            )
+                        except Exception as e:
+                            print(f"Erro ao recalcular reservas: {e}")
+                    else:
+                        print("AVISO: df_ranqueado não disponível para recalcular reservas")
                     
                     # VERIFICAR MELHOR FORMAÇÃO: Após substituições, outra formação pode ser melhor
                     formacao_atual = escalacao_atualizada.get('formacao', '4-3-3')
