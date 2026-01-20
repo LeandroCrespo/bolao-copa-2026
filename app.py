@@ -1,3355 +1,4988 @@
 """
-Dervé FC - Escalação Automática
-Estratégia v9 validada com 94.1 pts/rodada (+24.4% vs v6)
-
-Design moderno com cores do Dervé FC
+Bolão Copa do Mundo 2026
+Aplicativo principal Streamlit
 """
 
 import streamlit as st
-import pandas as pd
-import numpy as np
+from datetime import datetime, timedelta
+import pytz
 import json
-import os
-import requests
-from datetime import datetime
-from typing import Dict, List, Optional
-from glob import glob
 
-from estrategia_v7 import EstrategiaV7, FORMACOES, POSICAO_MAP
+from db import (
+    init_database, get_session, get_engine, get_config_value, set_config_value,
+    init_database_with_copa2026
+)
+from auth import authenticate_user, hash_password, change_password, create_user
+from models import (
+    User, Match, Prediction, Team, Config, 
+    GroupPrediction, PodiumPrediction, TournamentResult, GroupResult, AuditLog
+)
+from scoring import (
+    get_ranking, get_user_stats, get_scoring_config, 
+    process_match_predictions, process_group_predictions, process_podium_predictions
+)
 
-from io import BytesIO
-import plotly.graph_objects as go
-import plotly.express as px
+SELECOES_REPESCAGEM = {
+    # Repescagem Europa (4 vagas)
+    "EUR_A": [
+        {"code": "ITA", "name": "Itália", "flag": "🇮🇹"},
+        {"code": "NIR", "name": "Irlanda do Norte", "flag": "🇬🇧"},
+        {"code": "WAL", "name": "País de Gales", "flag": "🏴󠁧󠁢󠁷󠁬󠁳󠁿"},
+        {"code": "BIH", "name": "Bósnia e Herzegovina", "flag": "🇧🇦"},
+    ],
+    "EUR_B": [
+        {"code": "UKR", "name": "Ucrânia", "flag": "🇺🇦"},
+        {"code": "SWE", "name": "Suécia", "flag": "🇸🇪"},
+        {"code": "POL", "name": "Polônia", "flag": "🇵🇱"},
+        {"code": "ALB", "name": "Albânia", "flag": "🇦🇱"},
+    ],
+    "EUR_C": [
+        {"code": "TUR", "name": "Turquia", "flag": "🇹🇷"},
+        {"code": "ROU", "name": "Romênia", "flag": "🇷🇴"},
+        {"code": "SVK", "name": "Eslováquia", "flag": "🇸🇰"},
+        {"code": "KOS", "name": "Kosovo", "flag": "🇽🇰"},
+    ],
+    "EUR_D": [
+        {"code": "DEN", "name": "Dinamarca", "flag": "🇩🇰"},
+        {"code": "MKD", "name": "Macedônia do Norte", "flag": "🇲🇰"},
+        {"code": "CZE", "name": "República Tcheca", "flag": "🇨🇿"},
+        {"code": "IRL", "name": "Irlanda", "flag": "🇮🇪"},
+    ],
+    # Repescagem Intercontinental (2 vagas)
+    "INT_1": [
+        {"code": "COD", "name": "RD Congo", "flag": "🇨🇩"},
+        {"code": "JAM", "name": "Jamaica", "flag": "🇯🇲"},
+        {"code": "NCL", "name": "Nova Caledônia", "flag": "🇳🇨"},
+    ],
+    "INT_2": [
+        {"code": "BOL", "name": "Bolívia", "flag": "🇧🇴"},
+        {"code": "SUR", "name": "Suriname", "flag": "🇸🇷"},
+        {"code": "IRQ", "name": "Iraque", "flag": "🇮🇶"},
+    ],
+}
 
-# Módulo de persistência (Neon PostgreSQL)
-try:
-    from database import (
-        is_database_configured, salvar_jogadores_rodada, salvar_escalacao,
-        carregar_jogadores_rodada, verificar_rodada_processada, obter_estatisticas_db
-    )
-    DB_DISPONIVEL = is_database_configured()
-except ImportError:
-    DB_DISPONIVEL = False
-from aprendizagem_continua import AprendizagemContinua
-from api_cartola import CartolaFCAPI
-from reotimizar_orcamento import reotimizar_orcamento
-from verificar_melhor_formacao import verificar_melhor_formacao
-from recalcular_reservas import recalcular_reservas
-
-# Configuração da página
+# =============================================================================
+# CONFIGURAÇÃO DA PÁGINA
+# =============================================================================
 st.set_page_config(
-    page_title="Dervé FC - Escalação Automática",
+    page_title="Bolão Copa 2026",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# CSS customizado com cores do Dervé FC
+# =============================================================================
+# CSS PERSONALIZADO - TEMA COPA DO MUNDO 2026
+# =============================================================================
+
 st.markdown("""
 <style>
-    /* Importar fonte */
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    /* ========================================
+       HEADER FIXO COM LOGO DO BOLÃO
+       ======================================== */
     
-    /* Variáveis de cores do Dervé FC */
-    :root {
-        --derve-blue-light: #54b4f7;
-        --derve-blue-dark: #0b1d33;
-        --derve-blue-medium: #15367b;
-        --derve-gold: #D4A84B;
-        --derve-white: #FFFFFF;
-        --derve-gray: #6C757D;
+    /* Força overflow visible nos containers do Streamlit para o header fixo funcionar */
+    .stApp, .stAppViewContainer, .appview-container {
+        overflow: visible !important;
     }
     
-    /* Fundo geral */
-    .stApp {
-        background: linear-gradient(135deg, #0b1d33 0%, #152744 100%);
+    .fixed-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: linear-gradient(135deg, #1E3A5F 0%, #2A398D 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 999999;
+        box-shadow: 0 2px 15px rgba(0,0,0,0.2);
+        padding: 0 20px;
     }
     
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0b1d33 0%, #061222 100%);
-        border-right: 3px solid #54b4f7;
-    }
-    
-    [data-testid="stSidebar"] .stMarkdown {
-        color: #FFFFFF;
-    }
-    
-    [data-testid="stSidebar"] label {
-        color: #FFFFFF !important;
-    }
-    
-    /* Títulos */
-    h1 {
-        color: #54b4f7 !important;
-        font-family: 'Poppins', sans-serif !important;
-        font-weight: 700 !important;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-    }
-    
-    h2, h3 {
-        color: #FFFFFF !important;
-        font-family: 'Poppins', sans-serif !important;
-        font-weight: 600 !important;
-    }
-    
-    /* Cards de métricas */
-    [data-testid="stMetric"] {
-        background: linear-gradient(135deg, #152744 0%, #1e3a5f 100%);
-        padding: 15px;
-        border-radius: 15px;
-        border-left: 4px solid #54b4f7;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        min-width: 100px;
-    }
-    
-    [data-testid="stMetric"] label {
-        color: #FFFFFF !important;
-        font-weight: 500;
-        font-size: 0.85rem !important;
-    }
-    
-    [data-testid="stMetric"] [data-testid="stMetricValue"] {
-        color: #54b4f7 !important;
-        font-size: 1.4rem !important;
-        font-weight: 700 !important;
-        white-space: nowrap;
-    }
-    
-    /* Botões */
-    .stButton > button {
-        background: linear-gradient(135deg, #54b4f7 0%, #3a9fe0 100%);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 12px 24px;
-        font-weight: 600;
-        font-family: 'Poppins', sans-serif;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(84, 180, 247, 0.3);
-    }
-    
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #3a9fe0 0%, #2589c9 100%);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(84, 180, 247, 0.4);
-    }
-    
-    /* Inputs */
-    .stNumberInput input, .stTextInput input, .stSelectbox select {
-        background-color: #3D3D3D !important;
-        color: #FFFFFF !important;
-        border: 2px solid #4D4D4D !important;
-        border-radius: 10px !important;
-    }
-    
-    .stNumberInput input:focus, .stTextInput input:focus {
-        border-color: #54b4f7 !important;
-        box-shadow: 0 0 10px rgba(84, 180, 247, 0.3) !important;
-    }
-    
-    /* Tabelas */
-    .stDataFrame {
-        background-color: #2D2D2D;
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* Cards de jogadores */
-    .jogador-card {
-        background: linear-gradient(135deg, #152744 0%, #1e3a5f 100%);
-        padding: 15px;
-        border-radius: 12px;
-        margin: 8px 0;
-        border-left: 4px solid #15367b;
-        transition: all 0.3s ease;
-    }
-    
-    .jogador-card:hover {
-        transform: translateX(5px);
-        border-left-color: #54b4f7;
-    }
-    
-    .capitao-card {
-        background: linear-gradient(135deg, #3D3D3D 0%, #4D4D4D 100%);
-        border-left: 4px solid #FFD700 !important;
-        box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
-    }
-    
-    .reserva-luxo-card {
-        background: linear-gradient(135deg, #2D4D3D 0%, #3D5D4D 100%);
-        border-left: 4px solid #00FF00 !important;
-    }
-    
-    /* Posição badge */
-    .posicao-badge {
-        background: linear-gradient(135deg, #15367b 0%, #1e4a9f 100%);
-        color: white;
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-weight: 600;
-        font-size: 0.9rem;
-        display: inline-block;
-        margin: 10px 0;
-    }
-    
-    /* Formação recomendada */
-    .formacao-recomendada {
-        background: linear-gradient(135deg, #15367b 0%, #1e4a9f 100%);
-        padding: 20px;
-        border-radius: 15px;
-        border: 2px solid #54b4f7;
-        box-shadow: 0 0 30px rgba(84, 180, 247, 0.2);
-    }
-    
-    /* Alertas */
-    .stAlert {
-        border-radius: 10px;
-    }
-    
-    /* Info boxes */
-    .info-box {
-        background: linear-gradient(135deg, #15367b 0%, #1e4a9f 100%);
-        padding: 20px;
-        border-radius: 15px;
-        color: white;
-        margin: 15px 0;
-    }
-    
-    .warning-box {
-        background: linear-gradient(135deg, #D4A84B 0%, #b8923f 100%);
-        padding: 20px;
-        border-radius: 15px;
-        color: white;
-        margin: 15px 0;
-    }
-    
-    /* Comparação lado a lado */
-    .comparison-card {
-        background: linear-gradient(135deg, #152744 0%, #1e3a5f 100%);
-        padding: 20px;
-        border-radius: 15px;
-        border-top: 4px solid #54b4f7;
-        height: 100%;
-    }
-    
-    .comparison-card-green {
-        border-top: 4px solid #15367b;
-    }
-    
-    /* Distintivo Dervé FC */
-    [data-testid="stSidebar"] img[src*="base64"] {
-        width: 180px !important;
-        height: 180px !important;
-        max-width: 180px !important;
-        display: block !important;
-        margin: 0 auto !important;
-    }
-    
-    /* Scrollbar customizada */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: #2D2D2D;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: #54b4f7;
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: #3a9fe0;
-    }
-    
-    /* Radio buttons na sidebar */
-    [data-testid="stSidebar"] .stRadio label {
-        color: #FFFFFF !important;
-        padding: 10px 15px;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-    }
-    
-    [data-testid="stSidebar"] .stRadio label:hover {
-        background-color: rgba(84, 180, 247, 0.2);
-    }
-    
-    /* Divider */
-    hr {
-        border-color: #54b4f7 !important;
-        opacity: 0.3;
-    }
-    
-    /* Texto geral */
-    p, span, div {
-        font-family: 'Poppins', sans-serif;
-    }
-    
-    /* Logo header */
-    .logo-header {
+    .fixed-header-content {
         display: flex;
         align-items: center;
         gap: 15px;
-        margin-bottom: 20px;
     }
     
-    .logo-icon {
-        font-size: 3rem;
+    .fixed-header-logo {
+        width: 40px;
+        height: 40px;
     }
     
-    /* Pontuação destaque */
-    .pontuacao-destaque {
-        font-size: 3rem;
+    .fixed-header-title {
+        color: #ffffff !important;
+        font-size: 1.3rem;
         font-weight: 700;
-        color: #54b4f7;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        letter-spacing: 1px;
+        margin: 0;
     }
     
-    /* Gráficos */
-    .stLineChart {
-        background-color: #152744;
-        border-radius: 15px;
-        padding: 20px;
+    .fixed-header-subtitle {
+        color: #FFD700 !important;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 2px;
     }
+    
+    /* Ajusta o conteúdo principal para não ficar atrás do header */
+    .main .block-container {
+        padding-top: 80px !important;
+    }
+    
+    /* ========================================
+       ANIMAÇÕES SUTIS NAS TRANSIÇÕES
+       ======================================== */
+    
+    /* Animação de fade-in para o conteúdo principal */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideInLeft {
+        from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    
+    /* Aplica animações aos elementos */
+    .main .block-container > div {
+        animation: fadeInUp 0.5s ease-out;
+    }
+    
+    .stMetric {
+        animation: fadeIn 0.6s ease-out;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .stMetric:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    /* Cards com animação */
+    .element-container {
+        transition: all 0.3s ease;
+    }
+    
+    /* FORÇA FUNDO TRANSPARENTE nos containers que envolvem HTML customizado */
+    .element-container:has(.palpite-card-light),
+    .element-container:has(.ranking-card-light),
+    .element-container:has(.podio-container),
+    .element-container:has(.podio-item),
+    .stMarkdown:has(.palpite-card-light),
+    .stMarkdown:has(.ranking-card-light),
+    .stMarkdown:has(.podio-container),
+    .stMarkdown:has(.podio-item),
+    div[data-testid="stMarkdownContainer"]:has(.palpite-card-light),
+    div[data-testid="stMarkdownContainer"]:has(.ranking-card-light),
+    div[data-testid="stMarkdownContainer"]:has(.podio-container),
+    div[data-testid="stMarkdownContainer"]:has(.podio-item) {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
+    
+    /* Sobrescreve qualquer fundo escuro em elementos pai */
+    .palpite-card-light,
+    .ranking-card-light,
+    .podio-card-light {
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* Botões com animação de pulse no hover */
+    .stButton > button:hover {
+        animation: pulse 0.5s ease-in-out;
+    }
+    
+    /* Expanders com transição suave */
+    .streamlit-expanderHeader {
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+    }
+    
+    /* Tabelas com animação de linha */
+    .stDataFrame tbody tr {
+        transition: background-color 0.2s ease;
+    }
+    
+    .stDataFrame tbody tr:hover {
+        background-color: rgba(52, 152, 219, 0.1) !important;
+    }
+    
+    /* ========================================
+       CORES DAS FONTES - CONTRASTE GARANTIDO
+       ======================================== */
+    
+    /* Fundo principal mais claro */
+    .stApp {
+        background: #ffffff !important;
+    }
+    
+    /* TODAS as fontes do conteúdo principal em cor escura */
+    .stApp .main .block-container {
+        color: #1a1a2e !important;
+    }
+    
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {
+        color: #1E3A5F !important;
+    }
+    
+    .stApp p, .stApp span, .stApp div, .stApp label {
+        color: #1a1a2e !important;
+    }
+    
+    /* Markdown text */
+    .stMarkdown, .stMarkdown p, .stMarkdown span {
+        color: #1a1a2e !important;
+    }
+    
+    /* Expander headers e conteúdo */
+    .streamlit-expanderHeader {
+        color: #1E3A5F !important;
+        background: #f8f9fa !important;
+        font-weight: 600;
+    }
+    
+    .streamlit-expanderContent {
+        color: #1a1a2e !important;
+        background: #ffffff !important;
+    }
+    
+    /* Tabs - texto visível */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px !important;
+        background: transparent !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #1E3A5F !important;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        font-weight: 700 !important;
+        border-radius: 10px 10px 0 0 !important;
+        padding: 12px 24px !important;
+        border: 1px solid #dee2e6 !important;
+        border-bottom: none !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+        transform: translateY(-2px) !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
+        color: #ffffff !important;
+        border-color: #1E3A5F !important;
+        box-shadow: 0 4px 15px rgba(30, 58, 95, 0.3) !important;
+    }
+    
+    .stTabs [data-baseweb="tab-panel"] {
+        background: #ffffff !important;
+        border-radius: 0 12px 12px 12px !important;
+        padding: 1.5rem !important;
+        border: 1px solid #dee2e6 !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+    }
+    
+    /* ========================================
+       SIDEBAR - MANTÉM TEMA ESCURO
+       ======================================== */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1E3A5F 0%, #0f1f33 100%) !important;
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        font-size: 0.9rem;
+        letter-spacing: 0.2px;
+        transition: all 0.25s ease;
+        backdrop-filter: blur(10px);
+        text-align: left !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(52, 152, 219, 0.3) !important;
+        border-color: rgba(52, 152, 219, 0.5) !important;
+        transform: translateX(5px);
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.2);
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:active {
+        background: rgba(52, 152, 219, 0.4) !important;
+        transform: translateX(3px);
+    }
+    
+    /* Ícone de colapsar sidebar (<<) - BRANCO */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapseButton"] * {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="stSidebarCollapseButton"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebarCollapseButton"] button {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    /* Ícone do header da sidebar */
+    [data-testid="stSidebarHeader"] svg,
+    [data-testid="stSidebarHeader"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }
+    
+    /* Botão de colapsar no topo */
+    .css-1dp5vir,
+    .css-1dp5vir svg,
+    [data-testid="stSidebarNavCollapseIcon"],
+    [data-testid="stSidebarNavCollapseIcon"] svg {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Ícone de expandir sidebar quando fechada */
+    [data-testid="collapsedControl"],
+    [data-testid="collapsedControl"] * {
+        color: #1E3A5F !important;
+    }
+    
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] svg * {
+        fill: #1E3A5F !important;
+        stroke: #1E3A5F !important;
+    }
+    
+    /* Forçar TODOS os SVGs dentro da sidebar para branco */
+    [data-testid="stSidebar"] svg,
+    [data-testid="stSidebar"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }
+    
+    /* Botão do sidebar no mobile - garantir visibilidade */
+    @media (max-width: 768px) {
+        /* Esconder o header fixo no mobile para não cobrir o botão */
+        .fixed-header {
+            display: none !important;
+        }
+        
+        /* Ajustar padding do conteúdo principal no mobile */
+        .main .block-container {
+            padding-top: 1rem !important;
+        }
+        
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            position: fixed !important;
+            top: 10px !important;
+            left: 10px !important;
+            z-index: 9999999 !important;
+            background: linear-gradient(135deg, #1E3A5F 0%, #2A398D 100%) !important;
+            border-radius: 10px !important;
+            padding: 10px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+            border: 2px solid #FFD700 !important;
+        }
+        
+        [data-testid="collapsedControl"] button {
+            background: transparent !important;
+            color: white !important;
+            border: none !important;
+            padding: 4px !important;
+            min-width: auto !important;
+            min-height: auto !important;
+        }
+        
+        [data-testid="collapsedControl"] svg {
+            fill: #FFD700 !important;
+            stroke: #FFD700 !important;
+            width: 28px !important;
+            height: 28px !important;
+        }
+        
+        /* Garantir que o sidebar abra por cima de tudo */
+        [data-testid="stSidebar"] {
+            z-index: 99999999 !important;
+        }
+    }
+    
+    /* ========================================
+       HEADERS E TÍTULOS
+       ======================================== */
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #1E3A5F !important;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .sub-header {
+        font-size: 1.2rem;
+        color: #495057 !important;
+        text-align: center;
+        margin-bottom: 2rem;
+        font-weight: 500;
+    }
+    
+    /* ========================================
+       CARDS E CONTAINERS
+       ======================================== */
+    .match-card {
+        background: #ffffff !important;
+        padding: 1.2rem;
+        border-radius: 12px;
+        margin-bottom: 0.8rem;
+        border-left: 5px solid #D4AF37;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        color: #1a1a2e !important;
+        transition: all 0.3s ease;
+    }
+    
+    .match-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    /* Cards de estatísticas/métricas */
+    [data-testid="stMetric"] {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+        padding: 1.2rem !important;
+        border-radius: 16px !important;
+        box-shadow: 0 4px 20px rgba(30, 58, 95, 0.1) !important;
+        border: 1px solid rgba(30, 58, 95, 0.08) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    [data-testid="stMetric"]:hover {
+        transform: translateY(-5px) !important;
+        box-shadow: 0 8px 30px rgba(30, 58, 95, 0.15) !important;
+    }
+    
+    /* Expanders mais bonitos */
+    .streamlit-expanderHeader {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        font-weight: 700 !important;
+        border: 1px solid #dee2e6 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
+    }
+    
+    .streamlit-expanderContent {
+        background: #ffffff !important;
+        border-radius: 0 0 12px 12px !important;
+        border: 1px solid #dee2e6 !important;
+        border-top: none !important;
+        padding: 1.5rem !important;
+    }
+    
+    .team-name {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #1E3A5F !important;
+    }
+    
+    .match-info {
+        color: #495057 !important;
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+    
+    /* ========================================
+       FORMULÁRIOS E INPUTS
+       ======================================== */
+    .stForm {
+        background: #ffffff !important;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border: 1px solid #dee2e6;
+    }
+    
+    .stTextInput label, .stSelectbox label, .stNumberInput label {
+        color: #1E3A5F !important;
+        font-weight: 600;
+    }
+    
+    .stTextInput input, .stNumberInput input {
+        color: #1a1a2e !important;
+        background: #ffffff !important;
+    }
+    
+    /* SELECTBOXES - TEXTO BRANCO EM FUNDO ESCURO */
+    .stSelectbox > div > div {
+        background-color: #1E3A5F !important;
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] > div {
+        background-color: #1E3A5F !important;
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] span {
+        color: #ffffff !important;
+    }
+    
+    /* Forçar texto branco em TODOS os elementos do selectbox */
+    .stSelectbox div[data-baseweb="select"] * {
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] input {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+    
+    .stSelectbox [role="combobox"] {
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] [data-testid="stMarkdownContainer"] {
+        color: #ffffff !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] p {
+        color: #ffffff !important;
+    }
+    
+    [data-baseweb="popover"] {
+        background-color: #1E3A5F !important;
+    }
+    
+    [data-baseweb="menu"] {
+        background-color: #1E3A5F !important;
+    }
+    
+    [data-baseweb="menu"] li {
+        color: #ffffff !important;
+        background-color: #1E3A5F !important;
+    }
+    
+    [data-baseweb="menu"] li:hover {
+        background-color: #2d5a87 !important;
+    }
+    
+    .stSelectbox svg {
+        fill: #ffffff !important;
+    }
+    
+    /* ========================================
+       BOTÕES - TEXTO BRANCO (FORÇADO)
+       ======================================== */
+    .stButton > button,
+    .stButton > button *,
+    .stButton > button p,
+    .stButton > button span,
+    .stButton > button div {
+        width: 100%;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        background-color: #1E3A5F !important;
+        color: #ffffff !important;
+        border: none;
+    }
+    
+    .stButton > button:hover,
+    .stButton > button:hover * {
+        background-color: #2d5a87 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Botão primário (submit de formulário) */
+    .stFormSubmitButton > button,
+    .stFormSubmitButton > button *,
+    .stFormSubmitButton > button p,
+    .stFormSubmitButton > button span {
+        background-color: #1E3A5F !important;
+        color: #ffffff !important;
+        border: none;
+    }
+    
+    .stFormSubmitButton > button:hover,
+    .stFormSubmitButton > button:hover * {
+        background-color: #2d5a87 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Forçar texto branco em TODOS os botões */
+    button[kind="primary"],
+    button[kind="primary"] *,
+    button[kind="secondary"],
+    button[kind="secondary"] * {
+        color: #ffffff !important;
+    }
+    
+    /* Texto dentro de botões */
+    [data-testid="baseButton-secondary"],
+    [data-testid="baseButton-secondary"] *,
+    [data-testid="baseButton-primary"],
+    [data-testid="baseButton-primary"] * {
+        color: #ffffff !important;
+    }
+    
+    /* ========================================
+       RANKING
+       ======================================== */
+    .ranking-gold { 
+        background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%) !important;
+        color: #1E3A5F !important;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 0.5rem;
+    }
+    .ranking-silver { 
+        background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%) !important;
+        color: #1E3A5F !important;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 0.5rem;
+    }
+    .ranking-bronze { 
+        background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%) !important;
+        color: #ffffff !important;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 0.5rem;
+    }
+    
+    /* ========================================
+       MÉTRICAS
+       ======================================== */
+    [data-testid="stMetricValue"] {
+        font-size: 2.2rem !important;
+        font-weight: 900 !important;
+        color: #1E3A5F !important;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.05) !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
+        color: #495057 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+    }
+    
+    /* ========================================
+       DATAFRAMES E TABELAS
+       ======================================== */
+    .stDataFrame {
+        color: #1a1a2e !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08) !important;
+    }
+    
+    .stDataFrame th {
+        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        padding: 1rem !important;
+        text-transform: uppercase !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    .stDataFrame td {
+        color: #1a1a2e !important;
+        background: #ffffff !important;
+        padding: 0.8rem !important;
+        border-bottom: 1px solid #e9ecef !important;
+        transition: background 0.2s ease !important;
+    }
+    
+    .stDataFrame tr:nth-child(even) td {
+        background: #f8f9fa !important;
+    }
+    
+    .stDataFrame tr:hover td {
+        background: #e3f2fd !important;
+    }
+    
+    /* ========================================
+       ALERTAS
+       ======================================== */
+    .stAlert {
+        border-radius: 12px !important;
+        border-left-width: 5px !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+        padding: 1rem 1.2rem !important;
+    }
+    
+    /* Info alert */
+    div[data-testid="stAlert"] {
+        color: #1a1a2e !important;
+        border-radius: 12px !important;
+    }
+    
+    /* Success alert */
+    .stSuccess {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%) !important;
+        border-left-color: #28a745 !important;
+    }
+    
+    /* Warning alert */
+    .stWarning {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%) !important;
+        border-left-color: #ffc107 !important;
+    }
+    
+    /* Error alert */
+    .stError {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%) !important;
+        border-left-color: #dc3545 !important;
+    }
+    
+    /* ========================================
+       DIVIDERS
+       ======================================== */
+    hr {
+        border: none;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+        margin: 1.5rem 0;
+    }
+    
+    /* ========================================
+       CAPTIONS E TEXTOS MENORES
+       ======================================== */
+    .stCaption, small, .caption {
+        color: #6c757d !important;
+    }
+
+    /* SIDEBAR - FORÇAR TEXTO BRANCO EM TUDO */
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stMarkdown,
+    [data-testid="stSidebar"] .stMarkdown * {
+        color: #ffffff !important;
+    }
+    
+    /* Ícone de colapsar/expandir sidebar */
+    button[data-testid="baseButton-headerNoPadding"],
+    button[data-testid="baseButton-headerNoPadding"] * {
+        color: #ffffff !important;
+    }
+    
+    button[data-testid="baseButton-headerNoPadding"] svg,
+    button[data-testid="baseButton-headerNoPadding"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }
+    
+    /* Ícone >> quando sidebar está fechada */
+    [data-testid="collapsedControl"] button,
+    [data-testid="collapsedControl"] button * {
+        color: #ffffff !important;
+        background: #1E3A5F !important;
+    }
+    
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }
+    
+    /* Área do ícone de colapsar no topo da sidebar */
+    [data-testid="stSidebarHeader"] {
+        background: transparent !important;
+    }
+    
+    [data-testid="stSidebarHeader"] button,
+    [data-testid="stSidebarHeader"] button * {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebarHeader"] svg,
+    [data-testid="stSidebarHeader"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }
+
+
+    /* ========================================
+       ÍCONE DA SIDEBAR - FORÇAR BRANCO
+       ======================================== */
+    
+    /* Ícone >> quando sidebar está fechada - PRECISA SER VISÍVEL */
+    [data-testid="collapsedControl"] {
+        background: #1E3A5F !important;
+        border-radius: 0 8px 8px 0;
+        padding: 8px;
+    }
+    
+    [data-testid="collapsedControl"] button {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] svg *,
+    [data-testid="collapsedControl"] span {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Ícone << quando sidebar está aberta */
+    [data-testid="stSidebar"] button[kind="header"],
+    [data-testid="stSidebar"] [data-testid="baseButton-header"],
+    [data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"] {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    [data-testid="stSidebar"] button[kind="header"] svg,
+    [data-testid="stSidebar"] button[kind="header"] svg *,
+    [data-testid="stSidebar"] [data-testid="baseButton-header"] svg,
+    [data-testid="stSidebar"] [data-testid="baseButton-header"] svg *,
+    [data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"] svg,
+    [data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Material icons dentro da sidebar */
+    [data-testid="stSidebar"] .material-icons,
+    [data-testid="stSidebar"] span[class*="icon"],
+    [data-testid="stSidebar"] span[data-testid*="icon"] {
+        color: #ffffff !important;
+    }
+    
+    /* Texto "keyboard_double_arrow_left" que aparece */
+    [data-testid="stSidebar"] button span {
+        color: #ffffff !important;
+    }
+
+
+    /* ========================================
+       ÍCONE DA SIDEBAR FECHADA - SUPER VISÍVEL
+       ======================================== */
+    
+    /* Container do botão quando sidebar está fechada */
+    [data-testid="collapsedControl"] {
+        background-color: #3498db !important;
+        border-radius: 0 12px 12px 0 !important;
+        padding: 12px 8px !important;
+        box-shadow: 2px 2px 8px rgba(0,0,0,0.3) !important;
+        margin-top: 10px !important;
+    }
+    
+    [data-testid="collapsedControl"]:hover {
+        background-color: #2980b9 !important;
+    }
+    
+    /* Botão dentro do container */
+    [data-testid="collapsedControl"] > button,
+    [data-testid="collapsedControl"] button {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    /* SVG e ícones dentro */
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] svg path,
+    [data-testid="collapsedControl"] svg *,
+    [data-testid="collapsedControl"] span,
+    [data-testid="collapsedControl"] * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Header escuro no topo quando sidebar fechada */
+    header[data-testid="stHeader"] {
+        background-color: #1E3A5F !important;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
-# Arquivos de configuração
-CONFIG_FILE = "config_cartola.json"
-STATE_FILE = "estado_cartola.json"
-
-# API oficial (fonte de dados)
-API_BASE = "https://api.cartola.globo.com"
-
-# Diretório de dados históricos
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-
-# ============================================
-# ESCUDOS DOS TIMES
-# ============================================
-@st.cache_data(ttl=3600)  # Cache por 1 hora
-def carregar_escudos_times() -> Dict[int, Dict]:
-    """Carrega escudos dos times da API do Cartola FC."""
-    try:
-        response = requests.get(f"{API_BASE}/clubes", timeout=10)
-        response.raise_for_status()
-        clubes = response.json()
-        
-        # Criar mapeamento: clube_id -> {nome, escudo_url}
-        escudos = {}
-        for clube_id, dados in clubes.items():
-            escudos[int(clube_id)] = {
-                'nome': dados.get('nome', ''),
-                'nome_fantasia': dados.get('nome_fantasia', ''),
-                'abreviacao': dados.get('abreviacao', ''),
-                'escudo_30': dados.get('escudos', {}).get('30x30', ''),
-                'escudo_45': dados.get('escudos', {}).get('45x45', ''),
-                'escudo_60': dados.get('escudos', {}).get('60x60', '')
-            }
-        return escudos
-    except Exception as e:
-        print(f"Erro ao carregar escudos: {e}")
-        return {}
-
-def get_escudo_html(clube_nome: str, clube_id: int = None, tamanho: int = 20) -> str:
-    """Retorna HTML com escudo + nome do clube."""
-    escudos = carregar_escudos_times()
-    
-    # Tentar encontrar o clube pelo ID ou nome
-    escudo_url = ''
-    if clube_id and clube_id in escudos:
-        escudo_url = escudos[clube_id].get('escudo_30', '')
-    else:
-        # Buscar pelo nome
-        for cid, dados in escudos.items():
-            if dados.get('nome', '').upper() == clube_nome.upper() or \
-               dados.get('abreviacao', '').upper() == clube_nome.upper() or \
-               dados.get('nome_fantasia', '').upper() == clube_nome.upper():
-                escudo_url = dados.get('escudo_30', '')
-                break
-    
-    if escudo_url:
-        return f'<img src="{escudo_url}" style="width: {tamanho}px; height: {tamanho}px; vertical-align: middle; margin-right: 5px;"><span style="color: #6C757D;">{clube_nome}</span>'
-    else:
-        return f'<span style="color: #6C757D;">{clube_nome}</span>'
-
-
-def carregar_config() -> Dict:
-    """Carrega configurações do arquivo."""
-    config_padrao = {
-        "orcamento": 100.0,
-        "formacao_preferida": None,
-        "rodada_atual": 1,
-        "ultima_atualizacao": None
-    }
-    
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-                for key in config_padrao:
-                    if key not in config:
-                        config[key] = config_padrao[key]
-                return config
-        except:
-            return config_padrao
-    return config_padrao
-
-
-def salvar_config(config: Dict):
-    """Salva configurações no arquivo."""
-    config['ultima_atualizacao'] = datetime.now().isoformat()
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=2)
-
-
-def carregar_dados_historicos(ano: int, rodada: int) -> Optional[pd.DataFrame]:
-    """Carrega dados históricos de uma rodada específica."""
-    arquivo = os.path.join(DATA_DIR, str(ano), f"rodada-{rodada}.csv")
-    
-    if not os.path.exists(arquivo):
-        return None
-    
-    try:
-        df = pd.read_csv(arquivo)
-        
-        col_map = {
-            'atletas.atleta_id': 'atleta_id',
-            'atletas.apelido': 'apelido',
-            'atletas.pontos_num': 'pontos_num',
-            'atletas.preco_num': 'preco_num',
-            'atletas.media_num': 'media_num',
-            'atletas.variacao_num': 'variacao_num',
-            'atletas.clube.id.full.name': 'clube_nome',
-            'atletas.clube_id': 'clube_id',
-            'atletas.posicao_id': 'posicao_id',
-            'atletas.entrou_em_campo': 'entrou_em_campo'
-        }
-        
-        df = df.rename(columns=col_map)
-        
-        if 'pontos_num' in df.columns:
-            df['pontos_num'] = pd.to_numeric(df['pontos_num'], errors='coerce').fillna(0)
-        if 'preco_num' in df.columns:
-            df['preco_num'] = pd.to_numeric(df['preco_num'], errors='coerce').fillna(0)
-        if 'media_num' in df.columns:
-            df['media_num'] = pd.to_numeric(df['media_num'], errors='coerce').fillna(0)
-        if 'posicao_id' in df.columns:
-            df['posicao_id'] = pd.to_numeric(df['posicao_id'], errors='coerce').fillna(0).astype(int)
-        
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {e}")
-        return None
-
-
-def carregar_dados_rodada_anterior(ano: int, rodada: int) -> Optional[pd.DataFrame]:
-    """Carrega dados da rodada anterior para fazer a escalação."""
-    if rodada <= 1:
-        ano_anterior = ano - 1
-        arquivos = glob(os.path.join(DATA_DIR, str(ano_anterior), "rodada-*.csv"))
-        if arquivos:
-            ultima_rodada = max([int(f.split('-')[-1].replace('.csv', '')) for f in arquivos])
-            return carregar_dados_historicos(ano_anterior, ultima_rodada)
-        return None
-    
-    return carregar_dados_historicos(ano, rodada - 1)
-
-
-def gerar_justificativa_nao_escalado(jogador_ideal: Dict, escalacao: Dict, df_mercado: pd.DataFrame = None) -> Dict:
-    """
-    Gera justificativa explicando por que um jogador do time ideal não foi escalado.
-    
-    Args:
-        jogador_ideal: Dados do jogador do time ideal
-        escalacao: Escalação sugerida pelo sistema
-        df_mercado: DataFrame com dados do mercado (opcional, para mais contexto)
-    
-    Returns:
-        Dict com 'resumo', 'motivo' e 'cor' (para exibição)
-    """
-    if not escalacao or not jogador_ideal:
-        return {'resumo': '❓ Sem dados', 'motivo': 'Dados insuficientes para análise', 'cor': '#6C757D'}
-    
-    atleta_id = str(jogador_ideal.get('atleta_id', ''))
-    pos_id = jogador_ideal.get('pos_id', 0)
-    preco_ideal = jogador_ideal.get('preco', 0)
-    pontos_ideal = jogador_ideal.get('pontos', jogador_ideal.get('pontos_reais', 0))
-    
-    # Verificar se foi escalado
-    ids_escalados = set(str(t.get('atleta_id', '')) for t in escalacao.get('titulares', []))
-    if atleta_id in ids_escalados:
-        return {'resumo': '✅ Escalado', 'motivo': 'Este jogador foi escalado pelo sistema', 'cor': '#15367b'}
-    
-    # Obter jogadores escalados na mesma posição
-    escalados_posicao = [t for t in escalacao.get('titulares', []) if t.get('pos_id') == pos_id]
-    
-    if not escalados_posicao:
-        return {'resumo': '❓ Posição não usada', 'motivo': 'Nenhum jogador desta posição foi escalado na formação escolhida', 'cor': '#6C757D'}
-    
-    # Calcular scores e preços dos escalados
-    scores_escalados = [t.get('score', 0) for t in escalados_posicao]
-    precos_escalados = [t.get('preco', 0) for t in escalados_posicao]
-    max_score_escalado = max(scores_escalados) if scores_escalados else 0
-    min_preco_escalado = min(precos_escalados) if precos_escalados else 0
-    max_preco_escalado = max(precos_escalados) if precos_escalados else 0
-    
-    # Buscar score previsto do jogador ideal (se disponível no df_mercado)
-    score_previsto = 0
-    status_jogador = None
-    if df_mercado is not None and len(df_mercado) > 0:
-        jogador_mercado = df_mercado[df_mercado['atleta_id'].astype(str) == atleta_id]
-        if len(jogador_mercado) > 0:
-            score_previsto = jogador_mercado.iloc[0].get('score', jogador_mercado.iloc[0].get('pred', 0))
-            status_jogador = jogador_mercado.iloc[0].get('status_id', None)
-    
-    # Determinar motivo principal
-    
-    # 1. Jogador suspenso ou contundido
-    if status_jogador in [3, 5]:  # 3=Suspenso, 5=Contundido
-        status_nome = 'Suspenso' if status_jogador == 3 else 'Contundido'
-        return {
-            'resumo': f'🚫 {status_nome}',
-            'motivo': f'O jogador estava {status_nome.lower()} e não pôde ser escalado.',
-            'cor': '#DC3545'
-        }
-    
-    # 2. Preço muito alto para o orçamento
-    custo_total_escalacao = escalacao.get('custo_total', 0)
-    orcamento_restante = escalacao.get('orcamento_restante', 0)
-    
-    if preco_ideal > max_preco_escalado * 1.5:
-        return {
-            'resumo': '💰 Preço elevado',
-            'motivo': f'Preço de C$ {preco_ideal:.1f} é muito alto. O sistema priorizou jogadores mais baratos para otimizar o orçamento.',
-            'cor': '#FFC107'
-        }
-    
-    # 3. Score previsto menor que os escalados
-    if score_previsto > 0 and score_previsto < max_score_escalado * 0.8:
-        return {
-            'resumo': '📉 Score previsto baixo',
-            'motivo': f'O score previsto ({score_previsto:.2f}) era menor que dos jogadores escalados. O modelo não previa uma boa pontuação.',
-            'cor': '#FFC107'
-        }
-    
-    # 4. Custo-benefício desfavorável
-    if preco_ideal > 0:
-        cb_ideal = pontos_ideal / preco_ideal
-        cb_escalados = [t.get('score', 0) / t.get('preco', 1) for t in escalados_posicao if t.get('preco', 0) > 0]
-        media_cb_escalados = sum(cb_escalados) / len(cb_escalados) if cb_escalados else 0
-        
-        if cb_ideal < media_cb_escalados * 0.7:
-            return {
-                'resumo': '⚖️ Custo-benefício',
-                'motivo': f'Relação pontos/preço ({cb_ideal:.2f}) era inferior aos jogadores escalados. O sistema priorizou melhor custo-benefício.',
-                'cor': '#FFC107'
-            }
-    
-    # 5. Jogador não estava entre os melhores previstos
-    if score_previsto > 0:
-        return {
-            'resumo': '🎯 Previsão diferente',
-            'motivo': f'O modelo previa score de {score_previsto:.2f}, mas outros jogadores tinham previsões melhores para a rodada.',
-            'cor': '#17A2B8'
-        }
-    
-    # 6. Motivo genérico
-    return {
-        'resumo': '🔄 Otimização',
-        'motivo': 'O sistema escolheu outros jogadores com melhor combinação de previsão, preço e consistência.',
-        'cor': '#6C757D'
-    }
-
-
-def obter_melhores_reais(df: pd.DataFrame, formacao: str, orcamento: float, respeitar_orcamento: bool = False) -> Dict:
-    """Obtém os melhores pontuadores reais da rodada seguindo a formação.
-    
-    Se respeitar_orcamento=True, calcula o melhor time possível dentro do orçamento.
-    """
-    if df is None or len(df) == 0:
-        return None
-    
-    config_formacao = FORMACOES.get(formacao, FORMACOES['4-3-3'])
-    
-    df_jogou = df[df['entrou_em_campo'] == True].copy() if 'entrou_em_campo' in df.columns else df.copy()
-    
-    if not respeitar_orcamento:
-        # Lógica original: pegar os melhores sem limite de orçamento
-        titulares = []
-        custo_total = 0
-        
-        for pos_id, qtd in config_formacao.items():
-            pos_jogadores = df_jogou[df_jogou['posicao_id'] == pos_id].nlargest(qtd, 'pontos_num')
-            
-            for _, jogador in pos_jogadores.iterrows():
-                titulares.append({
-                    'atleta_id': str(jogador.get('atleta_id', '')),
-                    'apelido': jogador.get('apelido', 'N/A'),
-                    'posicao': POSICAO_MAP.get(pos_id, 'N/A'),
-                    'pos_id': pos_id,
-                    'pontos': jogador.get('pontos_num', 0),
-                    'pontos_reais': jogador.get('pontos_num', 0),
-                    'media': jogador.get('media_num', 0),
-                    'preco': jogador.get('preco_num', 0),
-                    'clube': jogador.get('clube_nome', '')
-                })
-                custo_total += jogador.get('preco_num', 0)
-    else:
-        # Nova lógica: melhor time possível DENTRO do orçamento
-        # Usar programação dinâmica simplificada (greedy com substituições)
-        titulares = []
-        custo_total = 0
-        ids_usados = []
-        
-        # Primeiro, tentar escalar os melhores de cada posição
-        for pos_id, qtd in config_formacao.items():
-            pos_jogadores = df_jogou[df_jogou['posicao_id'] == pos_id].sort_values('pontos_num', ascending=False)
-            
-            selecionados = 0
-            for _, jogador in pos_jogadores.iterrows():
-                if selecionados >= qtd:
-                    break
-                
-                atleta_id = str(jogador.get('atleta_id', ''))
-                preco = jogador.get('preco_num', 0)
-                
-                if atleta_id not in ids_usados:
-                    # Calcular custo mínimo restante
-                    pos_restantes = sum(config_formacao.get(p, 0) for p in config_formacao if p > pos_id)
-                    pos_restantes += (qtd - selecionados - 1)
-                    custo_minimo_restante = pos_restantes * 1.0  # Estimativa conservadora
-                    
-                    if custo_total + preco + custo_minimo_restante <= orcamento:
-                        titulares.append({
-                            'atleta_id': atleta_id,
-                            'apelido': jogador.get('apelido', 'N/A'),
-                            'posicao': POSICAO_MAP.get(pos_id, 'N/A'),
-                            'pos_id': pos_id,
-                            'pontos': jogador.get('pontos_num', 0),
-                            'pontos_reais': jogador.get('pontos_num', 0),
-                            'media': jogador.get('media_num', 0),
-                            'preco': preco,
-                            'clube': jogador.get('clube_nome', '')
-                        })
-                        custo_total += preco
-                        ids_usados.append(atleta_id)
-                        selecionados += 1
-        
-        # Se não conseguiu escalar 12, completar com os mais baratos
-        total_esperado = sum(config_formacao.values())
-        if len(titulares) < total_esperado:
-            for pos_id, qtd in config_formacao.items():
-                atual = len([t for t in titulares if t['pos_id'] == pos_id])
-                while atual < qtd:
-                    pos_jogadores = df_jogou[
-                        (df_jogou['posicao_id'] == pos_id) & 
-                        (~df_jogou['atleta_id'].astype(str).isin(ids_usados))
-                    ].sort_values('preco_num')
-                    
-                    if len(pos_jogadores) == 0:
-                        break
-                    
-                    for _, jogador in pos_jogadores.iterrows():
-                        preco = jogador.get('preco_num', 0)
-                        if custo_total + preco <= orcamento:
-                            atleta_id = str(jogador.get('atleta_id', ''))
-                            titulares.append({
-                                'atleta_id': atleta_id,
-                                'apelido': jogador.get('apelido', 'N/A'),
-                                'posicao': POSICAO_MAP.get(pos_id, 'N/A'),
-                                'pos_id': pos_id,
-                                'pontos': jogador.get('pontos_num', 0),
-                                'pontos_reais': jogador.get('pontos_num', 0),
-                                'media': jogador.get('media_num', 0),
-                                'preco': preco,
-                                'clube': jogador.get('clube_nome', '')
-                            })
-                            custo_total += preco
-                            ids_usados.append(atleta_id)
-                            atual += 1
-                            break
-                    else:
-                        break
-    
-    titulares.sort(key=lambda x: x.get('pontos', 0), reverse=True)
-    
-    capitao = titulares[0] if titulares else None
-    
-    pontuacao_total = sum(t.get('pontos', 0) for t in titulares)
-    if capitao:
-        pontuacao_total += capitao.get('pontos', 0)
-    
-    return {
-        'formacao': formacao,
-        'titulares': titulares,
-        'capitao': capitao,
-        'pontuacao_total': pontuacao_total,
-        'custo_total': custo_total
-    }
-
-
-def escalar_com_dados_anteriores(df_anterior: pd.DataFrame, df_atual: pd.DataFrame, 
-                                  formacao: str, orcamento: float, 
-                                  ano: int = None, rodada: int = None) -> Dict:
-    """Escala time usando a estratégia v8 e verifica pontuação real com substituições.
-    
-    IMPORTANTE: Para simulação histórica, usa df_atual (rodada N) para escalar,
-    pois contém o status correto dos jogadores (Provável, Suspenso, etc.).
-    O histórico é carregado até a rodada N-1.
-    """
-    # Para simulação histórica, usar df_atual (rodada N) para escalar
-    # Para mercado real, usar df_anterior (dados mais recentes disponíveis)
-    df_escalar = df_atual if (ano and rodada and df_atual is not None and len(df_atual) > 0) else df_anterior
-    
-    if df_escalar is None or len(df_escalar) == 0:
-        return None
-    
-    # Determinar se é simulação histórica (ano e rodada definidos)
-    modo_simulacao = ano is not None and rodada is not None
-    
-    # Usar a estratégia v9 com modelo apropriado:
-    # - modo_simulacao=True: usa modelo_v9.joblib (2022-2024) para simulação histórica
-    # - modo_simulacao=False: usa modelo_v9_2026.joblib (2022-2025) para escalação real
-    estrategia = EstrategiaV7(modo_simulacao=modo_simulacao)
-    
-    # Carregar histórico para ter explicações corretas
-    if ano and rodada:
-        # SEMPRE carregar dados do ano anterior primeiro para ter histórico base
-        # IMPORTANTE: Usar atualizar_historico() para que os dados sejam usados nas features
-        ano_anterior = ano - 1
-        for r in range(1, 39):
-            df_hist = carregar_dados_historicos(ano_anterior, r)
-            if df_hist is not None:
-                estrategia.atualizar_historico(df_hist)
-        
-        # Depois carregar rodadas anteriores do ano atual (até N-1)
-        if rodada > 1:
-            for r in range(1, rodada):
-                df_hist = carregar_dados_historicos(ano, r)
-                if df_hist is not None:
-                    estrategia.atualizar_historico(df_hist)
-        
-        # Ajustar rodada atual para cálculo correto
-        estrategia.rodada_atual = rodada
-    
-    # Escalar time (modo_simulacao já definido acima)
-    resultado = estrategia.escalar_time(df_escalar, formacao=formacao, orcamento=orcamento, incluir_explicacao=True, modo_simulacao=modo_simulacao)
-    
-    if resultado is None or len(resultado.get('titulares', [])) < 12:
-        return None
-    
-    # Função para obter pontuação real de um jogador
-    def obter_pontos_reais(atleta_id):
-        if df_atual is None:
-            return 0, False
-        jogador = df_atual[df_atual['atleta_id'].astype(str) == str(atleta_id)]
-        if len(jogador) > 0:
-            return jogador.iloc[0].get('pontos_num', 0), True
-        return 0, False
-    
-    # Processar titulares com pontuação real
-    titulares = []
-    for t in resultado['titulares']:
-        atleta_id = str(t.get('atleta_id', ''))
-        pontos_reais, encontrado = obter_pontos_reais(atleta_id)
-        
-        titulares.append({
-            'atleta_id': atleta_id,
-            'apelido': t.get('apelido', 'N/A'),
-            'posicao': t.get('posicao', 'N/A'),
-            'pos_id': t.get('pos_id', 0),
-            'score': t.get('score', 0),
-            'preco': t.get('preco', 0),
-            'media': t.get('media', 0),
-            'clube': t.get('clube', ''),
-            'pontos_reais': pontos_reais,
-            'substituido': False,
-            'substituto': None,
-            'explicacao': t.get('explicacao', {})
-        })
-    
-    # Processar reservas com pontuação real
-    reservas = {}
-    for pos_id, reserva in resultado.get('reservas', {}).items():
-        if reserva:
-            atleta_id = str(reserva.get('atleta_id', ''))
-            pontos_reais, _ = obter_pontos_reais(atleta_id)
-            reservas[pos_id] = {
-                'atleta_id': atleta_id,
-                'apelido': reserva.get('apelido', 'N/A'),
-                'posicao': reserva.get('posicao', 'N/A'),
-                'pos_id': pos_id,
-                'score': reserva.get('score', 0),
-                'preco': reserva.get('preco', 0),
-                'media': reserva.get('media', 0),
-                'clube': reserva.get('clube', ''),
-                'pontos_reais': pontos_reais,
-                'explicacao': reserva.get('explicacao', {})
-            }
-    
-    # Processar reserva de luxo com pontuação real
-    reserva_luxo = None
-    if resultado.get('reserva_luxo'):
-        rl = resultado['reserva_luxo']
-        atleta_id = str(rl.get('atleta_id', ''))
-        pontos_reais, _ = obter_pontos_reais(atleta_id)
-        reserva_luxo = {
-            'atleta_id': atleta_id,
-            'apelido': rl.get('apelido', 'N/A'),
-            'posicao': rl.get('posicao', 'N/A'),
-            'pos_id': rl.get('pos_id', 0),
-            'score': rl.get('score', 0),
-            'preco': rl.get('preco', 0),
-            'media': rl.get('media', 0),
-            'clube': rl.get('clube', ''),
-            'pontos_reais': pontos_reais,
-            'explicacao': rl.get('explicacao', {})
-        }
-    
-    # SUBSTITUIÇÃO 1: Reservas substituem titulares que NÃO JOGARAM (pontos = 0)
-    substituicoes = []
-    for i, titular in enumerate(titulares):
-        if titular['pontos_reais'] == 0:  # Titular não jogou
-            pos_id = titular['pos_id']
-            if pos_id in reservas and reservas[pos_id]:
-                reserva = reservas[pos_id]
-                if reserva['pontos_reais'] > 0:  # Reserva jogou
-                    titulares[i]['substituido'] = True
-                    titulares[i]['substituto'] = reserva
-                    substituicoes.append({
-                        'tipo': 'reserva',
-                        'saiu': titular,
-                        'entrou': reserva
-                    })
-                    # Remover reserva usado
-                    reservas[pos_id] = None
-    
-    # SUBSTITUIÇÃO 2: Reserva de luxo substitui o PIOR PONTUADOR da sua posição
-    if reserva_luxo:
-        pos_luxo = reserva_luxo['pos_id']
-        # Encontrar titulares da mesma posição que não foram substituídos
-        titulares_pos = [t for t in titulares if t['pos_id'] == pos_luxo and not t['substituido']]
-        
-        if titulares_pos:
-            # Encontrar o pior pontuador da posição
-            pior_pontuador = min(titulares_pos, key=lambda x: x['pontos_reais'])
-            
-            # Substituir se reserva de luxo fez mais pontos
-            if reserva_luxo['pontos_reais'] > pior_pontuador['pontos_reais']:
-                for i, titular in enumerate(titulares):
-                    if titular['atleta_id'] == pior_pontuador['atleta_id']:
-                        titulares[i]['substituido'] = True
-                        titulares[i]['substituto'] = reserva_luxo
-                        substituicoes.append({
-                            'tipo': 'reserva_luxo',
-                            'saiu': pior_pontuador,
-                            'entrou': reserva_luxo
-                        })
-                        break
-    
-    # Identificar capitão
-    capitao_id = str(resultado['capitao']['atleta_id']) if resultado.get('capitao') else None
-    capitao = None
-    for t in titulares:
-        if t['atleta_id'] == capitao_id:
-            capitao = t
-            break
-    
-    if capitao is None and titulares:
-        capitao = max(titulares, key=lambda x: x['score'])
-    
-    # Calcular pontuação PREVISTA (soma das médias dos titulares)
-    capitao_id = capitao['atleta_id'] if capitao else None
-    pontuacao_prevista = 0
-    for t in titulares:
-        media_jogador = t['media']
-        # Capitão conta 1.5x
-        if t['atleta_id'] == capitao_id:
-            media_jogador *= 1.5
-        pontuacao_prevista += media_jogador
-    
-    # Calcular pontuação real COM substituições
-    pontuacao_real = 0
-    capitao_id = capitao['atleta_id'] if capitao else None
-    
-    for t in titulares:
-        pontos_jogador = 0
-        if t['substituido'] and t['substituto']:
-            pontos_jogador = t['substituto']['pontos_reais']
-        else:
-            pontos_jogador = t['pontos_reais']
-        
-        # Capitão conta 1.5x
-        if t['atleta_id'] == capitao_id:
-            pontos_jogador *= 1.5
-        
-        pontuacao_real += pontos_jogador
-    
-    custo_total = sum(t['preco'] for t in titulares)
-    
-    return {
-        'formacao': formacao,
-        'titulares': titulares,
-        'reservas': reservas,
-        'reserva_luxo': reserva_luxo,
-        'capitao': capitao,
-        'substituicoes': substituicoes,
-        'pontuacao_prevista': pontuacao_prevista,
-        'pontuacao_real': pontuacao_real,
-        'custo_total': custo_total,
-        'orcamento_restante': orcamento - custo_total
-    }
-
-
-@st.cache_data(ttl=300)
-def buscar_mercado() -> Optional[pd.DataFrame]:
-    """Busca dados do mercado da API oficial."""
-    try:
-        response = requests.get(f"{API_BASE}/atletas/mercado", timeout=30)
-        if response.status_code == 200:
-            data = response.json()
-            atletas = data.get('atletas', [])
-            
-            if not atletas:
-                return None
-            
-            df = pd.DataFrame(atletas)
-            
-            df['atleta_id'] = df['atleta_id'].astype(str)
-            df['posicao_id'] = df['posicao_id'].astype(int)
-            df['preco_num'] = pd.to_numeric(df['preco_num'], errors='coerce').fillna(0)
-            df['media_num'] = pd.to_numeric(df['media_num'], errors='coerce').fillna(0)
-            df['pontos_num'] = pd.to_numeric(df.get('pontos_num', 0), errors='coerce').fillna(0)
-            
-            clubes = {c['id']: c['nome'] for c in data.get('clubes', {}).values()}
-            df['clube_nome'] = df['clube_id'].map(clubes)
-            
-            return df
-    except Exception as e:
-        pass
-    
-    return None
-
-
-@st.cache_data(ttl=300)
-def buscar_rodada_atual() -> int:
-    """Busca a rodada atual da API."""
-    try:
-        response = requests.get(f"{API_BASE}/mercado/status", timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('rodada_atual', 1)
-    except:
-        pass
-    return 38
-
-
-def exibir_jogador_card(jogador: Dict, is_capitao: bool = False, is_reserva_luxo: bool = False, 
-                        mostrar_pontos_reais: bool = False, mostrar_previsto_vs_real: bool = False,
-                        substituido: bool = False, mostrar_explicacao: bool = True):
-    """Exibe card de jogador com estilo moderno e explicação da escolha."""
-    card_class = "jogador-card"
-    if is_capitao:
-        card_class += " capitao-card"
-    elif is_reserva_luxo:
-        card_class += " reserva-luxo-card"
-    elif substituido:
-        card_class += " substituido-card"
-    
-    badge = ""
-    if is_capitao:
-        badge = "👑 "
-    elif is_reserva_luxo:
-        badge = "⭐ "
-    elif substituido:
-        badge = "🔄 "
-    
-    # Pontuação prevista (média) e real
-    media = jogador.get('media', 0)
-    pontos_reais = jogador.get('pontos_reais', jogador.get('pontos', 0))
-    
-    # Capitão tem pontuação multiplicada por 1.5
-    if is_capitao:
-        media_display = media * 1.5
-        pontos_reais_display = pontos_reais * 1.5
-    else:
-        media_display = media
-        pontos_reais_display = pontos_reais
-    
-    if mostrar_previsto_vs_real:
-        pontos_display = f"📊 {media_display:.1f} → ⚽ {pontos_reais_display:.1f}"
-        cor_pontos = "#FFFFFF" if pontos_reais_display > 0 else "#DC3545"
-    elif mostrar_pontos_reais:
-        pontos_display = f"⚽ {pontos_reais_display:.1f}"
-        cor_pontos = "#FFFFFF" if pontos_reais_display > 0 else "#DC3545"
-    else:
-        pontos_display = f"📊 {media_display:.1f}"
-        cor_pontos = "#FFFFFF"
-    
-    # Explicação da escolha
-    explicacao = jogador.get('explicacao', {})
-    resumo = explicacao.get('resumo', '') if explicacao else ''
-    significado = explicacao.get('significado', '') if explicacao else ''
-    motivo = explicacao.get('motivo', '') if explicacao else ''
-    
-    # Formatar classificação com cores baseadas no tipo
-    explicacao_html = ''
-    if resumo:
-        # Definir cor baseada no tipo de justificativa
-        if 'Boa fase' in resumo or 'recuperação' in resumo or 'premium' in resumo:
-            cor_resumo = '#D4A84B'  # Dourado
-        elif 'queda' in resumo:
-            cor_resumo = '#DC3545'  # Vermelho
-        elif 'Aposta' in resumo:
-            cor_resumo = '#FFC107'  # Amarelo
-        else:
-            cor_resumo = '#ADB5BD'  # Cinza
-        
-        explicacao_html = f'<div style="font-size: 0.85rem; color: {cor_resumo}; margin-top: 8px; font-weight: 600;">{resumo}</div>'
-        
-        if significado:
-            explicacao_html += f'<div style="font-size: 0.75rem; color: #E5E7EB; margin-top: 4px;">📝 {significado}</div>'
-        
-        if motivo:
-            explicacao_html += f'<div style="font-size: 0.75rem; color: #D1D5DB; margin-top: 4px; font-style: italic;">💡 {motivo}</div>'
-    
-    # Valorização prevista
-    valorizacao = jogador.get('valorizacao_prevista', 0)
-    if valorizacao > 0:
-        val_display = f"📈 +{valorizacao:.1f}"
-        cor_val = "#28A745"  # Verde
-    elif valorizacao < 0:
-        val_display = f"📉 {valorizacao:.1f}"
-        cor_val = "#DC3545"  # Vermelho
-    else:
-        val_display = f"🔹 {valorizacao:.1f}"
-        cor_val = "#6C757D"  # Cinza
-    
-    st.markdown(f"""
-    <div class="{card_class}">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <span style="font-size: 1.1rem; font-weight: 600; color: #FFFFFF;">{badge}{jogador.get('apelido', 'N/A')}</span>
-                <span style="margin-left: 10px;">{get_escudo_html(jogador.get('clube', ''), jogador.get('clube_id'))}</span>
-            </div>
-            <div style="text-align: right;">
-                <span style="color: #FFFFFF; font-weight: 600;">C$ {jogador.get('preco', 0):.1f}</span>
-                <span style="color: {cor_pontos}; margin-left: 15px; font-weight: 700; font-size: 1.1rem;">{pontos_display}</span>
-            </div>
+# Header fixo com logo do bolão
+LOGO_URL = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png"
+st.markdown(f'''
+<div class="fixed-header">
+    <div class="fixed-header-content">
+        <img src="{LOGO_URL}" class="fixed-header-logo" alt="Logo Copa 2026">
+        <div>
+            <div class="fixed-header-title">⚽ Bolão Copa 2026</div>
+            <div class="fixed-header-subtitle">#WeAre26</div>
         </div>
-        <div style="margin-top: 6px; font-size: 0.85rem;">
-            <span style="color: {cor_val}; font-weight: 600;">{val_display}</span>
-            <span style="color: #6C757D; margin-left: 5px;">valorização prevista</span>
-        </div>
-        {explicacao_html if mostrar_explicacao else ''}
     </div>
-    """, unsafe_allow_html=True)
+</div>
+''', unsafe_allow_html=True)
 
+# =============================================================================
+# CABEÇALHO PADRÃO DAS PÁGINAS
+# =============================================================================
+MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
 
+def render_page_header():
+    """Renderiza o cabeçalho padrão com banner, mascotes e título"""
+    # Banner decorativo com ícones dos países sede
+    st.markdown('''
+    <div style="
+        background: linear-gradient(90deg, #E61D25 0%, #3CAC3B 25%, #2A398D 50%, #3CAC3B 75%, #E61D25 100%);
+        padding: 8px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    ">
+        <span style="font-size: 1.3rem; letter-spacing: 8px;">
+            🍁 🇨🇦 • 🦅 🇲🇽 • ⭐ 🇺🇸
+        </span>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Imagem dos mascotes
+    st.markdown(f'''
+    <div style="text-align: center; margin-bottom: 0.5rem;">
+        <img src="{MASCOTES_IMG}" alt="Mascotes Copa 2026" style="max-width: 200px; height: auto;">
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Título principal
+    st.markdown('<h1 class="main-header">⚽ Bolão Copa do Mundo 2026</h1>', unsafe_allow_html=True)
 
+# =============================================================================
+# CONSTANTES
+# =============================================================================
+GRUPOS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
+FASES = {
+    "Grupos": "Fase de Grupos",
+    "Oitavas32": "Oitavas de Final (32)",
+    "Oitavas16": "Oitavas de Final (16)",
+    "Quartas": "Quartas de Final",
+    "Semifinal": "Semifinal",
+    "Terceiro": "Disputa 3º Lugar",
+    "Final": "Final"
+}
 
-def gerar_todas_rodadas(ano: int, orcamento: float, formacao: str = '4-3-3', progress_bar=None, status_text=None, retornar_detalhes: bool = False):
-    """Gera escalação para todas as rodadas de um ano.
-    
-    Se formacao='auto', testa todas as formações e escolhe a melhor para cada rodada.
-    Se retornar_detalhes=True, retorna também os dados detalhados de cada escalação.
-    
-    Returns:
-        Se retornar_detalhes=False: pd.DataFrame com resumo
-        Se retornar_detalhes=True: (pd.DataFrame, dict) com resumo e detalhes
-    """
-    resultados = []
-    detalhes_rodadas = {}  # Armazena dados detalhados de cada rodada
-    total_rodadas = 37  # Rodadas 2 a 38
-    
-    # Lista de formações para testar quando modo automático
-    formacoes_disponiveis = list(FORMACOES.keys())
-    usar_formacao_automatica = formacao == 'auto'
-    
-    for i, rodada in enumerate(range(2, 39)):
-        # Atualizar barra de progresso
-        if progress_bar is not None:
-            progress_bar.progress((i + 1) / total_rodadas)
-        if status_text is not None:
-            if usar_formacao_automatica:
-                status_text.text(f"⏳ Rodada {rodada}/38 - Testando {len(formacoes_disponiveis)} formações...")
-            else:
-                status_text.text(f"⏳ Processando rodada {rodada}/38... ({i+1}/{total_rodadas})")
-        
-        df_anterior = carregar_dados_rodada_anterior(ano, rodada)
-        df_atual = carregar_dados_historicos(ano, rodada)
-        
-        if df_anterior is None or df_atual is None:
-            continue
-        
-        try:
-            melhor_escalacao = None
-            melhor_formacao = formacao
-            melhor_pontuacao = -float('inf')
-            
-            if usar_formacao_automatica:
-                # Testar todas as formações e escolher a melhor PELA PREVISÃO (não pelo resultado real)
-                # Isso simula o comportamento real onde não sabemos o resultado ainda
-                for form in formacoes_disponiveis:
-                    esc = escalar_com_dados_anteriores(df_anterior, df_atual, form, orcamento, ano=ano, rodada=rodada)
-                    pontuacao_prevista = esc.get('pontuacao_prevista', esc.get('pontuacao_esperada', 0)) if esc else 0
-                    if esc and pontuacao_prevista > melhor_pontuacao:
-                        melhor_pontuacao = pontuacao_prevista
-                        melhor_escalacao = esc
-                        melhor_formacao = form
-            else:
-                melhor_escalacao = escalar_com_dados_anteriores(df_anterior, df_atual, formacao, orcamento, ano=ano, rodada=rodada)
-                melhor_formacao = formacao
-            
-            # Obter melhores reais com a mesma formação usada
-            melhores = obter_melhores_reais(df_atual, melhor_formacao, orcamento, respeitar_orcamento=True)
-            
-            if melhor_escalacao and melhores:
-                ids_escalados = set(t['atleta_id'] for t in melhor_escalacao['titulares'])
-                ids_melhores = set(t['atleta_id'] for t in melhores['titulares'])
-                acertos = len(ids_escalados.intersection(ids_melhores))
-                
-                cap_escalado = melhor_escalacao['capitao']['apelido'] if melhor_escalacao.get('capitao') else ''
-                cap_ideal = melhores['capitao']['apelido'] if melhores.get('capitao') else ''
-                cap_ok = 1 if cap_escalado == cap_ideal else 0
-                
-                pts_ideal = melhores['pontuacao_total'] if melhores['pontuacao_total'] > 0 else 1
-                
-                resultados.append({
-                    'Rodada': rodada,
-                    'Pts Escalado': round(melhor_escalacao['pontuacao_real'], 1),
-                    'Pts Previsto': round(melhor_escalacao.get('pontuacao_prevista', melhor_escalacao.get('pontuacao_esperada', 0)), 1),
-                    'Pts Ideal': round(melhores['pontuacao_total'], 1),
-                    'Aproveitamento': f"{(melhor_escalacao['pontuacao_real'] / pts_ideal * 100):.1f}%",
-                    'Acertos': f"{acertos}/12",
-                    'Capitão Escalado': cap_escalado,
-                    'Capitão Ideal': cap_ideal,
-                    'Cap OK': '✓' if cap_ok else '✗',
-                    'Custo': f"C$ {melhor_escalacao['custo_total']:.1f}",
-                    'Formação': melhor_formacao
-                })
-                
-                # Armazenar detalhes se solicitado
-                if retornar_detalhes:
-                    detalhes_rodadas[rodada] = {
-                        'escalacao': melhor_escalacao,
-                        'melhores': melhores,
-                        'formacao': melhor_formacao,
-                        'acertos': acertos,
-                        'cap_ok': cap_ok
-                    }
-        except Exception as e:
-            continue
-    
-    df_resultados = pd.DataFrame(resultados)
-    
-    if retornar_detalhes:
-        return df_resultados, detalhes_rodadas
-    return df_resultados
+# Mapeamento de códigos do mata-mata para nomes amigáveis
+MATA_MATA_CODES = {
+    "1A": "1º Grupo A", "2A": "2º Grupo A",
+    "1B": "1º Grupo B", "2B": "2º Grupo B",
+    "1C": "1º Grupo C", "2C": "2º Grupo C",
+    "1D": "1º Grupo D", "2D": "2º Grupo D",
+    "1E": "1º Grupo E", "2E": "2º Grupo E",
+    "1F": "1º Grupo F", "2F": "2º Grupo F",
+    "1G": "1º Grupo G", "2G": "2º Grupo G",
+    "1H": "1º Grupo H", "2H": "2º Grupo H",
+    "1I": "1º Grupo I", "2I": "2º Grupo I",
+    "1J": "1º Grupo J", "2J": "2º Grupo J",
+    "1K": "1º Grupo K", "2K": "2º Grupo K",
+    "1L": "1º Grupo L", "2L": "2º Grupo L",
+    "3AFJ": "3º (A/F/J)", "3BHJ": "3º (B/H/J)", "3BFJ": "3º (B/F/J)",
+    "3CEF": "3º (C/E/F)", "3ADGF": "3º (A/D/G/F)", "3EFIK": "3º (E/F/I/K)",
+    "W97": "Venc. Jogo 97", "W98": "Venc. Jogo 98", "W99": "Venc. Jogo 99", "W100": "Venc. Jogo 100",
+    "W101": "Venc. Jogo 101", "W102": "Venc. Jogo 102", "W103": "Venc. Jogo 103", "W104": "Venc. Jogo 104",
+    "W105": "Venc. Jogo 105", "W106": "Venc. Jogo 106", "W107": "Venc. Jogo 107", "W108": "Venc. Jogo 108",
+    "W109": "Venc. Jogo 109", "W110": "Venc. Jogo 110", "W111": "Venc. Jogo 111", "W112": "Venc. Jogo 112",
+    "W113": "Venc. Jogo 113", "W114": "Venc. Jogo 114", "W115": "Venc. Jogo 115", "W116": "Venc. Jogo 116",
+    "W117": "Venc. Jogo 117", "W118": "Venc. Jogo 118", "W119": "Venc. Jogo 119", "W120": "Venc. Jogo 120",
+    "W121": "Venc. Jogo 121", "W122": "Venc. Jogo 122", "W123": "Venc. Jogo 123", "W124": "Venc. Jogo 124",
+    "W125": "Venc. Semi 1", "W126": "Venc. Semi 2",
+    "L125": "Perd. Semi 1", "L126": "Perd. Semi 2",
+}
 
+# =============================================================================
+# INICIALIZAÇÃO
+# =============================================================================
+@st.cache_resource
+def init_app():
+    """Inicializa o banco de dados com dados da Copa 2026"""
+    return init_database_with_copa2026()
 
-def substituir_jogador_manual(escalacao: dict, jogador_id, df_mercado: pd.DataFrame, orcamento: float, estrategia=None, ids_a_excluir: set = None) -> dict:
-    """Substitui um jogador que não vai jogar por outro disponível.
-    
-    NOVA LÓGICA: Usa o DataFrame já ranqueado pela escalação original.
-    Simplesmente pega o próximo jogador da lista que:
-    - É da mesma posição
-    - Não está escalado
-    - Não está na lista de jogadores a excluir (outros sendo substituídos)
-    - Cabe no orçamento
-    
-    Args:
-        ids_a_excluir: IDs de jogadores que estão sendo substituídos em lote (para evitar reselecionar)
-    """
-    if not escalacao:
-        return escalacao
-    
-    # Converter jogador_id para string para comparação consistente
-    jogador_id_str = str(jogador_id)
-    
-    # Encontrar o jogador a ser substituído
-    jogador_substituir = None
-    idx_substituir = -1
-    for i, t in enumerate(escalacao['titulares']):
-        if str(t['atleta_id']) == jogador_id_str:
-            jogador_substituir = t
-            idx_substituir = i
-            break
-    
-    if jogador_substituir is None:
-        return escalacao
-    
-    pos_id = jogador_substituir['pos_id']
-    preco_liberado = jogador_substituir['preco']
-    orcamento_disponivel = escalacao.get('orcamento_restante', 0) + preco_liberado
-    
-    # IDs já escalados (exceto o que será substituído)
-    ids_escalados = set(str(t['atleta_id']) for t in escalacao['titulares'] if str(t['atleta_id']) != jogador_id_str)
-    
-    # Adicionar IDs das reservas também
-    for pos, reserva in escalacao.get('reservas', {}).items():
-        if reserva:
-            ids_escalados.add(str(reserva.get('atleta_id', '')))
-    if escalacao.get('reserva_luxo'):
-        ids_escalados.add(str(escalacao['reserva_luxo'].get('atleta_id', '')))
-    
-    # Adicionar IDs de jogadores sendo substituídos em lote (para evitar reselecionar)
-    if ids_a_excluir:
-        ids_escalados.update(str(id) for id in ids_a_excluir)
-    
-    # NOVA LÓGICA: Usar o DataFrame já ranqueado da escalação original
-    df_ranqueado = escalacao.get('df_ranqueado')
-    
-    if df_ranqueado is not None and len(df_ranqueado) > 0:
-        # Usar o DataFrame já ranqueado (com scores calculados)
-        candidatos = df_ranqueado[
-            (df_ranqueado['posicao_id'] == pos_id) &
-            (~df_ranqueado['atleta_id'].astype(str).isin(ids_escalados)) &
-            (df_ranqueado['preco'] <= orcamento_disponivel)
-        ].copy()
-        
-        # Já está ordenado por score, então só precisamos pegar o primeiro
-        if not candidatos.empty:
-            # Ordenar por score (garantir ordem)
-            candidatos = candidatos.sort_values('score', ascending=False)
-    else:
-        # Fallback: usar df_mercado e calcular scores
-        if df_mercado is None or len(df_mercado) == 0:
-            return escalacao
-        
-        candidatos = df_mercado[
-            (df_mercado['posicao_id'] == pos_id) &
-            (~df_mercado['atleta_id'].astype(str).isin(ids_escalados)) &
-            (df_mercado['preco_num'] <= orcamento_disponivel)
-        ].copy()
-        
-        if candidatos.empty:
-            return escalacao
-        
-        # Usar estratégia para calcular scores se disponível
-        if estrategia is not None:
-            try:
-                candidatos = estrategia.preparar_features_v9(candidatos)
-                if 'score_geral_v9' in candidatos.columns:
-                    candidatos['score'] = candidatos['score_geral_v9']
-                    candidatos = candidatos.sort_values('score', ascending=False)
-                else:
-                    candidatos['score'] = candidatos.get('media_num', candidatos.get('media', 0))
-                    candidatos = candidatos.sort_values('score', ascending=False)
-            except:
-                candidatos['score'] = candidatos.get('media_num', candidatos.get('media', 0))
-                candidatos = candidatos.sort_values('score', ascending=False)
-        else:
-            candidatos['score'] = candidatos.get('media_num', candidatos.get('media', 0))
-            candidatos = candidatos.sort_values('score', ascending=False)
-    
-    # Pegar o melhor candidato
-    if candidatos.empty:
-        escalacao['erro_substituicao'] = {
-            'jogador_id': jogador_id_str,
-            'motivo': 'Nenhum candidato disponível para substituição nesta posição'
-        }
-        return escalacao
-    
-    substituto = candidatos.iloc[0]
-    
-    # Calcular score e dados para explicação
-    # Priorizar 'score' (do DataFrame ranqueado) sobre 'score_geral_v9'
-    score = float(substituto.get('score', substituto.get('score_geral_v9', substituto.get('media', 0))))
-    media = float(substituto.get('media', substituto.get('media_num', 0)))
-    preco = float(substituto.get('preco', substituto.get('preco_num', 0)))
-    jogos = int(substituto.get('jogos_num', substituto.get('jogos', 0)))
-    custo_beneficio = score / preco if preco > 0 else 0  # Usar score ao invés de média
-    
-    # Gerar explicação detalhada
-    fatores = []
-    fatores.append(f"📊 Score: {score:.2f}")
-    fatores.append(f"📈 Média: {media:.2f} pts")
-    fatores.append(f"💰 Preço: C$ {preco:.1f}")
-    if jogos > 0:
-        fatores.append(f"⚽ Jogos: {jogos}")
-    fatores.append(f"📊 Custo-benefício: {custo_beneficio:.2f}")
-    
-    # Determinar resumo e motivo baseado no score calculado
-    if score >= 5:
-        resumo = "⭐ Melhor substituto disponível - alto score preditivo"
-        significado = f"Este jogador tem o maior score preditivo ({score:.2f}) entre os disponíveis na posição."
-        motivo = "Próximo da lista de jogadores ranqueados pela IA. Mesmo critério usado na escalação original."
-    elif score >= 3:
-        resumo = "✅ Substituto recomendado - bom score preditivo"
-        significado = f"Entre os jogadores disponíveis no orçamento, este tem o melhor score ({score:.2f})."
-        motivo = "Próximo da lista de jogadores ranqueados pela IA. Considerando orçamento e jogadores já escalados."
-    elif score > 0:
-        resumo = "📊 Substituto válido - score positivo"
-        significado = f"Score de {score:.2f} pontos previstos."
-        motivo = "Melhor opção disponível na posição considerando o orçamento restante."
-    elif media >= 5:
-        resumo = "⭐ Substituto de qualidade - boa média histórica"
-        significado = f"Jogador com média de {media:.2f} pontos por rodada."
-        motivo = "Escolhido por ter a melhor média histórica entre os candidatos disponíveis no orçamento."
-    else:
-        resumo = "🔄 Substituto disponível - melhor opção no orçamento"
-        significado = f"Média de {media:.2f} pontos."
-        motivo = "Escolhido como a melhor opção disponível considerando o orçamento restante."
-    
-    # Adicionar informação sobre outros candidatos
-    n_candidatos = len(candidatos)
-    if n_candidatos > 1:
-        segundo_melhor = candidatos.iloc[1]
-        segundo_nome = segundo_melhor.get('apelido', 'N/A')
-        segundo_score = float(segundo_melhor.get('score', segundo_melhor.get('score_geral_v9', segundo_melhor.get('media', 0))))
-        fatores.append(f"📋 Analisados {n_candidatos} candidatos na posição")
-        fatores.append(f"🥈 2º melhor: {segundo_nome} (score: {segundo_score:.2f})")
-    
-    novo_jogador = {
-        'atleta_id': str(substituto['atleta_id']),
-        'apelido': substituto['apelido'],
-        'pos_id': int(substituto['posicao_id']),
-        'posicao': POSICAO_MAP.get(int(substituto['posicao_id']), ''),
-        'preco': preco,
-        'media': media,
-        'score': score,
-        'clube': substituto.get('clube_nome', ''),
-        'clube_id': int(substituto.get('clube_id', 0)),
-        'pontos_reais': 0,
-        'substituido': False,
-        'substituto': None,
-        'valorizacao_prevista': round((score - media * 0.3) / 8, 2) if score > 0 else 0,
-        'explicacao': {
-            'fatores': fatores,
-            'resumo': resumo,
-            'significado': significado,
-            'motivo': motivo
-        }
-    }
-    
-    escalacao['titulares'][idx_substituir] = novo_jogador
-    escalacao['custo_total'] = sum(t['preco'] for t in escalacao['titulares'])
-    escalacao['orcamento_restante'] = orcamento - escalacao['custo_total']
-    
-    return escalacao
+engine = init_app()
 
+# =============================================================================
+# GERENCIAMENTO DE SESSÃO
+# =============================================================================
+def init_session_state():
+    """Inicializa variáveis de sessão"""
+    if 'user' not in st.session_state:
+        st.session_state.user = None
+    if 'page' not in st.session_state:
+        st.session_state.page = 'home'
+    if 'show_register' not in st.session_state:
+        st.session_state.show_register = False
 
-def pagina_simulacao():
-    """Página de simulação histórica com opção de gerar todas as rodadas."""
-    st.markdown('<h1>🔬 Simulação Histórica</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #6C757D; font-size: 1.1rem;">Compare a escalação sugerida com os melhores pontuadores reais</p>', unsafe_allow_html=True)
+init_session_state()
+
+# =============================================================================
+# FUNÇÕES AUXILIARES
+# =============================================================================
+def get_brazil_time():
+    """Retorna a hora atual no fuso horário de Brasília"""
+    tz = pytz.timezone('America/Sao_Paulo')
+    return datetime.now(tz)
+
+def format_datetime(dt):
+    """Formata data/hora para exibição"""
+    if dt is None:
+        return "A definir"
+    return dt.strftime("%d/%m/%Y %H:%M")
+
+def format_date(dt):
+    """Formata apenas a data"""
+    if dt is None:
+        return "A definir"
+    return dt.strftime("%d/%m/%Y")
+
+def format_time(dt):
+    """Formata apenas a hora"""
+    if dt is None:
+        return "A definir"
+    return dt.strftime("%H:%M")
+
+def get_team_display(team, code=None):
+    """Retorna nome do time para exibição com bandeira"""
+    if team:
+        # Mostra código + bandeira + nome para garantir visualização em todos os dispositivos
+        return f"{team.code} {team.flag} {team.name}"
+    elif code:
+        # Verifica se é um código do mata-mata
+        if code in MATA_MATA_CODES:
+            return f"🏳️ {MATA_MATA_CODES[code]}"
+        return f"🏳️ {code}"
+    return "🏳️ A definir"
+
+def can_predict_match(match):
+    """Verifica se ainda é possível fazer palpite para um jogo"""
+    if match.status != 'scheduled':
+        return False
+    now = get_brazil_time().replace(tzinfo=None)
+    return now < match.datetime
+
+def can_predict_podium(session):
+    """Verifica se ainda é possível fazer palpite de pódio"""
+    data_inicio = get_config_value(session, 'data_inicio_copa')
+    if not data_inicio:
+        return True
+    try:
+        dt_inicio = datetime.strptime(data_inicio, "%Y-%m-%d %H:%M")
+        now = get_brazil_time().replace(tzinfo=None)
+        return now < dt_inicio
+    except:
+        return True
+
+def log_action(session, user_id, action, target_user_id=None, details=None):
+    """Registra uma ação no log de auditoria"""
+    log = AuditLog(
+        user_id=user_id,
+        action=action,
+        target_user_id=target_user_id,
+        details=details
+    )
+    session.add(log)
+    session.commit()
+
+# =============================================================================
+# PÁGINA DE LOGIN
+# =============================================================================
+def page_login():
+    """Página de login e cadastro"""
+    # Imagem dos mascotes embutida em base64
+    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
     
-    with st.sidebar:
-        st.markdown('<h3 style="color: #54b4f7;">⚙️ Configurações</h3>', unsafe_allow_html=True)
-        
-        ano = st.selectbox("📅 Ano", [2025, 2024, 2023, 2022], index=0)
-        
-        modo = st.radio("📊 Modo", ["Rodada Específica", "Todas as Rodadas"], index=0)
-        
-        if modo == "Rodada Específica":
-            rodada = st.number_input("🔢 Rodada", min_value=1, max_value=38, value=38)
-        else:
-            rodada = None
-        
-        orcamento = st.number_input("💰 Orçamento (C$)", min_value=50.0, max_value=300.0, value=150.0, step=5.0)
-        
-        formacao_opcoes = ['Automática (Melhor)'] + list(FORMACOES.keys())
-        formacao_selecionada = st.selectbox("📋 Formação", formacao_opcoes, index=0)
+    # Imagem dos mascotes
+    st.markdown(f'''
+    <div style="text-align: center; margin-bottom: 1rem;">
+        <img src="{MASCOTES_IMG}" alt="Mascotes Copa 2026" style="max-width: 350px; height: auto;">
+    </div>
+    ''', unsafe_allow_html=True)
     
-    # Modo: Todas as Rodadas
-    if modo == "Todas as Rodadas":
-        st.markdown('<h2>📊 Análise de Todas as Rodadas</h2>', unsafe_allow_html=True)
-        
-        # Inicializar session_state para persistir resultados
-        if 'simulacao_gerada' not in st.session_state:
-            st.session_state['simulacao_gerada'] = False
-        
-        if st.button("🚀 Gerar Análise Completa", type="primary", use_container_width=True):
-            formacao_usar = 'auto' if formacao_selecionada == 'Automática (Melhor)' else formacao_selecionada
-            
-            # Barra de progresso visual
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            status_text.text("⏳ Iniciando processamento...")
-            
-            # Gerar com detalhes para exibir layout completo
-            resultado = gerar_todas_rodadas(ano, orcamento, formacao_usar, progress_bar, status_text, retornar_detalhes=True)
-            
-            # Desempacotar resultado
-            if isinstance(resultado, tuple):
-                df_resultados, detalhes_rodadas = resultado
-            else:
-                df_resultados = resultado
-                detalhes_rodadas = {}
-            
-            # Limpar barra de progresso
-            progress_bar.empty()
-            status_text.text("✅ Processamento concluído!")
-            
-            if df_resultados.empty:
-                st.error("Não foi possível gerar os resultados. Verifique se os dados do ano estão disponíveis.")
-                return
-            
-            # Salvar detalhes no session_state para persistência
-            st.session_state['detalhes_rodadas'] = detalhes_rodadas
-            st.session_state['df_resultados_simulacao'] = df_resultados
-            st.session_state['simulacao_gerada'] = True
-            st.session_state['simulacao_ano'] = ano
-            st.session_state['simulacao_orcamento'] = orcamento
-            st.session_state['simulacao_formacao'] = formacao_selecionada
-            
-            # Métricas resumidas
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                total_pts = df_resultados['Pts Escalado'].sum()
-                st.metric("Total Pontos", f"{total_pts:.1f}")
-            with col2:
-                media_pts = df_resultados['Pts Escalado'].mean()
-                st.metric("Média/Rodada", f"{media_pts:.1f}")
-            with col3:
-                caps_ok = (df_resultados['Cap OK'] == '✓').sum()
-                st.metric("Capitães OK", f"{caps_ok}/{len(df_resultados)}")
-            with col4:
-                total_ideal = df_resultados['Pts Ideal'].sum()
-                aproveit = (total_pts / total_ideal * 100) if total_ideal > 0 else 0
-                st.metric("Aproveitamento", f"{aproveit:.1f}%")
-            
-            st.divider()
-            
-            # Gráfico de Linhas: Previsto vs Real vs Ideal
-            st.markdown('<h3>📈 Evolução por Rodada</h3>', unsafe_allow_html=True)
-            
-            fig = go.Figure()
-            
-            # Linha do Time Ideal (dourada)
-            fig.add_trace(go.Scatter(
-                x=df_resultados['Rodada'],
-                y=df_resultados['Pts Ideal'],
-                mode='lines+markers',
-                name='Time Ideal',
-                line=dict(color='#FFD700', width=2, dash='dot'),
-                marker=dict(size=6),
-                hovertemplate='Rodada %{x}<br>Ideal: %{y:.1f} pts<extra></extra>'
-            ))
-            
-            # Linha de Previsão (azul claro)
-            if 'Pts Previsto' in df_resultados.columns:
-                fig.add_trace(go.Scatter(
-                    x=df_resultados['Rodada'],
-                    y=df_resultados['Pts Previsto'],
-                    mode='lines+markers',
-                    name='Previsão',
-                    line=dict(color='#28A745', width=2, dash='dash'),
-                    marker=dict(size=6, symbol='diamond'),
-                    hovertemplate='Rodada %{x}<br>Previsão: %{y:.1f} pts<extra></extra>'
-                ))
-            
-            # Linha do Escalado (laranja - cor do Dervé FC)
-            fig.add_trace(go.Scatter(
-                x=df_resultados['Rodada'],
-                y=df_resultados['Pts Escalado'],
-                mode='lines+markers',
-                name='Escalado (Real)',
-                line=dict(color='#54b4f7', width=3),
-                marker=dict(size=8),
-                fill='tozeroy',
-                fillcolor='rgba(255, 107, 0, 0.1)',
-                hovertemplate='Rodada %{x}<br>Escalado: %{y:.1f} pts<extra></extra>'
-            ))
-            
-            # Linha de meta (90 pts)
-            fig.add_hline(y=90, line_dash="dash", line_color="#DC3545", 
-                         annotation_text="Meta: 90 pts", annotation_position="right")
-            
-            # Layout do gráfico
-            fig.update_layout(
-                title=dict(text='Pontuação por Rodada', font=dict(size=16, color='#FFFFFF')),
-                xaxis=dict(
-                    title='Rodada',
-                    tickmode='linear',
-                    dtick=5,
-                    gridcolor='rgba(255,255,255,0.1)',
-                    color='#FFFFFF'
-                ),
-                yaxis=dict(
-                    title='Pontos',
-                    gridcolor='rgba(255,255,255,0.1)',
-                    color='#FFFFFF'
-                ),
-                legend=dict(
-                    orientation='h',
-                    yanchor='bottom',
-                    y=1.02,
-                    xanchor='center',
-                    x=0.5,
-                    font=dict(color='#FFFFFF')
-                ),
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                hovermode='x unified',
-                margin=dict(l=40, r=40, t=60, b=40)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Análise por Posição e Justificativas
-            if detalhes_rodadas:
-                st.divider()
-                
-                col_pos, col_just = st.columns(2)
-                
-                with col_pos:
-                    # Calcular aproveitamento por posição
-                    st.markdown('<h3>🎯 Aproveitamento por Posição</h3>', unsafe_allow_html=True)
-                    
-                    pos_stats = {pos: {'escalado': 0, 'ideal': 0} for pos in ['GOL', 'ZAG', 'LAT', 'MEI', 'ATA', 'TEC']}
-                    pos_map_inv = {1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA', 6: 'TEC'}
-                    
-                    for rodada_num, detalhe in detalhes_rodadas.items():
-                        for t in detalhe['escalacao'].get('titulares', []):
-                            pos = pos_map_inv.get(t.get('pos_id'), 'N/A')
-                            if pos in pos_stats:
-                                pos_stats[pos]['escalado'] += t.get('pontos_reais', 0)
-                        for t in detalhe['melhores'].get('titulares', []):
-                            pos = pos_map_inv.get(t.get('pos_id'), 'N/A')
-                            if pos in pos_stats:
-                                pos_stats[pos]['ideal'] += t.get('pontos', 0)
-                    
-                    posicoes = list(pos_stats.keys())
-                    aproveitamentos = []
-                    for pos in posicoes:
-                        if pos_stats[pos]['ideal'] > 0:
-                            aproveitamentos.append((pos_stats[pos]['escalado'] / pos_stats[pos]['ideal']) * 100)
-                        else:
-                            aproveitamentos.append(0)
-                    
-                    cores = ['#54b4f7' if a >= 50 else '#DC3545' for a in aproveitamentos]
-                    
-                    fig_pos = go.Figure(data=[
-                        go.Bar(
-                            x=posicoes,
-                            y=aproveitamentos,
-                            marker_color=cores,
-                            text=[f'{a:.0f}%' for a in aproveitamentos],
-                            textposition='outside',
-                            hovertemplate='%{x}<br>Aproveitamento: %{y:.1f}%<extra></extra>'
-                        )
-                    ])
-                    
-                    fig_pos.add_hline(y=50, line_dash="dash", line_color="#FFD700", 
-                                     annotation_text="50%", annotation_position="right")
-                    
-                    fig_pos.update_layout(
-                        xaxis=dict(title='', color='#FFFFFF'),
-                        yaxis=dict(title='Aproveitamento (%)', range=[0, 100], color='#FFFFFF', gridcolor='rgba(255,255,255,0.1)'),
-                        plot_bgcolor='rgba(30, 40, 60, 0.3)',
-                        paper_bgcolor='rgba(30, 40, 60, 0.3)',
-                        margin=dict(l=40, r=40, t=20, b=40),
-                        showlegend=False
-                    )
-                    
-                    st.plotly_chart(fig_pos, use_container_width=True)
-                
-                with col_just:
-                    # Distribuição de Justificativas
-                    st.markdown('<h3>📊 Distribuição de Justificativas</h3>', unsafe_allow_html=True)
-                    
-                    justificativas_count = {
-                        'Recuperação': 0,
-                        'Boa Fase': 0,
-                        'Em Queda': 0,
-                        'Premium': 0,
-                        'Custo-Benefício': 0,
-                        'Aposta': 0,
-                        'Consistente': 0
-                    }
-                    
-                    for rodada_num, detalhe in detalhes_rodadas.items():
-                        for t in detalhe['escalacao'].get('titulares', []):
-                            explicacao = t.get('explicacao', {})
-                            resumo = explicacao.get('resumo', '') if explicacao else ''
-                            if 'recuperação' in resumo.lower():
-                                justificativas_count['Recuperação'] += 1
-                            elif 'boa fase' in resumo.lower():
-                                justificativas_count['Boa Fase'] += 1
-                            elif 'queda' in resumo.lower():
-                                justificativas_count['Em Queda'] += 1
-                            elif 'premium' in resumo.lower():
-                                justificativas_count['Premium'] += 1
-                            elif 'custo' in resumo.lower():
-                                justificativas_count['Custo-Benefício'] += 1
-                            elif 'aposta' in resumo.lower():
-                                justificativas_count['Aposta'] += 1
-                            else:
-                                justificativas_count['Consistente'] += 1
-                    
-                    # Filtrar apenas justificativas com contagem > 0
-                    labels = [k for k, v in justificativas_count.items() if v > 0]
-                    values = [v for v in justificativas_count.values() if v > 0]
-                    colors = ['#15367b', '#28A745', '#DC3545', '#FFD700', '#17A2B8', '#FFC107', '#6C757D']
-                    
-                    fig_just = go.Figure(data=[go.Pie(
-                        labels=labels,
-                        values=values,
-                        hole=0.4,
-                        marker_colors=colors[:len(labels)],
-                        textinfo='label+percent',
-                        textfont=dict(color='#FFFFFF'),
-                        hovertemplate='%{label}<br>Quantidade: %{value}<br>%{percent}<extra></extra>'
-                    )])
-                    
-                    fig_just.update_layout(
-                        plot_bgcolor='rgba(30, 40, 60, 0.3)',
-                        paper_bgcolor='rgba(30, 40, 60, 0.3)',
-                        margin=dict(l=20, r=20, t=20, b=20),
-                        showlegend=False
-                    )
-                    
-                    st.plotly_chart(fig_just, use_container_width=True)
-                
-                st.divider()
-                
-                # Gráficos de Formações e Top Jogadores
-                col_form, col_top = st.columns(2)
-                
-                with col_form:
-                    # Formações Mais Escaladas
-                    st.markdown('<h3>⚽ Formações Mais Escaladas</h3>', unsafe_allow_html=True)
-                    
-                    formacoes_count = {}
-                    for rodada_num, detalhe in detalhes_rodadas.items():
-                        formacao = detalhe.get('formacao', 'N/A')
-                        formacoes_count[formacao] = formacoes_count.get(formacao, 0) + 1
-                    
-                    # Ordenar por quantidade
-                    formacoes_sorted = sorted(formacoes_count.items(), key=lambda x: x[1], reverse=True)
-                    formacoes_labels = [f[0] for f in formacoes_sorted]
-                    formacoes_values = [f[1] for f in formacoes_sorted]
-                    
-                    fig_form = go.Figure(data=[
-                        go.Bar(
-                            x=formacoes_labels,
-                            y=formacoes_values,
-                            marker_color='#54b4f7',
-                            text=formacoes_values,
-                            textposition='outside',
-                            hovertemplate='%{x}<br>Escalada: %{y} vezes<extra></extra>'
-                        )
-                    ])
-                    
-                    fig_form.update_layout(
-                        xaxis=dict(title='', color='#FFFFFF'),
-                        yaxis=dict(title='Quantidade', color='#FFFFFF', gridcolor='rgba(255,255,255,0.1)'),
-                        plot_bgcolor='rgba(30, 40, 60, 0.3)',
-                        paper_bgcolor='rgba(30, 40, 60, 0.3)',
-                        margin=dict(l=40, r=40, t=20, b=40),
-                        showlegend=False
-                    )
-                    
-                    st.plotly_chart(fig_form, use_container_width=True)
-                
-                with col_top:
-                    # Top 5 Jogadores Mais Escalados
-                    st.markdown('<h3>🏆 Top 5 Jogadores Mais Escalados</h3>', unsafe_allow_html=True)
-                    
-                    jogadores_stats = {}  # {nome: {'pontos': total, 'escalacoes': count}}
-                    for rodada_num, detalhe in detalhes_rodadas.items():
-                        for t in detalhe['escalacao'].get('titulares', []):
-                            nome = t.get('apelido', 'Desconhecido')
-                            pontos = t.get('pontos_reais', 0)
-                            if nome not in jogadores_stats:
-                                jogadores_stats[nome] = {'pontos': 0, 'escalacoes': 0}
-                            jogadores_stats[nome]['pontos'] += pontos
-                            jogadores_stats[nome]['escalacoes'] += 1
-                    
-                    # Top 5 por pontos totais
-                    top5 = sorted(jogadores_stats.items(), key=lambda x: x[1]['pontos'], reverse=True)[:5]
-                    
-                    # Medalhas
-                    medalhas = ['🥇', '🥈', '🥉', '🏅', '🏅']
-                    
-                    # Exibir lista estilizada
-                    for i, (nome, stats) in enumerate(top5):
-                        cor_borda = '#FFD700' if i == 0 else '#C0C0C0' if i == 1 else '#CD7F32' if i == 2 else '#54b4f7'
-                        st.markdown(f'''
-                        <div style="
-                            background: linear-gradient(135deg, rgba(30, 40, 60, 0.5), rgba(30, 40, 60, 0.3));
-                            border-left: 4px solid {cor_borda};
-                            border-radius: 8px;
-                            padding: 12px 16px;
-                            margin-bottom: 10px;
-                            display: flex;
-                            align-items: center;
-                            justify-content: space-between;
-                        ">
-                            <div style="display: flex; align-items: center; gap: 12px;">
-                                <span style="font-size: 24px;">{medalhas[i]}</span>
-                                <div>
-                                    <div style="color: #FFFFFF; font-size: 16px; font-weight: 600;">{nome}</div>
-                                    <div style="color: #ADB5BD; font-size: 13px;">{stats['escalacoes']} escalações</div>
-                                </div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="color: {cor_borda}; font-size: 20px; font-weight: 700;">{stats['pontos']:.1f}</div>
-                                <div style="color: #ADB5BD; font-size: 12px;">pontos</div>
-                            </div>
-                        </div>
-                        ''', unsafe_allow_html=True)
-            
-            st.divider()
-            
-            # Tabela com resultados
-            st.markdown('<h3>📋 Resultados por Rodada</h3>', unsafe_allow_html=True)
-            st.dataframe(df_resultados, use_container_width=True, hide_index=True)
-            
-            # Exibir detalhes de cada rodada em expanders
-            if detalhes_rodadas:
-                st.divider()
-                st.markdown('<h3>🔍 Detalhes por Rodada</h3>', unsafe_allow_html=True)
-                st.markdown('<p style="color: #6C757D;">Clique em uma rodada para ver a escalação completa</p>', unsafe_allow_html=True)
-                
-                for rodada_num in sorted(detalhes_rodadas.keys()):
-                    detalhe = detalhes_rodadas[rodada_num]
-                    escalacao = detalhe['escalacao']
-                    melhores = detalhe['melhores']
-                    formacao_rod = detalhe['formacao']
-                    
-                    # Resumo para o título do expander
-                    pts_real = escalacao.get('pontuacao_real', 0)
-                    pts_ideal = melhores.get('pontuacao_total', 0)
-                    cap_nome = escalacao.get('capitao', {}).get('apelido', 'N/A')
-                    
-                    with st.expander(f"🏆 Rodada {rodada_num} | {pts_real:.1f} pts | Formação: {formacao_rod} | Cap: {cap_nome}"):
-                        col_esc, col_ideal = st.columns(2)
-                        
-                        with col_esc:
-                            st.markdown('<div class="comparison-card comparison-card-orange">', unsafe_allow_html=True)
-                            st.markdown('<h4>🎯 Escalação Sugerida</h4>', unsafe_allow_html=True)
-                            
-                            # Métricas
-                            c1, c2, c3 = st.columns(3)
-                            with c1:
-                                st.metric("Prevista", f"{escalacao.get('pontuacao_prevista', 0):.1f}")
-                            with c2:
-                                st.metric("Real", f"{pts_real:.1f}")
-                            with c3:
-                                st.metric("Custo", f"C$ {escalacao.get('custo_total', 0):.1f}")
-                            
-                            # Substituições
-                            if escalacao.get('substituicoes'):
-                                st.markdown('<p style="color: #54b4f7; font-size: 0.9rem;">🔄 Substituições:</p>', unsafe_allow_html=True)
-                                for sub in escalacao['substituicoes']:
-                                    tipo = '⭐ Luxo' if sub['tipo'] == 'reserva_luxo' else '🔄'
-                                    st.markdown(f'<p style="color: #6C757D; font-size: 0.85rem;">{tipo}: {sub["saiu"]["apelido"]} → {sub["entrou"]["apelido"]}</p>', unsafe_allow_html=True)
-                            
-                            # Jogadores por posição
-                            for pos_id in [1, 3, 2, 4, 5, 6]:
-                                pos_jogadores = [t for t in escalacao.get('titulares', []) if t.get('pos_id') == pos_id]
-                                if pos_jogadores:
-                                    st.markdown(f'<span class="posicao-badge">{POSICAO_MAP.get(pos_id, "N/A")}</span>', unsafe_allow_html=True)
-                                    for jogador in pos_jogadores:
-                                        is_cap = jogador.get('atleta_id') == escalacao.get('capitao', {}).get('atleta_id')
-                                        if jogador.get('substituido') and jogador.get('substituto'):
-                                            exibir_jogador_card(jogador['substituto'], is_capitao=is_cap, 
-                                                               mostrar_previsto_vs_real=True, substituido=True, mostrar_explicacao=True)
-                                        else:
-                                            exibir_jogador_card(jogador, is_capitao=is_cap, mostrar_previsto_vs_real=True, mostrar_explicacao=True)
-                            
-                            # Capitão
-                            cap = escalacao.get('capitao', {})
-                            if cap:
-                                st.markdown(f'<p style="color: #FFD700; margin-top: 10px;">👑 Capitão: <strong>{cap.get("apelido", "N/A")}</strong> ({cap.get("pontos_reais", 0):.1f} pts x1.5)</p>', unsafe_allow_html=True)
-                            
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        with col_ideal:
-                            st.markdown('<div class="comparison-card comparison-card-green">', unsafe_allow_html=True)
-                            st.markdown('<h4>🏆 Melhor Time Possível</h4>', unsafe_allow_html=True)
-                            
-                            # Métricas
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                st.metric("Pontuação", f"{pts_ideal:.1f}")
-                            with c2:
-                                st.metric("Custo", f"C$ {melhores.get('custo_total', 0):.1f}")
-                            
-                            # Jogadores por posição
-                            for pos_id in [1, 3, 2, 4, 5, 6]:
-                                pos_jogadores = [t for t in melhores.get('titulares', []) if t.get('pos_id') == pos_id]
-                                if pos_jogadores:
-                                    st.markdown(f'<span class="posicao-badge">{POSICAO_MAP.get(pos_id, "N/A")}</span>', unsafe_allow_html=True)
-                                    for jogador in pos_jogadores:
-                                        is_cap = melhores.get('capitao') and jogador.get('atleta_id') == melhores['capitao'].get('atleta_id')
-                                        # Gerar justificativa de por que não foi escalado
-                                        justificativa = gerar_justificativa_nao_escalado(jogador, escalacao)
-                                        foi_escalado = justificativa['resumo'] == '✅ Escalado'
-                                        cor_justificativa = justificativa['cor']
-                                        
-                                        st.markdown(f"""
-                                        <div class="jogador-card {'capitao-card' if is_cap else ''}" style="border-left: 3px solid {cor_justificativa};">
-                                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                                <div>
-                                                    <span style="font-size: 1rem; font-weight: 600; color: #FFFFFF;">{"👑 " if is_cap else ""}{jogador.get('apelido', 'N/A')}</span>
-                                                    <span style="margin-left: 8px;">{get_escudo_html(jogador.get('clube', ''), jogador.get('clube_id'), 18)}</span>
-                                                </div>
-                                                <div style="text-align: right;">
-                                                    <span style="color: #FFFFFF; font-weight: 600;">C$ {jogador.get('preco', 0):.1f}</span>
-                                                    <span style="color: #D4A84B; margin-left: 10px; font-weight: 700;">⚽ {jogador.get('pontos', 0):.1f}</span>
-                                                </div>
-                                            </div>
-                                            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #333;">
-                                                <span style="color: {cor_justificativa}; font-size: 0.85rem;">{justificativa['resumo']}</span>
-                                                <p style="color: #9CA3AF; font-size: 0.75rem; margin: 2px 0 0 0;">{justificativa['motivo']}</p>
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            
-                            # Capitão ideal
-                            cap_ideal = melhores.get('capitao', {})
-                            if cap_ideal:
-                                st.markdown(f'<p style="color: #FFD700; margin-top: 10px;">👑 Capitão ideal: <strong>{cap_ideal.get("apelido", "N/A")}</strong> ({cap_ideal.get("pontos", 0):.1f} pts x1.5)</p>', unsafe_allow_html=True)
-                            
-                            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Botão para exportar Excel
-            st.divider()
-            st.markdown('<h3>📥 Exportar Resultados</h3>', unsafe_allow_html=True)
-            
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_resultados.to_excel(writer, sheet_name='Resultados', index=False)
-                
-                # Adicionar aba de resumo
-                resumo = pd.DataFrame({
-                    'Métrica': ['Total Pontos', 'Média/Rodada', 'Capitães OK', 'Aproveitamento', 'Ano', 'Orçamento'],
-                    'Valor': [f"{total_pts:.1f}", f"{media_pts:.1f}", f"{caps_ok}/{len(df_resultados)}", f"{aproveit:.1f}%", ano, f"C$ {orcamento:.1f}"]
-                })
-                resumo.to_excel(writer, sheet_name='Resumo', index=False)
-            
-            output.seek(0)
-            st.download_button(
-                label="📥 Baixar Excel",
-                data=output,
-                file_name=f"cartola_simulacao_{ano}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="download_excel_simulacao"
-            )
-        
-        # Exibir resultados persistentes do session_state (após download ou rerun)
-        elif st.session_state.get('simulacao_gerada', False):
-            # Recuperar dados do session_state
-            df_resultados = st.session_state.get('df_resultados_simulacao', pd.DataFrame())
-            detalhes_rodadas = st.session_state.get('detalhes_rodadas', {})
-            ano_salvo = st.session_state.get('simulacao_ano', ano)
-            orcamento_salvo = st.session_state.get('simulacao_orcamento', orcamento)
-            
-            if not df_resultados.empty:
-                st.success("✅ Processamento concluído!")
-                
-                # Métricas resumidas
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    total_pts = df_resultados['Pts Escalado'].sum()
-                    st.metric("Total Pontos", f"{total_pts:.1f}")
-                with col2:
-                    media_pts = df_resultados['Pts Escalado'].mean()
-                    st.metric("Média/Rodada", f"{media_pts:.1f}")
-                with col3:
-                    caps_ok = (df_resultados['Cap OK'] == '✓').sum()
-                    st.metric("Capitães OK", f"{caps_ok}/{len(df_resultados)}")
-                with col4:
-                    total_ideal = df_resultados['Pts Ideal'].sum()
-                    aproveit = (total_pts / total_ideal * 100) if total_ideal > 0 else 0
-                    st.metric("Aproveitamento", f"{aproveit:.1f}%")
-                
-                st.divider()
-                
-                # Gráfico de Linhas
-                st.markdown('<h3>📈 Evolução por Rodada</h3>', unsafe_allow_html=True)
-                
-                fig = go.Figure()
-                
-                fig.add_trace(go.Scatter(
-                    x=df_resultados['Rodada'],
-                    y=df_resultados['Pts Ideal'],
-                    mode='lines+markers',
-                    name='Time Ideal',
-                    line=dict(color='#FFD700', width=2, dash='dot'),
-                    marker=dict(size=6)
-                ))
-                
-                if 'Pts Previsto' in df_resultados.columns:
-                    fig.add_trace(go.Scatter(
-                        x=df_resultados['Rodada'],
-                        y=df_resultados['Pts Previsto'],
-                        mode='lines+markers',
-                        name='Previsão',
-                        line=dict(color='#28A745', width=2, dash='dash'),
-                        marker=dict(size=6, symbol='diamond')
-                    ))
-                
-                fig.add_trace(go.Scatter(
-                    x=df_resultados['Rodada'],
-                    y=df_resultados['Pts Escalado'],
-                    mode='lines+markers',
-                    name='Escalado (Real)',
-                    line=dict(color='#54b4f7', width=3),
-                    marker=dict(size=8),
-                    fill='tozeroy',
-                    fillcolor='rgba(255, 107, 0, 0.1)'
-                ))
-                
-                fig.add_hline(y=90, line_dash="dash", line_color="#DC3545", annotation_text="Meta: 90")
-                
-                fig.update_layout(
-                    title="Pontuação por Rodada",
-                    xaxis_title="Rodada",
-                    yaxis_title="Pontos",
-                    template="plotly_dark",
-                    height=400,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Análise por Posição e Justificativas
-                if detalhes_rodadas:
-                    st.divider()
-                    
-                    col_pos, col_just = st.columns(2)
-                    
-                    with col_pos:
-                        # Calcular aproveitamento por posição
-                        st.markdown('<h3>🎯 Aproveitamento por Posição</h3>', unsafe_allow_html=True)
-                        
-                        pos_stats = {pos: {'escalado': 0, 'ideal': 0} for pos in ['GOL', 'ZAG', 'LAT', 'MEI', 'ATA', 'TEC']}
-                        pos_map_inv = {1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA', 6: 'TEC'}
-                        
-                        for rodada_num, detalhe in detalhes_rodadas.items():
-                            for t in detalhe['escalacao'].get('titulares', []):
-                                pos = pos_map_inv.get(t.get('pos_id'), 'N/A')
-                                if pos in pos_stats:
-                                    pos_stats[pos]['escalado'] += t.get('pontos_reais', 0)
-                            for t in detalhe['melhores'].get('titulares', []):
-                                pos = pos_map_inv.get(t.get('pos_id'), 'N/A')
-                                if pos in pos_stats:
-                                    pos_stats[pos]['ideal'] += t.get('pontos', 0)
-                        
-                        posicoes = list(pos_stats.keys())
-                        aproveitamentos = []
-                        for pos in posicoes:
-                            if pos_stats[pos]['ideal'] > 0:
-                                aproveitamentos.append((pos_stats[pos]['escalado'] / pos_stats[pos]['ideal']) * 100)
-                            else:
-                                aproveitamentos.append(0)
-                        
-                        cores = ['#54b4f7' if a >= 50 else '#DC3545' for a in aproveitamentos]
-                        
-                        fig_pos = go.Figure(data=[
-                            go.Bar(
-                                x=posicoes,
-                                y=aproveitamentos,
-                                marker_color=cores,
-                                text=[f'{a:.0f}%' for a in aproveitamentos],
-                                textposition='outside',
-                                hovertemplate='%{x}<br>Aproveitamento: %{y:.1f}%<extra></extra>'
-                            )
-                        ])
-                        
-                        fig_pos.add_hline(y=50, line_dash="dash", line_color="#FFD700", 
-                                         annotation_text="50%", annotation_position="right")
-                        
-                        fig_pos.update_layout(
-                            xaxis=dict(title='', color='#FFFFFF'),
-                            yaxis=dict(title='Aproveitamento (%)', range=[0, 100], color='#FFFFFF', gridcolor='rgba(255,255,255,0.1)'),
-                            plot_bgcolor='rgba(30, 40, 60, 0.3)',
-                            paper_bgcolor='rgba(30, 40, 60, 0.3)',
-                            margin=dict(l=40, r=40, t=20, b=40),
-                            showlegend=False
-                        )
-                        
-                        st.plotly_chart(fig_pos, use_container_width=True)
-                    
-                    with col_just:
-                        # Distribuição de Justificativas
-                        st.markdown('<h3>📊 Distribuição de Justificativas</h3>', unsafe_allow_html=True)
-                        
-                        justificativas_count = {
-                            'Recuperação': 0,
-                            'Boa Fase': 0,
-                            'Em Queda': 0,
-                            'Premium': 0,
-                            'Custo-Benefício': 0,
-                            'Aposta': 0,
-                            'Consistente': 0
-                        }
-                        
-                        for rodada_num, detalhe in detalhes_rodadas.items():
-                            for t in detalhe['escalacao'].get('titulares', []):
-                                explicacao = t.get('explicacao', {})
-                                resumo = explicacao.get('resumo', '') if explicacao else ''
-                                if 'recuperação' in resumo.lower():
-                                    justificativas_count['Recuperação'] += 1
-                                elif 'boa fase' in resumo.lower():
-                                    justificativas_count['Boa Fase'] += 1
-                                elif 'queda' in resumo.lower():
-                                    justificativas_count['Em Queda'] += 1
-                                elif 'premium' in resumo.lower():
-                                    justificativas_count['Premium'] += 1
-                                elif 'custo' in resumo.lower():
-                                    justificativas_count['Custo-Benefício'] += 1
-                                elif 'aposta' in resumo.lower():
-                                    justificativas_count['Aposta'] += 1
-                                else:
-                                    justificativas_count['Consistente'] += 1
-                        
-                        # Filtrar apenas justificativas com contagem > 0
-                        labels = [k for k, v in justificativas_count.items() if v > 0]
-                        values = [v for v in justificativas_count.values() if v > 0]
-                        colors = ['#15367b', '#28A745', '#DC3545', '#FFD700', '#17A2B8', '#FFC107', '#6C757D']
-                        
-                        fig_just = go.Figure(data=[go.Pie(
-                            labels=labels,
-                            values=values,
-                            hole=0.4,
-                            marker_colors=colors[:len(labels)],
-                            textinfo='label+percent',
-                            textfont=dict(color='#FFFFFF'),
-                            hovertemplate='%{label}<br>Quantidade: %{value}<br>%{percent}<extra></extra>'
-                        )])
-                        
-                        fig_just.update_layout(
-                            plot_bgcolor='rgba(30, 40, 60, 0.3)',
-                            paper_bgcolor='rgba(30, 40, 60, 0.3)',
-                            margin=dict(l=20, r=20, t=20, b=20),
-                            showlegend=False
-                        )
-                        
-                        st.plotly_chart(fig_just, use_container_width=True)
-                    
-                    st.divider()
-                    
-                    # Gráficos de Formações e Top Jogadores
-                    col_form, col_top = st.columns(2)
-                    
-                    with col_form:
-                        # Formações Mais Escaladas
-                        st.markdown('<h3>⚽ Formações Mais Escaladas</h3>', unsafe_allow_html=True)
-                        
-                        formacoes_count = {}
-                        for rodada_num, detalhe in detalhes_rodadas.items():
-                            formacao = detalhe.get('formacao', 'N/A')
-                            formacoes_count[formacao] = formacoes_count.get(formacao, 0) + 1
-                        
-                        # Ordenar por quantidade
-                        formacoes_sorted = sorted(formacoes_count.items(), key=lambda x: x[1], reverse=True)
-                        formacoes_labels = [f[0] for f in formacoes_sorted]
-                        formacoes_values = [f[1] for f in formacoes_sorted]
-                        
-                        fig_form = go.Figure(data=[
-                            go.Bar(
-                                x=formacoes_labels,
-                                y=formacoes_values,
-                                marker_color='#54b4f7',
-                                text=formacoes_values,
-                                textposition='outside',
-                                hovertemplate='%{x}<br>Escalada: %{y} vezes<extra></extra>'
-                            )
-                        ])
-                        
-                        fig_form.update_layout(
-                            xaxis=dict(title='', color='#FFFFFF'),
-                            yaxis=dict(title='Quantidade', color='#FFFFFF', gridcolor='rgba(255,255,255,0.1)'),
-                            plot_bgcolor='rgba(30, 40, 60, 0.3)',
-                            paper_bgcolor='rgba(30, 40, 60, 0.3)',
-                            margin=dict(l=40, r=40, t=20, b=40),
-                            showlegend=False
-                        )
-                        
-                        st.plotly_chart(fig_form, use_container_width=True)
-                    
-                    with col_top:
-                        # Top 5 Jogadores Mais Escalados
-                        st.markdown('<h3>🏆 Top 5 Jogadores Mais Escalados</h3>', unsafe_allow_html=True)
-                        
-                        jogadores_stats = {}  # {nome: {'pontos': total, 'escalacoes': count}}
-                        for rodada_num, detalhe in detalhes_rodadas.items():
-                            for t in detalhe['escalacao'].get('titulares', []):
-                                nome = t.get('apelido', 'Desconhecido')
-                                pontos = t.get('pontos_reais', 0)
-                                if nome not in jogadores_stats:
-                                    jogadores_stats[nome] = {'pontos': 0, 'escalacoes': 0}
-                                jogadores_stats[nome]['pontos'] += pontos
-                                jogadores_stats[nome]['escalacoes'] += 1
-                        
-                        # Top 5 por pontos totais
-                        top5 = sorted(jogadores_stats.items(), key=lambda x: x[1]['pontos'], reverse=True)[:5]
-                        
-                        # Medalhas
-                        medalhas = ['🥇', '🥈', '🥉', '🏅', '🏅']
-                        
-                        # Exibir lista estilizada
-                        for i, (nome, stats) in enumerate(top5):
-                            cor_borda = '#FFD700' if i == 0 else '#C0C0C0' if i == 1 else '#CD7F32' if i == 2 else '#54b4f7'
-                            st.markdown(f'''
-                            <div style="
-                                background: linear-gradient(135deg, rgba(30, 40, 60, 0.5), rgba(30, 40, 60, 0.3));
-                                border-left: 4px solid {cor_borda};
-                                border-radius: 8px;
-                                padding: 12px 16px;
-                                margin-bottom: 10px;
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                            ">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <span style="font-size: 24px;">{medalhas[i]}</span>
-                                    <div>
-                                        <div style="color: #FFFFFF; font-size: 16px; font-weight: 600;">{nome}</div>
-                                        <div style="color: #ADB5BD; font-size: 13px;">{stats['escalacoes']} escalações</div>
-                                    </div>
-                                </div>
-                                <div style="text-align: right;">
-                                    <div style="color: {cor_borda}; font-size: 20px; font-weight: 700;">{stats['pontos']:.1f}</div>
-                                    <div style="color: #ADB5BD; font-size: 12px;">pontos</div>
-                                </div>
-                            </div>
-                            ''', unsafe_allow_html=True)
-                
-                st.divider()
-                
-                # Tabela com resultados
-                st.markdown('<h3>📋 Resultados por Rodada</h3>', unsafe_allow_html=True)
-                st.dataframe(df_resultados, use_container_width=True, hide_index=True)
-                
-                # Botão para exportar Excel
-                st.divider()
-                st.markdown('<h3>📥 Exportar Resultados</h3>', unsafe_allow_html=True)
-                
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df_resultados.to_excel(writer, sheet_name='Resultados', index=False)
-                    resumo = pd.DataFrame({
-                        'Métrica': ['Total Pontos', 'Média/Rodada', 'Capitães OK', 'Aproveitamento', 'Ano', 'Orçamento'],
-                        'Valor': [f"{total_pts:.1f}", f"{media_pts:.1f}", f"{caps_ok}/{len(df_resultados)}", f"{aproveit:.1f}%", ano_salvo, f"C$ {orcamento_salvo:.1f}"]
-                    })
-                    resumo.to_excel(writer, sheet_name='Resumo', index=False)
-                
-                output.seek(0)
-                st.download_button(
-                    label="📥 Baixar Excel",
-                    data=output,
-                    file_name=f"cartola_simulacao_{ano_salvo}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="download_excel_persistente"
-                )
-        
-        return
+    st.markdown('<h1 class="main-header">Bolão Copa do Mundo 2026</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">🇺🇸 Estados Unidos • 🇨🇦 Canadá • 🇲🇽 México</p>', unsafe_allow_html=True)
     
-    # Modo: Rodada Específica (código original)
-    
-    # Carregar dados fora das colunas para usar em ambas as seções
-    df_anterior = carregar_dados_rodada_anterior(ano, rodada)
-    df_atual = carregar_dados_historicos(ano, rodada)
-    
-    # Calcular escalação uma única vez para usar em ambas as seções
-    escalacao_calculada = None
-    formacao_usada = '4-3-3'
-    
-    if df_anterior is not None and df_atual is not None:
-        if formacao_selecionada == 'Automática (Melhor)':
-            # Testar todas as formações e escolher a melhor
-            melhor_escalacao = None
-            melhor_pontuacao = -1
-            melhor_formacao = '4-3-3'
-            
-            for form in FORMACOES.keys():
-                try:
-                    esc = escalar_com_dados_anteriores(df_anterior, df_atual, form, orcamento, ano=ano, rodada=rodada)
-                    if esc and esc.get('pontuacao_real', 0) > melhor_pontuacao:
-                        melhor_pontuacao = esc.get('pontuacao_real', 0)
-                        melhor_escalacao = esc
-                        melhor_formacao = form
-                except:
-                    continue
-            
-            escalacao_calculada = melhor_escalacao
-            formacao_usada = melhor_formacao
-        else:
-            formacao_usada = formacao_selecionada
-            escalacao_calculada = escalar_com_dados_anteriores(df_anterior, df_atual, formacao_usada, orcamento, ano=ano, rodada=rodada)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown('<div class="comparison-card">', unsafe_allow_html=True)
-        st.markdown('<h3>🎯 Escalação Sugerida</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #6C757D;">Baseada nos dados da rodada anterior</p>', unsafe_allow_html=True)
-        
-        if df_anterior is None:
-            st.warning(f"Dados da rodada {rodada-1} não disponíveis")
-        elif df_atual is None:
-            st.warning(f"Dados da rodada {rodada} não disponíveis")
-        else:
-            # Usar a escalação já calculada
-            escalacao = escalacao_calculada
-            formacao = formacao_usada
-            
-            if formacao_selecionada == 'Automática (Melhor)' and escalacao:
-                st.info(f"🏆 Melhor formação encontrada: **{formacao}**")
-            
-            if escalacao:
-                col_m1, col_m2, col_m3 = st.columns([1.2, 1.2, 1])
-                with col_m1:
-                    st.metric("Prevista", f"{escalacao['pontuacao_prevista']:.1f} pts")
-                with col_m2:
-                    st.metric("Real", f"{escalacao['pontuacao_real']:.1f} pts")
-                with col_m3:
-                    st.metric("Custo", f"C$ {escalacao['custo_total']:.1f}")
-                
-                st.divider()
-                
-                # Mostrar substituições se houver
-                if escalacao.get('substituicoes'):
-                    st.markdown('<p style="color: #54b4f7; font-size: 0.9rem;">🔄 Substituições aplicadas:</p>', unsafe_allow_html=True)
-                    for sub in escalacao['substituicoes']:
-                        tipo = '⭐ Luxo' if sub['tipo'] == 'reserva_luxo' else '🔄'
-                        st.markdown(f'<p style="color: #6C757D; font-size: 0.85rem;">{tipo}: {sub["saiu"]["apelido"]} → {sub["entrou"]["apelido"]}</p>', unsafe_allow_html=True)
-                    st.divider()
-                
-                for pos_id in [1, 3, 2, 4, 5, 6]:
-                    pos_jogadores = [t for t in escalacao['titulares'] if t['pos_id'] == pos_id]
-                    if pos_jogadores:
-                        st.markdown(f'<span class="posicao-badge">{POSICAO_MAP[pos_id]}</span>', unsafe_allow_html=True)
-                        for jogador in pos_jogadores:
-                            is_cap = jogador['atleta_id'] == escalacao['capitao']['atleta_id']
-                            # Se foi substituído, mostrar o substituto
-                            if jogador.get('substituido') and jogador.get('substituto'):
-                                exibir_jogador_card(jogador['substituto'], is_capitao=is_cap, 
-                                                   mostrar_previsto_vs_real=True, substituido=True)
-                            else:
-                                exibir_jogador_card(jogador, is_capitao=is_cap, mostrar_previsto_vs_real=True)
-                
-                st.markdown(f'<p style="color: #FFD700; margin-top: 15px;">👑 Capitão: <strong>{escalacao["capitao"]["apelido"]}</strong> ({escalacao["capitao"]["pontos_reais"]:.1f} pts x1.5)</p>', unsafe_allow_html=True)
-                
-                # Mostrar reservas
-                if escalacao.get('reservas'):
-                    with st.expander("💺 Reservas"):
-                        for pos_id, reserva in escalacao['reservas'].items():
-                            if reserva:
-                                st.markdown(f"**{POSICAO_MAP.get(pos_id, 'N/A')}**: {reserva['apelido']} (C$ {reserva['preco']:.1f}) - {reserva['pontos_reais']:.1f} pts")
-                
-                # Mostrar reserva de luxo
-                if escalacao.get('reserva_luxo'):
-                    rl = escalacao['reserva_luxo']
-                    st.markdown(f'<p style="color: #FFD700; margin-top: 10px;">⭐ Reserva de Luxo: <strong>{rl["apelido"]}</strong> ({rl["pontos_reais"]:.1f} pts)</p>', unsafe_allow_html=True)
-            else:
-                st.error("Não foi possível escalar o time com o orçamento disponível")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown('<div class="comparison-card comparison-card-green">', unsafe_allow_html=True)
-        st.markdown('<h3>🏆 Melhor Time Possível</h3>', unsafe_allow_html=True)
-        st.markdown(f'<p style="color: #6C757D;">Melhor escalação possível dentro do orçamento (C$ {orcamento:.0f})</p>', unsafe_allow_html=True)
-        
-        if df_atual is not None:
-            # Melhor time possível DENTRO do orçamento
-            melhores = obter_melhores_reais(df_atual, formacao, orcamento, respeitar_orcamento=True)
-            
-            if melhores:
-                col_m1, col_m2 = st.columns(2)
-                with col_m1:
-                    st.metric("Pontuação Máxima", f"{melhores['pontuacao_total']:.1f} pts")
-                with col_m2:
-                    st.metric("Custo Total", f"C$ {melhores['custo_total']:.1f}")
+        if not st.session_state.show_register:
+            with st.form("login_form"):
+                username = st.text_input("Usuário", placeholder="Digite seu usuário")
+                password = st.text_input("Senha", type="password", placeholder="Digite sua senha")
+                submit = st.form_submit_button("Entrar", use_container_width=True)
                 
-                st.divider()
-                
-                for pos_id in [1, 3, 2, 4, 5, 6]:
-                    pos_jogadores = [t for t in melhores['titulares'] if t['pos_id'] == pos_id]
-                    if pos_jogadores:
-                        st.markdown(f'<span class="posicao-badge">{POSICAO_MAP[pos_id]}</span>', unsafe_allow_html=True)
-                        for jogador in pos_jogadores:
-                            is_cap = melhores['capitao'] and jogador['atleta_id'] == melhores['capitao']['atleta_id']
-                            # Gerar justificativa de por que não foi escalado
-                            justificativa = gerar_justificativa_nao_escalado(jogador, escalacao_calculada, df_anterior)
-                            cor_justificativa = justificativa['cor']
-                            
-                            st.markdown(f"""
-                            <div class="jogador-card {'capitao-card' if is_cap else ''}" style="border-left: 3px solid {cor_justificativa};">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <span style="font-size: 1.1rem; font-weight: 600; color: #FFFFFF;">{'👑 ' if is_cap else ''}{jogador['apelido']}</span>
-                                        <span style="margin-left: 10px;">{get_escudo_html(jogador.get('clube', ''), jogador.get('clube_id'))}</span>
-                                    </div>
-                                    <div style="text-align: right;">
-                                        <span style="color: #FFFFFF; font-weight: 600;">C$ {jogador['preco']:.1f}</span>
-                                        <span style="color: #D4A84B; margin-left: 15px; font-weight: 700; font-size: 1.2rem;">⚽ {jogador['pontos']:.1f}</span>
-                                    </div>
-                                </div>
-                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #333;">
-                                    <span style="color: {cor_justificativa}; font-size: 0.85rem;">{justificativa['resumo']}</span>
-                                    <p style="color: #9CA3AF; font-size: 0.75rem; margin: 2px 0 0 0;">{justificativa['motivo']}</p>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
-                if melhores['capitao']:
-                    st.markdown(f'<p style="color: #FFD700; margin-top: 15px;">👑 Capitão ideal: <strong>{melhores["capitao"]["apelido"]}</strong> ({melhores["capitao"]["pontos"]:.1f} pts x1.5)</p>', unsafe_allow_html=True)
-        else:
-            st.warning("Dados não disponíveis")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.divider()
-    st.markdown('<h3>📊 Comparação</h3>', unsafe_allow_html=True)
-    
-    if df_anterior is not None and df_atual is not None and escalacao_calculada is not None:
-        # Usar a mesma escalação já calculada para consistência
-        escalacao = escalacao_calculada
-        melhores = obter_melhores_reais(df_atual, formacao_usada, orcamento, respeitar_orcamento=True)
-        
-        if escalacao and melhores:
-            col1, col2, col3, col4, col5 = st.columns(5)
-            
-            with col1:
-                st.metric("Pontuação Prevista", f"{escalacao['pontuacao_prevista']:.1f} pts")
-            
-            with col2:
-                st.metric("Pontuação Real", f"{escalacao['pontuacao_real']:.1f} pts")
-            
-            with col3:
-                st.metric("Pontuação Máxima", f"{melhores['pontuacao_total']:.1f} pts")
-            
-            with col4:
-                aproveitamento = (escalacao['pontuacao_real'] / melhores['pontuacao_total'] * 100) if melhores['pontuacao_total'] > 0 else 0
-                st.metric("Aproveitamento", f"{aproveitamento:.1f}%")
-            
-            with col5:
-                ids_escalados = set(t['atleta_id'] for t in escalacao['titulares'])
-                ids_melhores = set(t['atleta_id'] for t in melhores['titulares'])
-                acertos = ids_escalados.intersection(ids_melhores)
-                st.metric("Acertos", f"{len(acertos)}/12")
-            
-            if acertos:
-                nomes_acertos = [t['apelido'] for t in escalacao['titulares'] if t['atleta_id'] in acertos]
-                st.success(f"🎯 Jogadores acertados: {', '.join(nomes_acertos)}")
-
-
-def pagina_escalacao():
-    """Página principal de escalação."""
-    st.markdown('<h1>🎩 Escalação Automática</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #6C757D; font-size: 1.1rem;">Estratégia v7 - Validada com <span style="color: #54b4f7; font-weight: 600;">94.1 pts/rodada</span> (+24.4% vs v6)</p>', unsafe_allow_html=True)
-    
-    with st.sidebar:
-        st.markdown('<h3 style="color: #54b4f7;">⚙️ Configurações</h3>', unsafe_allow_html=True)
-        
-        config = carregar_config()
-        
-        st.markdown('<p style="color: #FFFFFF; font-weight: 500;">💰 Orçamento</p>', unsafe_allow_html=True)
-        orcamento = st.number_input(
-            "Cartoletas disponíveis (C$)",
-            min_value=0.0,
-            max_value=500.0,
-            value=float(config.get('orcamento', 100.0)),
-            step=0.5,
-            help="Informe o valor de cartoletas que você tem disponível",
-            label_visibility="collapsed"
-        )
-        
-        st.markdown('<p style="color: #FFFFFF; font-weight: 500; margin-top: 15px;">📋 Formação</p>', unsafe_allow_html=True)
-        opcoes_formacao = ["Automático (Recomendada)"] + list(FORMACOES.keys())
-        formacao_selecionada = st.selectbox(
-            "Escolha a formação",
-            opcoes_formacao,
-            index=0,
-            help="Deixe em 'Automático' para o sistema recomendar a melhor formação",
-            label_visibility="collapsed"
-        )
-        
-        formacao_preferida = None if formacao_selecionada == "Automático (Recomendada)" else formacao_selecionada
-        
-        if st.button("💾 Salvar Configurações", use_container_width=True):
-            config['orcamento'] = orcamento
-            config['formacao_preferida'] = formacao_preferida
-            salvar_config(config)
-            st.success("✅ Configurações salvas!")
-        
-        st.divider()
-        
-        rodada = buscar_rodada_atual()
-        st.metric("📅 Rodada Atual", rodada)
-    
-    with st.spinner("🔄 Buscando dados do mercado..."):
-        mercado = buscar_mercado()
-    
-    if mercado is None or len(mercado) == 0:
-        st.markdown("""
-        <div class="warning-box">
-            <h4>⚠️ Mercado Fechado</h4>
-            <p>Não foi possível carregar os dados do mercado. O mercado pode estar fechado.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("""
-        <div class="info-box">
-            <h4>💡 Dica</h4>
-            <p>Use a página <strong>Simulação Histórica</strong> para testar a estratégia com dados de 2025!</p>
-        </div>
-        """, unsafe_allow_html=True)
-        return
-    
-    st.success(f"✅ {len(mercado)} jogadores disponíveis no mercado")
-    
-    estrategia = EstrategiaV7()
-    estrategia.orcamento = orcamento
-    
-    # Determinar ano atual baseado na data
-    from datetime import datetime
-    ano_atual = datetime.now().year
-    ano_anterior = ano_atual - 1
-    
-    # Carregar histórico usando MESMA LÓGICA da simulação histórica
-    # 1. Primeiro carregar TODO o histórico do ANO ANTERIOR como base
-    for r in range(1, 39):
-        df_hist = carregar_dados_historicos(ano_anterior, r)
-        if df_hist is not None:
-            estrategia.atualizar_historico(df_hist)
-    
-    # 2. Carregar rodadas anteriores do ANO ATUAL (se houver)
-    if rodada > 1:
-        for r in range(1, rodada):
-            df_hist = carregar_dados_historicos(ano_atual, r)
-            if df_hist is not None:
-                estrategia.atualizar_historico(df_hist)
-    
-    estrategia.rodada_atual = rodada
-    
-    # Botão para gerar nova escalação
-    col_escalar, col_limpar = st.columns([3, 1])
-    with col_escalar:
-        if st.button("🎯 Escalar Time", type="primary", use_container_width=True):
-            with st.spinner("🔄 Analisando formações e escalando time..."):
-                resultados = estrategia.analisar_todas_formacoes(mercado, orcamento)
-            
-            if not resultados:
-                st.error("❌ Não foi possível escalar o time. Verifique o orçamento.")
-            else:
-                if formacao_preferida:
-                    escalacao = next(
-                        (r for r in resultados if r['formacao'] == formacao_preferida),
-                        resultados[0]
-                    )
-                else:
-                    escalacao = resultados[0]
-                
-                # Armazenar escalação atual no session_state
-                st.session_state.escalacao_para_confirmar = escalacao
-                st.session_state.escalacao_ano = ano_atual
-                st.session_state.escalacao_rodada = rodada
-                st.session_state.escalacao_orcamento = orcamento
-                st.session_state.mercado_atual = mercado
-                st.session_state.estrategia_atual = estrategia  # Salvar estratégia com histórico
-                # Limpar escalação atualizada anterior
-                if 'escalacao_atualizada' in st.session_state:
-                    del st.session_state.escalacao_atualizada
-                st.rerun()
-    
-    with col_limpar:
-        if st.session_state.get('escalacao_para_confirmar'):
-            if st.button("🗑️ Limpar", use_container_width=True):
-                if 'escalacao_para_confirmar' in st.session_state:
-                    del st.session_state.escalacao_para_confirmar
-                if 'escalacao_atualizada' in st.session_state:
-                    del st.session_state.escalacao_atualizada
-                if 'escalacao_confirmada' in st.session_state:
-                    del st.session_state.escalacao_confirmada
-                st.rerun()
-    
-    # Exibir escalação se existir no session_state
-    if st.session_state.get('escalacao_para_confirmar'):
-        escalacao = st.session_state.escalacao_para_confirmar
-        mercado = st.session_state.get('mercado_atual', mercado)
-        
-        st.markdown(f'<h2>🏆 Escalação Recomendada: {escalacao["formacao"]}</h2>', unsafe_allow_html=True)
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("Pontuação Esperada", f"{escalacao['pontuacao_esperada']:.1f} pts")
-        with col2:
-            st.metric("Custo Total", f"C$ {escalacao['custo_total']:.2f}")
-        with col3:
-            st.metric("Orçamento Restante", f"C$ {escalacao['orcamento_restante']:.2f}")
-        with col4:
-            valorizacao_total = escalacao.get('valorizacao_total', 0)
-            delta_color = "normal" if valorizacao_total >= 0 else "inverse"
-            st.metric("Valorização Total", f"{valorizacao_total:+.1f}", delta_color=delta_color)
-        with col5:
-            st.metric("Jogadores", len(escalacao['titulares']))
-        
-        st.divider()
-        
-        st.markdown('<h3>📋 Titulares</h3>', unsafe_allow_html=True)
-        
-        for pos_id in [1, 3, 2, 4, 5, 6]:
-            pos_jogadores = [t for t in escalacao['titulares'] if t['pos_id'] == pos_id]
-            if pos_jogadores:
-                st.markdown(f'<span class="posicao-badge">{POSICAO_MAP[pos_id]}</span>', unsafe_allow_html=True)
-                for jogador in pos_jogadores:
-                    is_cap = escalacao['capitao'] and jogador['atleta_id'] == escalacao['capitao']['atleta_id']
-                    exibir_jogador_card(jogador, is_capitao=is_cap)
-        
-        # Seção de Reservas
-        st.divider()
-        st.markdown('<h3>💺 Reservas</h3>', unsafe_allow_html=True)
-        
-        # Exibir reservas por posição (apenas posições que existem na formação)
-        if escalacao.get('reservas'):
-            reservas = escalacao['reservas']
-            # Filtrar apenas posições que têm reserva (baseado na formação)
-            pos_map_reservas = {1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA'}
-            posicoes_com_reserva = [pos_id for pos_id in [1, 2, 3, 4, 5] 
-                                    if reservas.get(pos_id) or reservas.get(str(pos_id))]
-            
-            if posicoes_com_reserva:
-                cols_reservas = st.columns(len(posicoes_com_reserva))
-                for idx, pos_id in enumerate(posicoes_com_reserva):
-                    with cols_reservas[idx]:
-                        reserva = reservas.get(pos_id) or reservas.get(str(pos_id))
-                        pos_nome = pos_map_reservas.get(pos_id, 'N/A')
+                if submit:
+                    if username and password:
+                        session = get_session(engine)
+                        user = authenticate_user(session, username, password)
+                        session.close()
                         
-                        # Verificar se é reserva de luxo
-                        is_luxo = reserva.get('is_reserva_luxo', False)
-                        
-                        # Obter nome do clube
-                        clube_nome = reserva.get('clube', '')
-                        
-                        if is_luxo:
-                            # Card especial para reserva de luxo
-                            st.markdown(f'''
-                            <div style="background: linear-gradient(135deg, #744210 0%, #5C3D0E 100%); 
-                                        border: 2px solid #D69E2E; border-radius: 10px; padding: 10px; text-align: center; margin: 5px 0;">
-                                <span style="color: #F6E05E; font-size: 0.8em;">⭐ {pos_nome}</span><br>
-                                <span style="color: #FEFCBF; font-weight: bold;">{reserva['apelido']}</span><br>
-                                <span style="font-size: 0.75em;">{get_escudo_html(clube_nome, reserva.get('clube_id'), 16)}</span><br>
-                                <span style="color: #68D391;">C$ {reserva['preco']:.1f}</span>
-                            </div>
-                            ''', unsafe_allow_html=True)
-                        else:
-                            # Card normal para reserva
-                            st.markdown(f'''
-                            <div style="background: linear-gradient(135deg, #2D3748 0%, #1A202C 100%); 
-                                        border-radius: 10px; padding: 10px; text-align: center; margin: 5px 0;">
-                                <span style="color: #A0AEC0; font-size: 0.8em;">{pos_nome}</span><br>
-                                <span style="color: #E2E8F0; font-weight: bold;">{reserva['apelido']}</span><br>
-                                <span style="font-size: 0.75em;">{get_escudo_html(clube_nome, reserva.get('clube_id'), 16)}</span><br>
-                                <span style="color: #68D391;">C$ {reserva['preco']:.1f}</span>
-                            </div>
-                            ''', unsafe_allow_html=True)
-            else:
-                st.info("Nenhum reserva disponível")
-        else:
-            st.info("Nenhum reserva disponível")
-        
-        # Seção de Substituição Manual
-        st.divider()
-        st.markdown('<h3>🔄 Substituição Manual</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #6C757D;">Se algum jogador não vai jogar, selecione-o para substituir:</p>', unsafe_allow_html=True)
-        
-        # Criar lista de jogadores para seleção
-        jogadores_escalados = [(t['atleta_id'], f"{t['apelido']} ({POSICAO_MAP.get(t['pos_id'], '')})") for t in escalacao['titulares']]
-        
-        # Inicializar session_state para substituições se não existir
-        if 'substituicoes_manuais' not in st.session_state:
-            st.session_state.substituicoes_manuais = {}
-        
-        # Multiselect para escolher jogadores a substituir
-        jogadores_para_substituir = st.multiselect(
-            "Selecione os jogadores que NÃO vão jogar:",
-            options=[j[0] for j in jogadores_escalados],
-            format_func=lambda x: next((j[1] for j in jogadores_escalados if j[0] == x), x),
-            key="jogadores_substituir"
-        )
-        
-        if jogadores_para_substituir:
-            col_aplicar, col_cancelar = st.columns(2)
-            with col_aplicar:
-                if st.button("🔄 Aplicar Substituições", type="secondary", use_container_width=True):
-                    import copy
-                    escalacao_atualizada = copy.deepcopy(escalacao)
-                    
-                    # Usar orçamento salvo no session_state
-                    orcamento_salvo = st.session_state.get('escalacao_orcamento', orcamento)
-                    
-                    # Usar estratégia salva (com histórico carregado) ou criar nova
-                    estrategia_subst = st.session_state.get('estrategia_atual')
-                    if estrategia_subst is None:
-                        # Fallback: criar nova estratégia e carregar histórico
-                        estrategia_subst = EstrategiaV7()
-                        ano_atual = st.session_state.get('escalacao_ano', datetime.now().year)
-                        ano_anterior = ano_atual - 1
-                        # Carregar histórico do ano anterior
-                        for r in range(1, 39):
-                            df_hist = carregar_dados_historicos(ano_anterior, r)
-                            if df_hist is not None:
-                                estrategia_subst.atualizar_historico(df_hist)
-                    
-                    erros_substituicao = []
-                    
-                    # Criar set com todos os IDs sendo substituídos (para evitar reselecionar)
-                    ids_sendo_substituidos = set(str(jid) for jid in jogadores_para_substituir)
-                    
-                    for jogador_id in jogadores_para_substituir:
-                        # Aplicar substituição com estratégia para justificativa
-                        # Passa todos os IDs sendo substituídos para evitar reselecionar
-                        escalacao_atualizada = substituir_jogador_manual(
-                            escalacao_atualizada, 
-                            jogador_id, 
-                            mercado, 
-                            orcamento_salvo,
-                            estrategia=estrategia_subst,
-                            ids_a_excluir=ids_sendo_substituidos
-                        )
-                        
-                        # Verificar se houve erro na substituição
-                        if 'erro_substituicao' in escalacao_atualizada:
-                            erro = escalacao_atualizada.pop('erro_substituicao')
-                            # Encontrar nome do jogador
-                            nome_jogador = next(
-                                (t['apelido'] for t in escalacao['titulares'] if str(t['atleta_id']) == str(erro['jogador_id'])),
-                                'Jogador'
-                            )
-                            erros_substituicao.append(f"{nome_jogador}: {erro['motivo']}")
-                    
-                    # REOTIMIZAÇÃO: Se sobrou orçamento, verificar se há upgrades possíveis
-                    df_ranqueado = escalacao_atualizada.get('df_ranqueado')
-                    
-                    # Fallback: se df_ranqueado não existe, usar mercado
-                    if df_ranqueado is None and mercado is not None:
-                        df_ranqueado = mercado.copy()
-                        # Adicionar coluna score se não existir
-                        if 'score' not in df_ranqueado.columns:
-                            df_ranqueado['score'] = df_ranqueado.get('media_num', df_ranqueado.get('media', 0))
-                    
-                    if df_ranqueado is not None and escalacao_atualizada.get('orcamento_restante', 0) > 0:
-                        escalacao_atualizada = reotimizar_orcamento(
-                            escalacao_atualizada,
-                            df_ranqueado,
-                            orcamento_salvo
-                        )
-                    
-                    # RECALCULAR RESERVAS: Após substituições, recalcular reservas e reserva de luxo
-                    if df_ranqueado is not None:
-                        try:
-                            escalacao_atualizada = recalcular_reservas(
-                                escalacao_atualizada,
-                                df_ranqueado,
-                                estrategia=st.session_state.get('estrategia_atual')
-                            )
-                        except Exception as e:
-                            print(f"Erro ao recalcular reservas: {e}")
-                    else:
-                        print("AVISO: df_ranqueado não disponível para recalcular reservas")
-                    
-                    # VERIFICAR MELHOR FORMAÇÃO: Após substituições, outra formação pode ser melhor
-                    formacao_atual = escalacao_atualizada.get('formacao', '4-3-3')
-                    estrategia_salva = st.session_state.get('estrategia_atual')
-                    ids_removidos = [str(jid) for jid in jogadores_para_substituir]
-                    
-                    if estrategia_salva and df_ranqueado is not None:
-                        try:
-                            resultado_formacao = verificar_melhor_formacao(
-                                df_mercado=df_ranqueado,
-                                orcamento=orcamento_salvo,
-                                formacao_atual=formacao_atual,
-                                estrategia=estrategia_salva,
-                                jogadores_excluidos=ids_removidos
-                            )
-                            
-                            if resultado_formacao.get('mudou_formacao') and resultado_formacao.get('melhor_escalacao'):
-                                # Guardar sugestão de nova formação para exibir
-                                st.session_state.sugestao_formacao = resultado_formacao
-                        except Exception as e:
-                            # Se falhar, continuar sem sugestão de formação
-                            pass
-                    
-                    # Salvar escalação atualizada
-                    st.session_state.escalacao_atualizada = escalacao_atualizada
-                    
-                    # Mostrar resultado
-                    melhorias = escalacao_atualizada.get('melhorias_orcamento', [])
-                    sugestao_formacao = st.session_state.get('sugestao_formacao')
-                    
-                    if erros_substituicao:
-                        st.warning(f"⚠️ Não foi possível substituir alguns jogadores:\n" + "\n".join(erros_substituicao))
-                        st.info("💡 Dica: Na primeira rodada, não há dados históricos para previsão. Aguarde as próximas rodadas para substituições mais precisas.")
-                    elif melhorias:
-                        msg_melhorias = "\n".join([f"⬆️ {m['de']} → {m['para']} (+{m['ganho_score']:.2f} score)" for m in melhorias])
-                        st.success(f"✅ Substituições aplicadas!\n\n💰 Orçamento liberado permitiu upgrades:\n{msg_melhorias}")
-                    else:
-                        st.success("✅ Substituições aplicadas!")
-                    
-                    # Mostrar sugestão de formação se houver
-                    if sugestao_formacao and sugestao_formacao.get('mudou_formacao'):
-                        st.info(sugestao_formacao.get('mensagem', ''))
-                    
-                    st.rerun()
-            with col_cancelar:
-                if st.button("❌ Cancelar Seleção", type="primary", use_container_width=True):
-                    # Limpar a seleção do multiselect
-                    st.session_state.jogadores_substituir = []
-                    st.rerun()
-        
-        # Mostrar sugestão de nova formação se houver
-        if 'sugestao_formacao' in st.session_state and st.session_state.sugestao_formacao.get('mudou_formacao'):
-            sugestao = st.session_state.sugestao_formacao
-            st.divider()
-            st.markdown('<h3>💡 Sugestão de Formação</h3>', unsafe_allow_html=True)
-            
-            # Mensagem principal
-            st.info(sugestao.get('mensagem', ''))
-            
-            # Comparativo de formações
-            comparativo = sugestao.get('comparativo', [])
-            if comparativo:
-                st.markdown('**Comparativo de Formações:**')
-                for item in comparativo[:5]:  # Top 5 formações
-                    icone = '🏆' if item.get('melhor') else ('👉' if item.get('atual') else '')
-                    st.markdown(f"{icone} **{item['formacao']}**: {item['score']:.2f} pts (C$ {item['custo']:.2f})")
-            
-            # Botões para aceitar ou ignorar
-            col_aceitar, col_ignorar = st.columns(2)
-            with col_aceitar:
-                if st.button('✅ Aceitar Nova Formação', type='primary', use_container_width=True):
-                    # Aplicar a nova escalação
-                    nova_escalacao = sugestao.get('melhor_escalacao')
-                    if nova_escalacao:
-                        st.session_state.escalacao_atualizada = nova_escalacao
-                        del st.session_state.sugestao_formacao
-                        st.success(f"✅ Formação alterada para {sugestao.get('melhor_formacao')}!")
-                        st.rerun()
-            with col_ignorar:
-                if st.button('❌ Manter Formação Atual', use_container_width=True):
-                    del st.session_state.sugestao_formacao
-                    st.rerun()
-        
-        # Mostrar escalação atualizada se houver
-        if 'escalacao_atualizada' in st.session_state:
-            st.divider()
-            st.markdown('<h3>📋 Escalação Atualizada</h3>', unsafe_allow_html=True)
-            
-            esc_atual = st.session_state.escalacao_atualizada
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Pontuação Esperada", f"{esc_atual.get('pontuacao_esperada', 0):.1f} pts")
-            with col2:
-                st.metric("Custo Total", f"C$ {esc_atual.get('custo_total', 0):.2f}")
-            with col3:
-                st.metric("Orçamento Restante", f"C$ {esc_atual.get('orcamento_restante', 0):.2f}")
-            with col4:
-                valorizacao_total = esc_atual.get('valorizacao_total', 0)
-                delta_color = "normal" if valorizacao_total >= 0 else "inverse"
-                st.metric("Valorização Total", f"{valorizacao_total:+.1f}", delta_color=delta_color)
-            
-            for pos_id in [1, 3, 2, 4, 5, 6]:
-                pos_jogadores = [t for t in esc_atual['titulares'] if t['pos_id'] == pos_id]
-                if pos_jogadores:
-                    st.markdown(f'<span class="posicao-badge">{POSICAO_MAP[pos_id]}</span>', unsafe_allow_html=True)
-                    for jogador in pos_jogadores:
-                        is_cap = esc_atual.get('capitao') and jogador['atleta_id'] == esc_atual['capitao']['atleta_id']
-                        exibir_jogador_card(jogador, is_capitao=is_cap)
-            
-            # Exibir reservas se houver
-            reservas = esc_atual.get('reservas', {})
-            reserva_luxo = esc_atual.get('reserva_luxo')
-            
-            # Debug: mostrar se há reservas
-            st.divider()
-            if reservas or reserva_luxo:
-                st.markdown('<h4>🔄 Reservas</h4>', unsafe_allow_html=True)
-                
-                # Exibir reservas normais
-                for pos_id, reserva in reservas.items():
-                    if reserva and not reserva.get('is_reserva_luxo'):
-                        exibir_jogador_card(reserva, is_capitao=False)
-                
-                # Exibir reserva de luxo
-                if reserva_luxo:
-                    st.markdown('<h4>⭐ Reserva de Luxo</h4>', unsafe_allow_html=True)
-                    exibir_jogador_card(reserva_luxo, is_capitao=False)
-            else:
-                st.info('💡 Reservas serão calculados após a substituição.')
-            
-            if st.button("🗑️ Limpar Substituições", use_container_width=True):
-                del st.session_state.escalacao_atualizada
-                st.rerun()
-        
-        # Botão de confirmação da escalação final
-        st.divider()
-        st.markdown('<h3>✅ Confirmar Escalação Final</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #6C757D;">Clique no botão abaixo para salvar a escalação que será utilizada na rodada. Isso registra para o aprendizado contínuo.</p>', unsafe_allow_html=True)
-        
-        # Determinar qual escalação confirmar (atualizada ou original)
-        escalacao_final = st.session_state.get('escalacao_atualizada', st.session_state.get('escalacao_para_confirmar'))
-        
-        if escalacao_final:
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                if st.button("✅ Confirmar Escalação Final", type="primary", use_container_width=True):
-                    try:
-                        aprendizagem = AprendizagemContinua()
-                        arquivo_salvo = aprendizagem.salvar_escalacao_detalhada(
-                            ano=st.session_state.get('escalacao_ano', 2026),
-                            rodada=st.session_state.get('escalacao_rodada', 1),
-                            escalacao=escalacao_final,
-                            formacao=escalacao_final.get('formacao', '4-3-3'),
-                            orcamento=st.session_state.get('escalacao_orcamento', 100)
-                        )
-                        st.success("📊 Escalação confirmada e salva para aprendizado contínuo!")
-                        st.session_state.escalacao_confirmada = True
-                    except Exception as e:
-                        st.error(f"Erro ao salvar escalação: {e}")
-            
-            with col_btn2:
-                if st.session_state.get('escalacao_confirmada'):
-                    st.info("🎯 Escalação já confirmada para esta rodada")
-
-
-def carregar_escalacao_salva(ano: int, rodada: int) -> Dict:
-    """Carrega a escalação salva para uma rodada específica."""
-    arquivo = Path(f'escalacoes_detalhadas/{ano}/rodada-{rodada}.json')
-    if arquivo.exists():
-        with open(arquivo, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return None
-
-
-def calcular_time_ideal(ano: int, rodada: int, orcamento: float) -> Dict:
-    """Calcula o time ideal para uma rodada com base nos pontos reais."""
-    from app import carregar_dados_historicos, carregar_dados_rodada_anterior
-    
-    # Carregar dados reais da rodada
-    df_atual = carregar_dados_historicos(ano, rodada)
-    if df_atual is None:
-        return None
-    
-    # Carregar histórico anterior
-    df_anterior = carregar_dados_rodada_anterior(ano, rodada)
-    
-    # Escalar usando a estratégia com dados reais
-    # modo_simulacao=True pois estamos calculando time ideal histórico
-    estrategia = EstrategiaV7(modo_simulacao=True)
-    if df_anterior is not None:
-        estrategia.carregar_stats_ano_anterior(df_anterior)
-    
-    # Testar todas as formações e pegar a melhor
-    from estrategia_v7 import FORMACOES
-    melhor_escalacao = None
-    melhor_pontuacao = -float('inf')
-    
-    for formacao in FORMACOES.keys():
-        try:
-            escalacao = estrategia.escalar_time(
-                df_atual, 
-                formacao=formacao, 
-                orcamento=orcamento,
-                modo_simulacao=True,
-                incluir_explicacao=False
-            )
-            
-            if escalacao and escalacao.get('titulares'):
-                # Calcular pontuação real
-                pontuacao_real = sum(j.get('pontos', 0) for j in escalacao['titulares'])
-                
-                # Adicionar bônus do capitão
-                capitao = escalacao.get('capitao')
-                if capitao:
-                    pontuacao_real += capitao.get('pontos', 0) * 0.5
-                
-                if pontuacao_real > melhor_pontuacao:
-                    melhor_pontuacao = pontuacao_real
-                    melhor_escalacao = escalacao
-                    melhor_escalacao['pontuacao_real'] = pontuacao_real
-        except:
-            continue
-    
-    return melhor_escalacao
-
-
-def exibir_comparacao_escalacoes(escalacao_sugerida: Dict, time_ideal: Dict, rodada: int):
-    """Exibe comparação lado a lado entre escalação sugerida e time ideal."""
-    
-    st.markdown(f'<h2>📊 Rodada {rodada} - Comparação Detalhada</h2>', unsafe_allow_html=True)
-    
-    # Métricas de comparação
-    pts_sugerido = escalacao_sugerida.get('pontuacao_real', 0)
-    pts_ideal = time_ideal.get('pontuacao_real', 0) if time_ideal else 0
-    diferenca = pts_sugerido - pts_ideal
-    aproveitamento = (pts_sugerido / pts_ideal * 100) if pts_ideal > 0 else 0
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Escalação Sugerida", f"{pts_sugerido:.1f} pts")
-    with col2:
-        st.metric("Time Ideal", f"{pts_ideal:.1f} pts")
-    with col3:
-        st.metric("Diferença", f"{diferenca:+.1f} pts", 
-                 delta_color="normal" if diferenca >= 0 else "inverse")
-    with col4:
-        st.metric("Aproveitamento", f"{aproveitamento:.1f}%")
-    
-    st.divider()
-    
-    # Comparação dos jogadores
-    col_sug, col_ideal = st.columns(2)
-    
-    with col_sug:
-        st.markdown('<h3>🎯 Escalação Sugerida</h3>', unsafe_allow_html=True)
-        exibir_time_completo(escalacao_sugerida, mostrar_pontos_reais=True)
-    
-    with col_ideal:
-        st.markdown('<h3>🏆 Time Ideal</h3>', unsafe_allow_html=True)
-        if time_ideal:
-            exibir_time_completo(time_ideal, mostrar_pontos_reais=True)
-        else:
-            st.info("Dados não disponíveis")
-
-
-def exibir_time_completo(escalacao: Dict, mostrar_pontos_reais: bool = False):
-    """Exibe o time completo com titulares organizados por posição."""
-    from app import exibir_jogador_card
-    
-    capitao_id = escalacao.get('capitao', {}).get('atleta_id')
-    
-    for pos_id in [1, 3, 2, 4, 5, 6]:  # GOL, ZAG, LAT, MEI, ATA, TEC
-        pos_jogadores = [t for t in escalacao.get('titulares', []) if t.get('pos_id') == pos_id]
-        
-        if pos_jogadores:
-            st.markdown(f'<span class="posicao-badge">{POSICAO_MAP.get(pos_id, "")}</span>', 
-                       unsafe_allow_html=True)
-            
-            for jogador in pos_jogadores:
-                is_cap = jogador.get('atleta_id') == capitao_id
-                exibir_jogador_card(
-                    jogador, 
-                    is_capitao=is_cap,
-                    mostrar_previsto_vs_real=mostrar_pontos_reais,
-                    mostrar_explicacao=True
-                )
-
-
-
-
-def pagina_historico():
-    """Nova página de histórico com comparação detalhada."""
-    st.markdown('<h1>📜 Histórico de Resultados</h1>', unsafe_allow_html=True)
-    
-    # Carregar dados
-    estrategia = EstrategiaV7()
-    aprendizado = AprendizagemContinua()
-    
-    if not estrategia.resultados:
-        st.markdown("""
-        <div class="info-box">
-            <h4>📊 Nenhum resultado registrado</h4>
-            <p>Registre os resultados das rodadas na página "Atualizar Resultados" para acompanhar sua evolução.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        return
-    
-    df = pd.DataFrame(estrategia.resultados)
-    
-    # ========== MÉTRICAS GERAIS ==========
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Pontos", f"{df['pontos'].sum():.1f}")
-    with col2:
-        st.metric("Média/Rodada", f"{df['pontos'].mean():.1f}")
-    with col3:
-        st.metric("Melhor Rodada", f"{df['pontos'].max():.1f}")
-    with col4:
-        st.metric("Orçamento Atual", f"C$ {df['orcamento'].iloc[-1]:.1f}")
-    
-    st.divider()
-    
-    # ========== GRÁFICOS DE EVOLUÇÃO ==========
-    st.markdown('<h3>📈 Evolução por Rodada</h3>', unsafe_allow_html=True)
-    
-    # Carregar rodadas com ajustes
-    rodadas_ajustes = aprendizado.obter_rodadas_com_ajustes()
-    rodadas_com_ajuste = [a['rodada'] for a in rodadas_ajustes if a.get('rodada')]
-    
-    fig = go.Figure()
-    
-    # Linha de pontuação
-    fig.add_trace(go.Scatter(
-        x=df['rodada'],
-        y=df['pontos'],
-        mode='lines+markers',
-        name='Pontos',
-        line=dict(color='#54b4f7', width=3),
-        marker=dict(size=8),
-        fill='tozeroy',
-        fillcolor='rgba(84, 180, 247, 0.1)',
-        hovertemplate='Rodada %{x}<br>Pontos: %{y:.1f}<extra></extra>'
-    ))
-    
-    # Marcação de ajustes
-    for rodada_ajuste in rodadas_com_ajuste:
-        desc = next((a['descricao'] for a in rodadas_ajustes if a.get('rodada') == rodada_ajuste), 'Ajuste')
-        fig.add_vline(
-            x=rodada_ajuste, 
-            line_dash="dash", 
-            line_color="#FFC107", 
-            line_width=2,
-            annotation_text=f"🔧 {desc}",
-            annotation_position="top",
-            annotation_font_size=10,
-            annotation_font_color="#FFC107"
-        )
-    
-    # Linha de média
-    media = df['pontos'].mean()
-    fig.add_hline(y=media, line_dash="dash", line_color="#15367b", 
-                 annotation_text=f"Média: {media:.1f}", annotation_position="right")
-    
-    # Linha de meta
-    fig.add_hline(y=90, line_dash="dot", line_color="#FFD700", 
-                 annotation_text="Meta: 90 pts", annotation_position="left")
-    
-    fig.update_layout(
-        xaxis=dict(title='Rodada', tickmode='linear', dtick=5, gridcolor='rgba(255,255,255,0.1)', color='#FFFFFF'),
-        yaxis=dict(title='Pontos', gridcolor='rgba(255,255,255,0.1)', color='#FFFFFF'),
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        hovermode='x unified',
-        margin=dict(l=40, r=40, t=20, b=40),
-        showlegend=False,
-        height=400
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Gráfico de Orçamento
-    st.markdown('<h3>💰 Evolução do Orçamento</h3>', unsafe_allow_html=True)
-    
-    fig_orc = go.Figure()
-    
-    fig_orc.add_trace(go.Scatter(
-        x=df['rodada'],
-        y=df['orcamento'],
-        mode='lines+markers',
-        name='Orçamento',
-        line=dict(color='#28A745', width=3),
-        marker=dict(size=8),
-        fill='tozeroy',
-        fillcolor='rgba(40, 167, 69, 0.1)',
-        hovertemplate='Rodada %{x}<br>Orçamento: C$ %{y:.1f}<extra></extra>'
-    ))
-    
-    fig_orc.update_layout(
-        xaxis=dict(title='Rodada', tickmode='linear', dtick=5, gridcolor='rgba(255,255,255,0.1)', color='#FFFFFF'),
-        yaxis=dict(title='Orçamento (C$)', gridcolor='rgba(255,255,255,0.1)', color='#FFFFFF'),
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        hovermode='x unified',
-        margin=dict(l=40, r=40, t=20, b=40),
-        showlegend=False,
-        height=400
-    )
-    
-    st.plotly_chart(fig_orc, use_container_width=True)
-    
-    st.divider()
-    
-    # ========== DETALHES POR RODADA ==========
-    st.markdown('<h3>🔍 Detalhes por Rodada</h3>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #6C757D;">Selecione uma rodada para ver a comparação entre sua escalação e o time ideal</p>', unsafe_allow_html=True)
-    
-    # Seletor de rodada
-    rodadas_disponiveis = sorted(df['rodada'].unique())
-    rodada_selecionada = st.selectbox(
-        "Rodada",
-        rodadas_disponiveis,
-        index=len(rodadas_disponiveis) - 1  # Última rodada por padrão
-    )
-    
-    if rodada_selecionada:
-        # Carregar escalação salva
-        ano_atual = 2026  # TODO: pegar do contexto
-        escalacao_salva = carregar_escalacao_salva(ano_atual, rodada_selecionada)
-        
-        if escalacao_salva:
-            # Calcular time ideal
-            orcamento = escalacao_salva.get('orcamento', 100)
-            
-            with st.spinner("Calculando time ideal..."):
-                time_ideal = calcular_time_ideal(ano_atual, rodada_selecionada, orcamento)
-            
-            # Exibir comparação
-            exibir_comparacao_escalacoes(escalacao_salva, time_ideal, rodada_selecionada)
-        else:
-            st.info(f"Escalação da rodada {rodada_selecionada} não encontrada. Confirme a escalação antes do fechamento do mercado.")
-    
-    st.divider()
-    
-    # ========== TABELA DE RESULTADOS ==========
-    st.markdown('<h3>📋 Tabela de Resultados</h3>', unsafe_allow_html=True)
-    st.dataframe(df, use_container_width=True)
-    
-    st.divider()
-    
-    # ========== HISTÓRICO DE AJUSTES ==========
-    st.markdown('<h3>🔧 Histórico de Ajustes Automáticos</h3>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #6C757D;">Ajustes realizados pelo sistema de aprendizado contínuo</p>', unsafe_allow_html=True)
-    
-    ajustes = aprendizado.obter_historico_ajustes_completo()
-    
-    if not ajustes:
-        st.markdown("""
-        <div class="info-box">
-            <h4>ℹ️ Nenhum ajuste realizado ainda</h4>
-            <p>O sistema fará ajustes automáticos após analisar os resultados das rodadas.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        for i, ajuste in enumerate(reversed(ajustes)):
-            rodada = ajuste.get('rodada', 'N/A')
-            ano = ajuste.get('ano', 'N/A')
-            data = ajuste.get('data', '')[:10]
-            descricao = ajuste.get('descricao', 'Ajuste de parâmetros')
-            detalhes = ajuste.get('ajustes', [])
-            
-            with st.expander(f"📅 Rodada {rodada} ({ano}) - {descricao}", expanded=(i == 0)):
-                st.markdown(f"**Data:** {data}")
-                st.markdown("**Detalhes dos ajustes:**")
-                
-                for det in detalhes:
-                    pos = det.get('posicao', 'N/A')
-                    tipo = det.get('tipo', 'N/A')
-                    anterior = det.get('peso_anterior', 0)
-                    novo = det.get('peso_novo', 0)
-                    motivo = det.get('motivo', '')
-                    
-                    icone = "⬇️" if tipo == 'redução' else "⬆️"
-                    cor = "#DC3545" if tipo == 'redução' else "#28A745"
-                    
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #1a2744 0%, #0b1d33 100%); 
-                                padding: 10px 15px; border-radius: 8px; margin: 5px 0;
-                                border-left: 3px solid {cor};">
-                        <span style="font-size: 1.2rem;">{icone}</span>
-                        <strong style="color: #FFFFFF;">{pos}</strong>: 
-                        <span style="color: #ADB5BD;">{anterior:.2f} → {novo:.2f}</span>
-                        <br><small style="color: #6C757D;">{motivo}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-def pagina_atualizar():
-    """Página para atualizar resultados (aprendizado contínuo)."""
-    st.markdown('<h1>🔄 Atualizar Resultados</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #6C757D; font-size: 1.1rem;">Atualize os resultados da rodada para o aprendizado contínuo</p>', unsafe_allow_html=True)
-    
-    estrategia = EstrategiaV7()
-    api = CartolaFCAPI()
-    
-    # Mostrar status atual
-    col_status1, col_status2, col_status3 = st.columns(3)
-    with col_status1:
-        st.metric("📅 Rodada Atual", estrategia.rodada_atual)
-    with col_status2:
-        st.metric("💰 Orçamento", f"C$ {estrategia.orcamento:.2f}")
-    with col_status3:
-        total_pts = sum(r.get('pontos', 0) for r in estrategia.resultados)
-        st.metric("⚽ Total Pontos", f"{total_pts:.1f}")
-    
-    st.divider()
-    
-    # Tabs para atualização automática e manual
-    tab_auto, tab_manual = st.tabs(["🤖 Atualização Automática", "✏️ Atualização Manual"])
-    
-    with tab_auto:
-        st.markdown('<h3>🤖 Atualização Automática via API</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #6C757D;">Busca automaticamente os resultados da rodada na API oficial</p>', unsafe_allow_html=True)
-        
-        # Verificar status do mercado
-        status = api.get_mercado_status()
-        if status:
-            rodada_api = status.get('rodada_atual', 1)
-            status_mercado = status.get('status_mercado', 0)
-            
-            status_texto = "🟢 Aberto" if status_mercado == 1 else "🔴 Fechado"
-            st.info(f"📊 Status do Mercado: {status_texto} | Rodada API: {rodada_api}")
-            
-            if status_mercado != 1:  # Mercado fechado
-                st.success("✅ Mercado fechado! Você pode atualizar os resultados.")
-                
-                # Carregar escalação salva (se existir)
-                escalacao_salva = None
-                if os.path.exists('escalacao_atual.json'):
-                    try:
-                        with open('escalacao_atual.json', 'r') as f:
-                            escalacao_salva = json.load(f)
-                        st.info(f"📋 Escalação salva encontrada para a rodada {escalacao_salva.get('rodada', 'N/A')}")
-                    except:
-                        pass
-                
-                if st.button("🔄 Atualizar Automaticamente", type="primary", use_container_width=True):
-                    with st.spinner("Buscando resultados da API..."):
-                        resultado = estrategia.atualizar_automatico(api, escalacao_salva)
-                        
-                        if resultado.get('sucesso'):
-                            st.success(f"✅ Rodada {resultado['rodada']} atualizada com sucesso!")
-                            
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("⚽ Pontuação", f"{resultado['pontos']:.1f} pts")
-                            with col2:
-                                st.metric("📈 Valorização", f"C$ {resultado['valorizacao']:.2f}")
-                            with col3:
-                                st.metric("💰 Novo Orçamento", f"C$ {resultado['novo_orcamento']:.2f}")
-                            
-                            st.info(f"📊 {resultado['total_jogadores_atualizados']} jogadores atualizados no histórico")
-                            
-                            # APRENDIZADO CONTÍNUO: Atualizar resultado detalhado
-                            try:
-                                aprendizagem = AprendizagemContinua()
-                                ano_atual = datetime.now().year
-                                
-                                # Criar dict de resultados por jogador
-                                resultados_jogadores = {}
-                                for jog in resultado.get('detalhes', []):
-                                    if 'atleta_id' in jog:
-                                        resultados_jogadores[jog['atleta_id']] = jog['pontos']
-                                
-                                # Atualizar resultado da rodada
-                                analise = aprendizagem.atualizar_resultado_rodada(
-                                    ano=ano_atual,
-                                    rodada=resultado['rodada'],
-                                    resultados_jogadores=resultados_jogadores,
-                                    pontuacao_total=resultado['pontos']
-                                )
-                                
-                                if analise.get('sucesso'):
-                                    st.success(f"🧠 Aprendizado: Acurácia {analise['acuracia']:.1f}% ({analise['acertos']}/12 jogadores)")
-                            except Exception as e:
-                                pass  # Não interromper se falhar
-                            
-                            # Mostrar detalhes dos jogadores
-                            if resultado.get('detalhes'):
-                                with st.expander("📋 Detalhes dos Jogadores"):
-                                    for jog in resultado['detalhes']:
-                                        emoji = "👑" if jog.get('capitao') else "🔄" if jog.get('substituicao') else "⚽"
-                                        st.markdown(f"{emoji} **{jog['apelido']}**: {jog['pontos']:.1f} pts (C$ {jog['variacao']:.2f})")
-                            
+                        if user:
+                            st.session_state.user = {
+                                'id': user.id,
+                                'name': user.name,
+                                'username': user.username,
+                                'role': user.role
+                            }
+                            st.success(f"Bem-vindo(a), {user.name}!")
                             st.rerun()
                         else:
-                            st.error(f"❌ Erro: {resultado.get('erro', 'Erro desconhecido')}")
-            else:
-                st.warning("⏳ O mercado ainda está aberto. Aguarde o fechamento para atualizar os resultados.")
+                            st.error("Usuário ou senha incorretos!")
+                    else:
+                        st.warning("Preencha todos os campos!")
+            
+            st.divider()
+            st.markdown("<p style='text-align: center;'>Não tem conta?</p>", unsafe_allow_html=True)
+            if st.button("📝 Criar minha conta", use_container_width=True):
+                st.session_state.show_register = True
+                st.rerun()
+        
         else:
-            st.error("❌ Não foi possível conectar à API oficial")
+            st.markdown("### 📝 Criar Nova Conta")
+            
+            with st.form("register_form"):
+                new_name = st.text_input("Nome completo", placeholder="Digite seu nome completo")
+                new_username = st.text_input("Usuário", placeholder="Escolha um nome de usuário")
+                new_password = st.text_input("Senha", type="password", placeholder="Escolha uma senha")
+                confirm_password = st.text_input("Confirmar senha", type="password", placeholder="Digite a senha novamente")
+                
+                submit_register = st.form_submit_button("Criar Conta", use_container_width=True)
+                
+                if submit_register:
+                    if not all([new_name, new_username, new_password, confirm_password]):
+                        st.warning("Preencha todos os campos!")
+                    elif new_password != confirm_password:
+                        st.error("As senhas não coincidem!")
+                    elif len(new_password) < 4:
+                        st.error("A senha deve ter pelo menos 4 caracteres!")
+                    elif len(new_username) < 3:
+                        st.error("O usuário deve ter pelo menos 3 caracteres!")
+                    else:
+                        session = get_session(engine)
+                        user = create_user(session, new_name, new_username, new_password, 'player')
+                        session.close()
+                        
+                        if user:
+                            st.success(f"Conta criada com sucesso! Faça login com o usuário '{new_username}'.")
+                            st.session_state.show_register = False
+                            st.rerun()
+                        else:
+                            st.error("Este nome de usuário já está em uso. Escolha outro.")
+            
+            st.divider()
+            st.markdown("<p style='text-align: center;'>Já tem conta?</p>", unsafe_allow_html=True)
+            if st.button("🔑 Fazer login", use_container_width=True):
+                st.session_state.show_register = False
+                st.rerun()
+
+# =============================================================================
+# PÁGINA INICIAL (DASHBOARD)
+# =============================================================================
+def page_home():
+    """Página inicial com resumo do bolão"""
+    # Cabeçalho padrão
+    render_page_header()
     
-    with tab_manual:
-        st.markdown('<h3>✏️ Atualização Manual</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="color: #6C757D;">Insira manualmente os resultados da rodada</p>', unsafe_allow_html=True)
+    session = get_session(engine)
+    
+    try:
+        user_stats = get_user_stats(session, st.session_state.user['id'])
+        ranking = get_ranking(session)
+        
+        user_position = next(
+            (r['posicao'] for r in ranking if r['user_id'] == st.session_state.user['id']),
+            '-'
+        )
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("🏆 Sua Posição", f"{user_position}º" if user_position != '-' else '-')
+        with col2:
+            st.metric("⭐ Total de Pontos", user_stats.get('total_pontos', 0))
+        with col3:
+            st.metric("🎯 Placares Exatos", user_stats.get('placares_exatos', 0))
+        with col4:
+            st.metric("✅ Palpites Feitos", user_stats.get('total_palpites', 0))
+        
+        st.divider()
         
         col1, col2 = st.columns(2)
         
         with col1:
-            rodada = st.number_input("📅 Rodada", min_value=1, max_value=38, value=estrategia.rodada_atual)
-            pontos = st.number_input("⚽ Pontuação Real", min_value=-50.0, max_value=300.0, value=0.0, step=0.1)
+            st.subheader("📅 Próximos Jogos")
+            
+            now = get_brazil_time().replace(tzinfo=None)
+            proximos_jogos = session.query(Match).filter(
+                Match.status == 'scheduled',
+                Match.datetime > now
+            ).order_by(Match.datetime).limit(5).all()
+            
+            if proximos_jogos:
+                for match in proximos_jogos:
+                    team1_display = get_team_display(match.team1, match.team1_code)
+                    team2_display = get_team_display(match.team2, match.team2_code)
+                    
+                    # Verifica se já tem palpite
+                    pred = session.query(Prediction).filter_by(
+                        user_id=st.session_state.user['id'],
+                        match_id=match.id
+                    ).first()
+                    
+                    palpite_icon = "✅" if pred else "❌"
+                    
+                    st.markdown(f"""
+                    <div class="match-card">
+                        <strong>{team1_display}</strong> vs <strong>{team2_display}</strong><br>
+                        <span class="match-info">🕐 {format_datetime(match.datetime)} | 📍 {match.city} | {palpite_icon} Palpite</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("Nenhum jogo programado.")
         
         with col2:
-            valorizacao = st.number_input("📈 Valorização (C$)", min_value=-50.0, max_value=50.0, value=0.0, step=0.1)
-            formacao_usada = st.selectbox("📋 Formação Usada", list(FORMACOES.keys()))
+            st.subheader("🏆 Top 5 Ranking")
+            
+            if ranking:
+                for r in ranking[:5]:
+                    medal = ""
+                    if r['posicao'] == 1:
+                        medal = "🥇"
+                    elif r['posicao'] == 2:
+                        medal = "🥈"
+                    elif r['posicao'] == 3:
+                        medal = "🥉"
+                    
+                    st.markdown(f"{medal} **{r['posicao']}º** {r['nome']} - **{r['total_pontos']}** pts")
+            else:
+                st.info("Nenhum participante no ranking ainda.")
+    
+    finally:
+        session.close()
+
+# =============================================================================
+# PÁGINA DE PALPITES - JOGOS
+# =============================================================================
+def page_palpites_jogos():
+    """Página para fazer palpites nos jogos"""
+    render_page_header()
+    st.markdown("## 📝 Palpites dos Jogos")
+    
+    session = get_session(engine)
+    
+    try:
+        # Filtros
+        col1, col2 = st.columns(2)
+        with col1:
+            fases_opcoes = ["Todas as Fases"] + list(FASES.keys())
+            fase_selecionada = st.selectbox("Fase", fases_opcoes)
+        with col2:
+            grupos_opcoes = ["Todos os Grupos"] + GRUPOS
+            grupo_selecionado = st.selectbox("Grupo", grupos_opcoes)
         
-        if st.button("📝 Registrar Resultado", type="primary", use_container_width=True):
-            estrategia.registrar_resultado(
-                rodada=rodada,
-                pontos=pontos,
-                valorizacao=valorizacao,
-                escalacao={'formacao': formacao_usada}
+        # Query de jogos
+        query = session.query(Match).order_by(Match.datetime)
+        
+        if fase_selecionada != "Todas as Fases":
+            query = query.filter(Match.phase == fase_selecionada)
+        
+        if grupo_selecionado != "Todos os Grupos":
+            query = query.filter(Match.group == grupo_selecionado)
+        
+        jogos = query.all()
+        
+        # Agrupa por data
+        jogos_por_data = {}
+        for jogo in jogos:
+            data = jogo.datetime.strftime("%d/%m/%Y (%A)")
+            if data not in jogos_por_data:
+                jogos_por_data[data] = []
+            jogos_por_data[data].append(jogo)
+        
+        # Exibe jogos agrupados
+        for data, jogos_data in jogos_por_data.items():
+            st.markdown(f"### 📅 {data}")
+            
+            for match in jogos_data:
+                team1_display = get_team_display(match.team1, match.team1_code)
+                team2_display = get_team_display(match.team2, match.team2_code)
+                
+                can_predict = can_predict_match(match)
+                status_icon = "🟢" if can_predict else "🔴"
+                
+                with st.expander(f"{status_icon} {format_time(match.datetime)} - {team1_display} vs {team2_display}"):
+                    st.markdown(f"**{team1_display}** VS **{team2_display}**")
+                    st.markdown(f"📍 {match.city} | {FASES.get(match.phase, match.phase)} - Grupo {match.group or 'N/A'}")
+
+                    
+                    # Busca palpite existente
+                    pred = session.query(Prediction).filter_by(
+                        user_id=st.session_state.user['id'],
+                        match_id=match.id
+                    ).first()
+                    
+                    # Mostra indicação de palpite salvo
+                    if pred:
+                        data_salvo = pred.updated_at or pred.created_at
+                        if data_salvo:
+                            # Converter para horário de Brasília
+                            import pytz
+                            tz_brazil = pytz.timezone('America/Sao_Paulo')
+                            if data_salvo.tzinfo is None:
+                                data_salvo = pytz.utc.localize(data_salvo)
+                            data_brazil = data_salvo.astimezone(tz_brazil)
+                            st.success(f"✅ Palpite salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+                    
+                    if can_predict:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            gols1 = st.number_input(
+                                f"Gols {team1_display}",
+                                min_value=0, max_value=20,
+                                value=pred.pred_team1_score if pred else 0,
+                                key=f"gols1_{match.id}"
+                            )
+                        with col2:
+                            gols2 = st.number_input(
+                                f"Gols {team2_display}",
+                                min_value=0, max_value=20,
+                                value=pred.pred_team2_score if pred else 0,
+                                key=f"gols2_{match.id}"
+                            )
+                        
+                        if st.button("💾 Salvar Palpite", key=f"save_{match.id}"):
+                            if pred:
+                                pred.pred_team1_score = gols1
+                                pred.pred_team2_score = gols2
+                            else:
+                                pred = Prediction(
+                                    user_id=st.session_state.user['id'],
+                                    match_id=match.id,
+                                    pred_team1_score=gols1,
+                                    pred_team2_score=gols2
+                                )
+                                session.add(pred)
+                            session.commit()
+                            st.success("✅ Palpite salvo com sucesso!")
+                            st.rerun()
+                    else:
+                        if pred:
+                            st.info(f"Seu palpite: **{pred.pred_team1_score}** x **{pred.pred_team2_score}**")
+                            if match.status == 'finished':
+                                st.markdown(f"Resultado: **{match.team1_score}** x **{match.team2_score}**")
+                                if pred.points_awarded is not None:
+                                    st.markdown(f"Pontos: **{pred.points_awarded}**")
+                        else:
+                            st.warning("⏰ Prazo encerrado - Você não fez palpite para este jogo")
+    
+    finally:
+        session.close()
+
+# =============================================================================
+# PÁGINA DE PALPITES - GRUPOS
+# =============================================================================
+def page_palpites_grupos():
+    """Página para fazer palpites de classificação dos grupos"""
+    render_page_header()
+    st.markdown("## 🏅 Palpites de Classificação dos Grupos")
+    
+    session = get_session(engine)
+    
+    try:
+        # Verifica se ainda pode fazer palpites (usa mesma lógica do pódio)
+        can_predict = can_predict_podium(session)
+        
+        if can_predict:
+            st.info("Escolha quem será o 1º e 2º colocado de cada grupo")
+        else:
+            st.warning("⏰ O prazo para palpites de grupos já encerrou! A Copa já começou.")
+        
+        teams = session.query(Team).order_by(Team.name).all()
+        
+        # Organiza em colunas de 3
+        cols = st.columns(3)
+        
+        for idx, grupo in enumerate(GRUPOS):
+            with cols[idx % 3]:
+                st.markdown(f"### Grupo {grupo}")
+                
+                grupo_teams = [t for t in teams if t.group == grupo]
+                
+                if not grupo_teams:
+                    st.warning(f"Nenhuma seleção no grupo {grupo}")
+                    continue
+                
+                team_options = {t.id: f"{t.flag} {t.name}" for t in grupo_teams}
+                team_ids = [None] + list(team_options.keys())
+                
+                # Busca palpite existente
+                pred = session.query(GroupPrediction).filter_by(
+                    user_id=st.session_state.user['id'],
+                    group_name=grupo
+                ).first()
+                
+                # Calcula classificação sugerida baseada nos palpites dos jogos
+                from group_standings import get_predicted_group_standings
+                standings = get_predicted_group_standings(session, st.session_state.user['id'], grupo)
+                
+                if standings and len(standings) >= 2:
+                    st.markdown("**📊 Classificação baseada nos seus palpites:**")
+                    for i, team_stat in enumerate(standings[:4], 1):
+                        st.caption(f"{i}º {team_stat['team'].flag} {team_stat['team'].name} - {team_stat['points']} pts ({team_stat['wins']}V {team_stat['draws']}E {team_stat['losses']}D) | Saldo: {team_stat['goal_difference']:+d}")
+                    st.caption("⚠️ Sugestão: Você pode usar essa classificação ou escolher manualmente")
+                    st.divider()
+                
+                with st.form(f"grupo_{grupo}"):
+                    # Define valores padrão baseados na classificação sugerida ou palpite existente
+                    default_first = None
+                    default_second = None
+                    
+                    if pred:
+                        default_first = pred.first_place_team_id
+                        default_second = pred.second_place_team_id
+                    elif standings and len(standings) >= 2:
+                        default_first = standings[0]['team'].id
+                        default_second = standings[1]['team'].id
+                    
+                    primeiro = st.selectbox(
+                        "1º Lugar",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(default_first) if default_first and default_first in team_ids else 0,
+                        key=f"g{grupo}_1"
+                    )
+                    
+                    segundo = st.selectbox(
+                        "2º Lugar",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(default_second) if default_second and default_second in team_ids else 0,
+                        key=f"g{grupo}_2"
+                    )
+                    
+                    # Mostra indicação de palpite salvo
+                    if pred:
+                        data_salvo = pred.updated_at or pred.created_at
+                        if data_salvo:
+                            import pytz
+                            tz_brazil = pytz.timezone('America/Sao_Paulo')
+                            if data_salvo.tzinfo is None:
+                                data_salvo = pytz.utc.localize(data_salvo)
+                            data_brazil = data_salvo.astimezone(tz_brazil)
+                            st.success(f"✅ Salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+                    
+                    if st.form_submit_button("💾 Salvar", disabled=not can_predict):
+                        if not can_predict:
+                            st.error("⏰ O prazo para palpites já encerrou!")
+                        elif primeiro and segundo and primeiro != segundo:
+                            if pred:
+                                pred.first_place_team_id = primeiro
+                                pred.second_place_team_id = segundo
+                            else:
+                                pred = GroupPrediction(
+                                    user_id=st.session_state.user['id'],
+                                    group_name=grupo,
+                                    first_place_team_id=primeiro,
+                                    second_place_team_id=segundo
+                                )
+                                session.add(pred)
+                            session.commit()
+                            st.success("Palpite salvo!")
+                        else:
+                            st.error("Selecione dois times diferentes!")
+    
+    finally:
+        session.close()
+
+# =============================================================================
+# PÁGINA DE PALPITES - PÓDIO
+# =============================================================================
+def page_palpites_podio():
+    """Página para fazer palpites do pódio"""
+    render_page_header()
+    st.markdown("## 🏆 Palpites do Pódio")
+    
+    session = get_session(engine)
+    
+    try:
+        can_predict = can_predict_podium(session)
+        
+        if can_predict:
+            st.info("Escolha quem será o Campeão, Vice-Campeão e 3º Lugar da Copa do Mundo 2026")
+        else:
+            st.warning("⏰ O prazo para palpites de pódio já encerrou!")
+        
+        teams = session.query(Team).order_by(Team.name).all()
+        team_options = {t.id: f"{t.flag} {t.name}" for t in teams}
+        team_ids = [None] + list(team_options.keys())
+        
+        # Busca palpite existente
+        pred = session.query(PodiumPrediction).filter_by(
+            user_id=st.session_state.user['id']
+        ).first()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("### 🥇 Campeão")
+            campeao = st.selectbox(
+                "Selecione o Campeão",
+                options=team_ids,
+                format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                index=team_ids.index(pred.champion_team_id) if pred and pred.champion_team_id in team_ids else 0,
+                disabled=not can_predict,
+                key="podio_campeao"
             )
-            st.success(f"✅ Resultado da rodada {rodada} registrado!")
-            st.info(f"💰 Novo orçamento: C$ {estrategia.orcamento:.2f}")
+        
+        with col2:
+            st.markdown("### 🥈 Vice-Campeão")
+            vice = st.selectbox(
+                "Selecione o Vice",
+                options=team_ids,
+                format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                index=team_ids.index(pred.runner_up_team_id) if pred and pred.runner_up_team_id in team_ids else 0,
+                disabled=not can_predict,
+                key="podio_vice"
+            )
+        
+        with col3:
+            st.markdown("### 🥉 3º Lugar")
+            terceiro = st.selectbox(
+                "Selecione o 3º Lugar",
+                options=team_ids,
+                format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                index=team_ids.index(pred.third_place_team_id) if pred and pred.third_place_team_id in team_ids else 0,
+                disabled=not can_predict,
+                key="podio_terceiro"
+            )
+        
+        # Mostra indicação de palpite salvo
+        if pred and (pred.champion_team_id or pred.runner_up_team_id or pred.third_place_team_id):
+            data_salvo = pred.updated_at or pred.created_at
+            if data_salvo:
+                import pytz
+                tz_brazil = pytz.timezone('America/Sao_Paulo')
+                if data_salvo.tzinfo is None:
+                    data_salvo = pytz.utc.localize(data_salvo)
+                data_brazil = data_salvo.astimezone(tz_brazil)
+                st.success(f"✅ Palpite de pódio salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+        
+        if can_predict:
+            if st.button("💾 Salvar Palpite de Pódio", use_container_width=True):
+                if campeao and vice and terceiro and len(set([campeao, vice, terceiro])) == 3:
+                    if pred:
+                        pred.champion_team_id = campeao
+                        pred.runner_up_team_id = vice
+                        pred.third_place_team_id = terceiro
+                    else:
+                        pred = PodiumPrediction(
+                            user_id=st.session_state.user['id'],
+                            champion_team_id=campeao,
+                            runner_up_team_id=vice,
+                            third_place_team_id=terceiro
+                        )
+                        session.add(pred)
+                    session.commit()
+                    st.success("Palpite de pódio salvo!")
+                    st.rerun()
+                else:
+                    st.error("Selecione três times diferentes!")
+    
+    finally:
+        session.close()
+
+
+
+# =============================================================================
+# PÁGINA DE DICAS - POWER RANKING FIFA
+# =============================================================================
+def page_dicas():
+    """Página de Dicas com Power Ranking FIFA"""
+    render_page_header()
+    st.header("💡 Dicas para seus Palpites")
+    
+    # Texto explicativo sobre o ranking
+    st.markdown("""
+    ### 📊 Sobre o Ranking FIFA
+    
+    O **Ranking FIFA/Coca-Cola** é a classificação oficial das seleções masculinas de futebol, 
+    atualizado mensalmente pela FIFA. Ele considera os resultados das partidas internacionais, 
+    a importância dos jogos e a força dos adversários enfrentados.
+    
+    """)
+    
+    # Alerta destacado com cores chamativas
+    st.markdown('''
+    <div style="
+        background: linear-gradient(135deg, #FF6B35 0%, #F7931E 50%, #FFD700 100%);
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+        box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+        border-left: 6px solid #E61D25;
+    ">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 2.5rem;">⚠️</span>
+            <div>
+                <h3 style="color: #1E3A5F; margin: 0 0 8px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">
+                    IMPORTANTE - LEIA ANTES DE PALPITAR!
+                </h3>
+                <p style="color: #2A398D; margin: 0; font-size: 1.1rem; line-height: 1.6;">
+                    Este ranking serve como uma <strong>referência</strong> para auxiliar nos seus palpites, 
+                    mas <strong style="color: #E61D25;">NÃO deve ser seguido à risca</strong>! 
+                    O futebol é imprevisível e grandes surpresas acontecem em toda Copa do Mundo. 
+                    Seleções bem posicionadas podem tropeçar, enquanto equipes menos cotadas frequentemente surpreendem.
+                </p>
+                <p style="color: #1E3A5F; margin: 10px 0 0 0; font-size: 1.05rem; font-weight: 600;">
+                    🎯 Use estas informações como um <strong>guia</strong>, mas confie também na sua 
+                    <strong style="color: #3CAC3B;">intuição</strong> e 
+                    <strong style="color: #3CAC3B;">conhecimento do futebol</strong>!
+                </p>
+            </div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    st.markdown("""
+    
+    ---
+    """)
+    
+    # Power Ranking das seleções da Copa 2026
+    st.subheader("🏆 Power Ranking - Copa do Mundo 2026")
+    
+    # Função para renderizar cabeçalho das colunas
+    def render_header():
+        return '''
+        <div class="dicas-card-light" style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1E3A5F !important;
+            border-radius: 10px 10px 0 0;
+            padding: 10px 16px;
+            margin-bottom: 0;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: #ffffff !important; min-width: 30px;">#</span>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #ffffff !important; min-width: 30px;"></span>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #ffffff !important;">Seleção</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size: 0.75rem; font-weight: 600; color: #ffffff !important; min-width: 35px;">FIFA</span>
+                <span style="font-size: 0.75rem; font-weight: 600; color: #ffffff !important; min-width: 55px; text-align: center;">Pontos</span>
+                <span style="font-size: 0.75rem; font-weight: 600; color: #ffffff !important; min-width: 30px; text-align: center;">Grupo</span>
+            </div>
+        </div>
+        '''
+    
+    # Função para renderizar card de seleção
+    def render_selecao_card(pos, bandeira, nome, ranking_fifa, pontos, grupo, is_first=False):
+        border_radius = "0" if not is_first else "0"
+        return f'''
+        <div class="dicas-card-light" style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+            border-radius: {border_radius};
+            padding: 12px 16px;
+            margin-bottom: 2px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-left: 4px solid #1E3A5F;
+        ">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 1.1rem; font-weight: 700; color: #1E3A5F !important; min-width: 30px;">{pos}</span>
+                <span style="font-size: 1.5rem;">{bandeira}</span>
+                <span style="font-size: 1rem; font-weight: 600; color: #1a1a2e !important;">{nome}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size: 0.85rem; color: #666 !important; min-width: 35px;">{ranking_fifa}</span>
+                <span style="font-size: 0.9rem; font-weight: 700; color: #1E3A5F !important; background: rgba(30,58,95,0.1) !important; padding: 4px 10px; border-radius: 6px; min-width: 55px; text-align: center;">{pontos}</span>
+                <span style="font-size: 0.9rem; font-weight: 600; color: #ffffff !important; background: #1E3A5F !important; padding: 4px 10px; border-radius: 6px; min-width: 30px; text-align: center;">{grupo}</span>
+            </div>
+        </div>
+        '''
+    
+    # Tier 1 - Favoritas
+    st.markdown("### ⭐ FAVORITAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
+    tier1_data = [
+        (1, "🇪🇸", "Espanha", "#1", 1877, "H"),
+        (2, "🇦🇷", "Argentina", "#2", 1873, "J"),
+        (3, "🇫🇷", "França", "#3", 1870, "I"),
+        (4, "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Inglaterra", "#4", 1834, "L"),
+        (5, "🇧🇷", "Brasil", "#5", 1760, "C"),
+    ]
+    for item in tier1_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Tier 2 - Fortes Candidatas
+    st.markdown("### 🥇 FORTES CANDIDATAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
+    tier2_data = [
+        (6, "🇵🇹", "Portugal", "#6", 1760, "K"),
+        (7, "🇳🇱", "Holanda", "#7", 1756, "F"),
+        (8, "🇧🇪", "Bélgica", "#8", 1731, "G"),
+        (9, "🇩🇪", "Alemanha", "#9", 1724, "E"),
+        (10, "🇭🇷", "Croácia", "#10", 1717, "L"),
+    ]
+    for item in tier2_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Tier 3 - Competitivas
+    st.markdown("### 🥈 COMPETITIVAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
+    tier3_data = [
+        (11, "🇲🇦", "Marrocos", "#11", 1716, "C"),
+        (12, "🇨🇴", "Colômbia", "#13", 1701, "K"),
+        (13, "🇺🇸", "Estados Unidos", "#14", 1682, "D"),
+        (14, "🇲🇽", "México", "#15", 1676, "A"),
+        (15, "🇺🇾", "Uruguai", "#16", 1673, "H"),
+        (16, "🇨🇭", "Suíça", "#17", 1655, "B"),
+        (17, "🇯🇵", "Japão", "#18", 1650, "F"),
+        (18, "🇸🇳", "Senegal", "#19", 1648, "I"),
+        (19, "🇮🇷", "Irã", "#20", 1617, "G"),
+        (20, "🇰🇷", "Coreia do Sul", "#22", 1599, "A"),
+    ]
+    for item in tier3_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Tier 4 - Médias
+    st.markdown("### 🥉 MÉDIAS")
+    st.markdown(render_header(), unsafe_allow_html=True)
+    tier4_data = [
+        (21, "🇪🇨", "Equador", "#23", 1592, "E"),
+        (22, "🇦🇹", "Áustria", "#24", 1586, "J"),
+        (23, "🇦🇺", "Austrália", "#26", 1574, "D"),
+        (24, "🇨🇦", "Canadá", "#27", 1559, "B"),
+        (25, "🇳🇴", "Noruega", "#29", 1553, "I"),
+        (26, "🇵🇦", "Panamá", "#30", 1540, "L"),
+        (27, "🇩🇿", "Argélia", "#34", 1518, "J"),
+        (28, "🇪🇬", "Egito", "#35", 1515, "G"),
+        (29, "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Escócia", "#36", 1507, "C"),
+        (30, "🇵🇾", "Paraguai", "#39", 1502, "D"),
+    ]
+    for item in tier4_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Tier 5 - Zebras Potenciais
+    st.markdown("### 🦓 ZEBRAS POTENCIAIS")
+    st.markdown(render_header(), unsafe_allow_html=True)
+    tier5_data = [
+        (31, "🇹🇳", "Tunísia", "#41", 1495, "F"),
+        (32, "🇨🇮", "Costa do Marfim", "#42", 1490, "E"),
+        (33, "🇺🇿", "Uzbequestão", "#50", 1462, "K"),
+        (34, "🇶🇦", "Qatar", "#54", 1455, "B"),
+        (35, "🇸🇦", "Arábia Saudita", "#60", 1429, "H"),
+        (36, "🇿🇦", "África do Sul", "#61", 1427, "A"),
+        (37, "🇯🇴", "Jordânia", "#64", 1389, "J"),
+        (38, "🇨🇻", "Cabo Verde", "#67", 1370, "H"),
+        (39, "🇬🇭", "Gana", "#72", 1351, "L"),
+        (40, "🇨🇼", "Curaçao", "#82", 1303, "E"),
+        (41, "🇭🇹", "Haiti", "#84", 1294, "C"),
+        (42, "🇳🇿", "Nova Zelândia", "#87", 1279, "G"),
+    ]
+    for item in tier5_data:
+        st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # Seleções da Repescagem
+    st.subheader("🎯 Seleções da Repescagem (A Definir)")
+    
+    st.markdown("""
+    Estas seleções ainda disputarão a repescagem para definir as últimas vagas:
+    
+    **🇪🇺 Repescagem Europa:**
+    | Chave | Seleções |
+    |-------|----------|
+    | Europa A | 🇮🇹 Itália, 🇮🇪 Irlanda do Norte, 🏴󠁧󠁢󠁷󠁬󠁳󠁿 País de Gales, 🇧🇦 Bósnia |
+    | Europa B | 🇺🇦 Ucrânia, 🇸🇪 Suécia, 🇵🇱 Polônia, 🇦🇱 Albânia |
+    | Europa C | 🇹🇷 Turquia, 🇷🇴 Romênia, 🇸🇰 Eslováquia, 🇽🇰 Kosovo |
+    | Europa D | 🇨🇿 Rep. Tcheca, 🇮🇪 Irlanda, 🇩🇰 Dinamarca, 🇲🇰 Macedônia do Norte |
+    
+    **🌍 Repescagem Intercontinental:**
+    | Chave | Seleções |
+    |-------|----------|
+    | Intercon. 1 | 🇨🇩 Congo DR, 🇯🇲 Jamaica, 🇳🇨 Nova Caledônia |
+    | Intercon. 2 | 🇧🇴 Bolívia, 🇸🇷 Suriname, 🇮🇶 Iraque |
+    """)
+    
+    # Dicas extras
+    st.subheader("📝 Dicas Extras")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        **🏠 Fator Casa:**
+        - 🇺🇸 EUA, 🇨🇦 Canadá e 🇲🇽 México jogam em casa
+        - Seleções anfitriãs costumam ter desempenho acima do esperado
+        - Torcida e clima familiar fazem diferença!
+        """)
+        
+        st.markdown("""
+        **📈 Seleções em Alta:**
+        - 🇲🇦 Marrocos: Semifinalista em 2022
+        - 🇯🇵 Japão: Eliminando potências europeias
+        - 🇦🇺 Austrália: Crescimento consistente
+        """)
+    
+    with col2:
+        st.markdown("""
+        **⚠️ Atenção aos Grupos:**
+        - **Grupo C** (Brasil, Marrocos, Escócia, Haiti): Grupo da morte!
+        - **Grupo L** (Inglaterra, Croácia, Gana, Panamá): Muito equilibrado
+        - **Grupo J** (Argentina, Argélia, Áustria, Jordânia): Argentina favorita
+        """)
+        
+        st.markdown("""
+        **🎲 Zebras Históricas:**
+        - Coreia do Sul 2002 (4º lugar)
+        - Croácia 2018 (Vice-campeã)
+        - Marrocos 2022 (4º lugar)
+        """)
+    
+    # Rodapé
+    st.markdown("---")
+    st.caption("📅 Ranking FIFA atualizado em Dezembro/2025 | Fonte: FIFA.com")
+
+
+# =============================================================================
+# PÁGINA DE RANKING
+# =============================================================================
+def page_ranking():
+    """
+    Página de ranking com visual aprimorado:
+    - Pódio para os 3 primeiros
+    - Destaque para zona de rebaixamento
+    - Configuração de quantos serão rebaixados
+    """
+    import streamlit as st
+    from db import get_session, get_config_value, set_config_value
+    from scoring import get_ranking
+    
+    render_page_header()
+    st.header("🏆 Ranking do Bolão")
+    
+    with get_session(engine) as session:
+        ranking = get_ranking(session)
+        
+        if not ranking:
+            st.info("Nenhum participante no ranking ainda.")
+            return
+        
+        # Configuração de rebaixamento (apenas admin vê)
+        qtd_rebaixados = int(get_config_value(session, 'qtd_rebaixados', '2'))
+        
+        if st.session_state.user.get('role') == 'admin':
+            with st.expander("⚙️ Configurar Zona de Rebaixamento"):
+                nova_qtd = st.number_input(
+                    "Quantidade de rebaixados:",
+                    min_value=0,
+                    max_value=10,
+                    value=qtd_rebaixados,
+                    help="Define quantos participantes estarão na zona de rebaixamento"
+                )
+                if st.button("💾 Salvar Configuração"):
+                    set_config_value(session, 'qtd_rebaixados', str(nova_qtd))
+                    st.success("✅ Configuração salva!")
+                    st.rerun()
+        
+        # CSS para o pódio e ranking
+        st.markdown("""
+        <style>
+            /* Marca d'água do logo Copa 2026 */
+            .ranking-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 400px;
+                height: 400px;
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+                opacity: 0.06;
+                pointer-events: none;
+                z-index: 0;
+            }
+            
+            .podio-container {
+                display: flex;
+                justify-content: center;
+                align-items: flex-end;
+                gap: 20px;
+                margin: 30px 0;
+                padding: 20px;
+                position: relative;
+                z-index: 1;
+            }
+            
+            .podio-item {
+                text-align: center;
+                border-radius: 15px;
+                padding: 20px;
+                min-width: 150px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                background: transparent !important;
+            }
+            
+            .podio-1 {
+                background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%) !important;
+                height: 200px;
+                order: 2;
+            }
+            
+            .podio-2 {
+                background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%) !important;
+                height: 160px;
+                order: 1;
+            }
+            
+            .podio-3 {
+                background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%) !important;
+                height: 130px;
+                order: 3;
+            }
+            
+            /* Forçar cores corretas no pódio */
+            .podio-item.podio-1,
+            .podio-item.podio-2,
+            .podio-item.podio-3 {
+                color: #1a1a2e !important;
+            }
+            
+            .podio-item.podio-1 *,
+            .podio-item.podio-2 *,
+            .podio-item.podio-3 * {
+                background: transparent !important;
+                color: #1a1a2e !important;
+            }
+            
+            .podio-posicao {
+                font-size: 2.5rem;
+                font-weight: bold;
+                margin-bottom: 10px;
+                background: transparent !important;
+            }
+            
+            .podio-nome {
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #1a1a2e !important;
+                margin-bottom: 5px;
+                background: transparent !important;
+            }
+            
+            .podio-pontos {
+                font-size: 1.3rem;
+                font-weight: bold;
+                color: #1E3A5F !important;
+                background: transparent !important;
+            }
+            
+            .ranking-row {
+                display: flex;
+                align-items: center;
+                padding: 12px 20px;
+                margin: 5px 0;
+                border-radius: 10px;
+                background: #ffffff;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            
+            .ranking-row-1 {
+                background: linear-gradient(90deg, rgba(255,215,0,0.15) 0%, #ffffff 100%);
+                border: 2px solid #FFD700;
+                box-shadow: 0 3px 10px rgba(255,215,0,0.3);
+            }
+            
+            .ranking-row-2 {
+                background: linear-gradient(90deg, rgba(192,192,192,0.15) 0%, #ffffff 100%);
+                border: 2px solid #C0C0C0;
+                box-shadow: 0 3px 10px rgba(192,192,192,0.3);
+            }
+            
+            .ranking-row-3 {
+                background: linear-gradient(90deg, rgba(205,127,50,0.15) 0%, #ffffff 100%);
+                border: 2px solid #CD7F32;
+                box-shadow: 0 3px 10px rgba(205,127,50,0.3);
+            }
+            
+            .ranking-row-rebaixado {
+                background: linear-gradient(90deg, #ffebee 0%, #ffffff 100%);
+                border-left: 4px solid #E63946;
+            }
+            
+            .ranking-posicao {
+                font-size: 1.5rem;
+                font-weight: bold;
+                width: 50px;
+                color: #1E3A5F;
+            }
+            
+            .ranking-nome {
+                flex: 1;
+                font-size: 1.1rem;
+                font-weight: 600;
+                color: #1a1a2e;
+            }
+            
+            .ranking-pontos {
+                font-size: 1.2rem;
+                font-weight: bold;
+                color: #1E3A5F;
+                background: #e9ecef;
+                padding: 5px 15px;
+                border-radius: 20px;
+            }
+            
+            /* CSS da zona de rebaixamento removido - usando estilo inline */
+            
+            /* ========================================
+               PÓDIO RESPONSIVO - MOBILE
+               Espaçamento uniforme entre os cards
+               ======================================== */
+            
+            /* Desktop: manter efeito de pódio escalonado - 2º e 3º na mesma altura */
+            @media (min-width: 769px) {
+                .podio-2 {
+                    margin-top: 50px !important;
+                }
+                .podio-3 {
+                    margin-top: 50px !important;
+                }
+            }
+            
+            /* Mobile: espaçamento uniforme, altura adequada e ordem 1º, 2º, 3º */
+            @media (max-width: 768px) {
+                /* Container flex para reordenar */
+                .stColumns {
+                    display: flex !important;
+                    flex-direction: column !important;
+                }
+                
+                /* Reordenar colunas: 1º lugar primeiro, depois 2º, depois 3º */
+                [data-testid="column"]:has(.podio-1) {
+                    order: 1 !important;
+                }
+                [data-testid="column"]:has(.podio-2) {
+                    order: 2 !important;
+                }
+                [data-testid="column"]:has(.podio-3) {
+                    order: 3 !important;
+                }
+                
+                /* Esconder colunas de espaçamento */
+                [data-testid="column"]:empty {
+                    display: none !important;
+                }
+                
+                .podio-card {
+                    margin-top: 0 !important;
+                    margin-bottom: 15px !important;
+                    min-height: auto !important;
+                    height: auto !important;
+                    padding-bottom: 20px !important;
+                    overflow: visible !important;
+                }
+                
+                .podio-1, .podio-2, .podio-3 {
+                    margin-top: 0 !important;
+                    min-height: auto !important;
+                    height: auto !important;
+                }
+                
+                /* Garantir que o conteúdo não seja cortado */
+                [data-testid="column"] {
+                    overflow: visible !important;
+                }
+                
+                [data-testid="column"] > div {
+                    overflow: visible !important;
+                }
+            }
+        
+    /* ========================================
+       ÍCONE DA SIDEBAR - FORÇAR BRANCO
+       ======================================== */
+    
+    /* Ícone >> quando sidebar está fechada - PRECISA SER VISÍVEL */
+    [data-testid="collapsedControl"] {
+        background: #1E3A5F !important;
+        border-radius: 0 8px 8px 0;
+        padding: 8px;
+    }
+    
+    [data-testid="collapsedControl"] button {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] svg *,
+    [data-testid="collapsedControl"] span {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Ícone << quando sidebar está aberta */
+    [data-testid="stSidebar"] button[kind="header"],
+    [data-testid="stSidebar"] [data-testid="baseButton-header"],
+    [data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"] {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    [data-testid="stSidebar"] button[kind="header"] svg,
+    [data-testid="stSidebar"] button[kind="header"] svg *,
+    [data-testid="stSidebar"] [data-testid="baseButton-header"] svg,
+    [data-testid="stSidebar"] [data-testid="baseButton-header"] svg *,
+    [data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"] svg,
+    [data-testid="stSidebar"] [data-testid="baseButton-headerNoPadding"] svg * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Material icons dentro da sidebar */
+    [data-testid="stSidebar"] .material-icons,
+    [data-testid="stSidebar"] span[class*="icon"],
+    [data-testid="stSidebar"] span[data-testid*="icon"] {
+        color: #ffffff !important;
+    }
+    
+    /* Texto "keyboard_double_arrow_left" que aparece */
+    [data-testid="stSidebar"] button span {
+        color: #ffffff !important;
+    }
+
+
+    /* ========================================
+       ÍCONE DA SIDEBAR FECHADA - SUPER VISÍVEL
+       ======================================== */
+    
+    /* Container do botão quando sidebar está fechada */
+    [data-testid="collapsedControl"] {
+        background-color: #3498db !important;
+        border-radius: 0 12px 12px 0 !important;
+        padding: 12px 8px !important;
+        box-shadow: 2px 2px 8px rgba(0,0,0,0.3) !important;
+        margin-top: 10px !important;
+    }
+    
+    [data-testid="collapsedControl"]:hover {
+        background-color: #2980b9 !important;
+    }
+    
+    /* Botão dentro do container */
+    [data-testid="collapsedControl"] > button,
+    [data-testid="collapsedControl"] button {
+        color: #ffffff !important;
+        background: transparent !important;
+    }
+    
+    /* SVG e ícones dentro */
+    [data-testid="collapsedControl"] svg,
+    [data-testid="collapsedControl"] svg path,
+    [data-testid="collapsedControl"] svg *,
+    [data-testid="collapsedControl"] span,
+    [data-testid="collapsedControl"] * {
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Header escuro no topo quando sidebar fechada */
+    header[data-testid="stHeader"] {
+        background-color: #1E3A5F !important;
+    }
+
+</style>
+        """, unsafe_allow_html=True)
+        
+        # Adiciona marca d'água do logo Copa 2026
+        st.markdown('<div class="ranking-watermark"></div>', unsafe_allow_html=True)
+        
+        # ========================================
+        # PÓDIO - TOP 3
+        # ========================================
+        st.subheader("🥇 Pódio")
+        
+        if len(ranking) >= 3:
+            # Pódio visual usando inline-flex - funciona bem no mobile
+            # Mantém horizontal em todas as telas
+            
+            primeiro = ranking[0]
+            segundo = ranking[1]
+            terceiro = ranking[2]
+            
+            # Renderizar os 3 cards inline com st.markdown individual
+            # 2º lugar
+            st.markdown(f'''
+            <div class="podio-card-light" style="
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                width: 30%;
+                max-width: 140px;
+                min-width: 85px;
+                background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
+                border-radius: 10px;
+                padding: 12px 6px;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                border: 3px solid #d4d4d4;
+                margin-top: 25px;
+                vertical-align: bottom;
+            ">
+                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 3px 8px; border-radius: 8px; font-size: 0.6rem; font-weight: bold; margin-bottom: 6px;">2º LUGAR</div>
+                <div style="font-size: 1.8rem; margin: 4px 0;">🥈</div>
+                <div style="font-size: 0.75rem; font-weight: 700; color: #1a1a2e !important; margin-bottom: 8px; word-wrap: break-word; line-height: 1.2;">{segundo['nome']}</div>
+                <div style="font-size: 0.9rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 4px 10px; border-radius: 6px;">{segundo['total_pontos']} pts</div>
+            </div><div class="podio-card-light" style="
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                width: 34%;
+                max-width: 160px;
+                min-width: 95px;
+                background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
+                border-radius: 10px;
+                padding: 14px 8px;
+                text-align: center;
+                box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+                border: 3px solid #FFD700;
+                margin: 0 2%;
+                vertical-align: bottom;
+            ">
+                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 4px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: bold; margin-bottom: 6px;">🏆 CAMPEÃO</div>
+                <div style="font-size: 2.2rem; margin: 5px 0;">🥇</div>
+                <div style="font-size: 0.85rem; font-weight: 700; color: #1a1a2e !important; margin-bottom: 10px; word-wrap: break-word; line-height: 1.2;">{primeiro['nome']}</div>
+                <div style="font-size: 1rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 5px 12px; border-radius: 6px;">{primeiro['total_pontos']} pts</div>
+            </div><div class="podio-card-light" style="
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                width: 30%;
+                max-width: 140px;
+                min-width: 85px;
+                background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
+                border-radius: 10px;
+                padding: 12px 6px;
+                text-align: center;
+                box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                border: 3px solid #CD7F32;
+                margin-top: 25px;
+                vertical-align: bottom;
+            ">
+                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 3px 8px; border-radius: 8px; font-size: 0.6rem; font-weight: bold; margin-bottom: 6px;">3º LUGAR</div>
+                <div style="font-size: 1.8rem; margin: 4px 0;">🥉</div>
+                <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff !important; margin-bottom: 8px; word-wrap: break-word; line-height: 1.2;">{terceiro['nome']}</div>
+                <div style="font-size: 0.9rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 4px 10px; border-radius: 6px;">{terceiro['total_pontos']} pts</div>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        elif len(ranking) > 0:
+            # Menos de 3 participantes - mostra o que tem
+            for i, r in enumerate(ranking[:3]):
+                medalha = ["🥇", "🥈", "🥉"][i]
+                st.markdown(f"**{medalha} {r['nome']}** - {r['total_pontos']} pts")
+        
+        st.divider()
+        
+        # ========================================
+        # RANKING COMPLETO
+        # ========================================
+        st.subheader("📊 Classificação Completa")
+        
+        # Determina a posição de início da zona de rebaixamento
+        total_participantes = len(ranking)
+        inicio_rebaixamento = total_participantes - qtd_rebaixados
+        
+        # Mostra ranking - separado em duas partes (antes e depois da zona de rebaixamento)
+        ranking_html_normal = ""
+        ranking_html_rebaixados = ""
+        
+        for i, r in enumerate(ranking):
+            posicao = i + 1
+            nome = r['nome']
+            pontos = r['total_pontos']
+            
+            # Verifica se está na zona de rebaixamento
+            is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
+            
+            # Classe CSS - adiciona classe de posição para os 3 primeiros
+            if is_rebaixado:
+                row_class = "ranking-row-rebaixado"
+            elif posicao <= 3:
+                row_class = f"ranking-row-{posicao}"
+            else:
+                row_class = ""
+            
+            # Ícone de posição
+            if posicao == 1:
+                icone = "🥇"
+            elif posicao == 2:
+                icone = "🥈"
+            elif posicao == 3:
+                icone = "🥉"
+            elif is_rebaixado:
+                icone = f"⬇️ {posicao}º"
+            else:
+                icone = f"{posicao}º"
+            
+            row_html = f'''
+            <div class="ranking-row {row_class}">
+                <div class="ranking-posicao">{icone}</div>
+                <div class="ranking-nome">{nome}</div>
+                <div class="ranking-pontos">{pontos} pts</div>
+            </div>
+            '''
+            
+            if is_rebaixado:
+                ranking_html_rebaixados += row_html
+            else:
+                ranking_html_normal += row_html
+        
+        # Renderiza ranking normal
+        st.markdown(ranking_html_normal, unsafe_allow_html=True)
+        
+        # Renderiza zona de rebaixamento (se houver)
+        if qtd_rebaixados > 0 and ranking_html_rebaixados:
+            st.warning(f"⚠️ ZONA DE REBAIXAMENTO ({qtd_rebaixados} {'vaga' if qtd_rebaixados == 1 else 'vagas'})")
+            st.markdown(ranking_html_rebaixados, unsafe_allow_html=True)
+        
+        # ========================================
+        # ESTATÍSTICAS ADICIONAIS
+        # ========================================
+        st.divider()
+        st.subheader("📈 Estatísticas")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("👥 Participantes", total_participantes)
+        
+        with col2:
+            if ranking:
+                maior_pontuacao = max(r['total_pontos'] for r in ranking)
+                st.metric("🏆 Maior Pontuação", f"{maior_pontuacao} pts")
+        
+        with col3:
+            if ranking:
+                media = sum(r['total_pontos'] for r in ranking) / len(ranking)
+                st.metric("📊 Média", f"{media:.1f} pts")
+        
+        with col4:
+            st.metric("⬇️ Zona de Rebaixamento", f"{qtd_rebaixados} vagas")
+        
+        # ========================================
+        # CRITÉRIOS DE DESEMPATE
+        # ========================================
+        with st.expander("📋 Critérios de Desempate"):
+            st.markdown("""
+            Em caso de empate em pontos, os critérios de desempate são:
+            
+            1. **Maior número de placares exatos** (20 pts)
+            2. **Maior número de acerto de Vencedores com gols corretos** (15 pts)
+            3. **Maior número de acerto de Vencedores** (10 pts)
+            4. **Maior número de acerto de classificados no grupo**
+            5. **Maior número de acerto de pódio**
+            6. **Maior número de acerto de gols de um time** (5 pts)
+            7. **Menos palpites zerados**
+            8. **Ordem de inscrição** (quem se inscreveu primeiro)
+            """)
+
+
+# =============================================================================
+# PÁGINA DE ESTATÍSTICAS
+# =============================================================================
+def page_estatisticas():
+    """Página com estatísticas do usuário"""
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from datetime import datetime, timedelta
+    
+    render_page_header()
+    st.markdown("## 📈 Suas Estatísticas")
+    
+    session = get_session(engine)
+    
+    try:
+        stats = get_user_stats(session, st.session_state.user['id'])
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("⭐ Total de Pontos", stats.get('total_pontos', 0))
+            st.metric("🎯 Placares Exatos", stats.get('placares_exatos', 0))
+        
+        with col2:
+            st.metric("✅ Resultados Corretos", stats.get('resultados_corretos', 0))
+            st.metric("📝 Total de Palpites", stats.get('total_palpites', 0))
+        
+        with col3:
+            st.metric("🏅 Pontos de Grupos", stats.get('pontos_grupos', 0))
+            st.metric("🏆 Pontos de Pódio", stats.get('pontos_podio', 0))
+        
+        st.divider()
+        
+        # ========================================
+        # GRÁFICO DE EVOLUÇÃO DE PONTOS
+        # ========================================
+        st.subheader("📈 Evolução de Pontos")
+        
+        # Busca todos os palpites do usuário com pontos de jogos que já iniciaram
+        from datetime import datetime
+        import pytz
+        
+        now = datetime.now(pytz.timezone('America/Sao_Paulo'))
+        
+        # Busca palpites com pontos
+        user_predictions = session.query(Prediction).filter(
+            Prediction.user_id == st.session_state.user['id'],
+            Prediction.points_awarded > 0
+        ).all()
+        
+        if user_predictions:
+            # Agrupa pontos por data do jogo (apenas jogos que já iniciaram)
+            pontos_por_data = {}
+            for pred in user_predictions:
+                match = session.query(Match).get(pred.match_id)
+                if match and match.datetime:
+                    # Só considera se o jogo já iniciou
+                    match_time = match.datetime
+                    if match_time.tzinfo is None:
+                        match_time = pytz.timezone('America/Sao_Paulo').localize(match_time)
+                    
+                    if match_time <= now:
+                        data_str = match.datetime.strftime('%d/%m')
+                        if data_str not in pontos_por_data:
+                            pontos_por_data[data_str] = 0
+                        pontos_por_data[data_str] += pred.points_awarded
+            
+            if pontos_por_data:
+                # Ordena por data
+                datas = list(pontos_por_data.keys())
+                pontos = list(pontos_por_data.values())
+                
+                # Calcula pontos acumulados
+                pontos_acumulados = []
+                acumulado = 0
+                for p in pontos:
+                    acumulado += p
+                    pontos_acumulados.append(acumulado)
+                
+                # Calcula limites dinâmicos para os eixos
+                max_acumulado = max(pontos_acumulados) if pontos_acumulados else 0
+                max_dia = max(pontos) if pontos else 0
+                
+                # Usa o maior valor entre os dois para ter a mesma escala
+                y_max = max(max_acumulado, max_dia) * 1.2 if max(max_acumulado, max_dia) > 0 else 10
+                
+                # Cria gráfico com Plotly
+                fig = go.Figure()
+                
+                # Linha de evolução
+                fig.add_trace(go.Scatter(
+                    x=datas,
+                    y=pontos_acumulados,
+                    mode='lines+markers',
+                    name='Pontos Acumulados',
+                    line=dict(color='#3498db', width=3),
+                    marker=dict(size=10, color='#2980b9'),
+                    fill='tozeroy',
+                    fillcolor='rgba(52, 152, 219, 0.2)'
+                ))
+                
+                # Barras de pontos por dia
+                fig.add_trace(go.Bar(
+                    x=datas,
+                    y=pontos,
+                    name='Pontos no Dia',
+                    marker_color='rgba(46, 204, 113, 0.7)',
+                    yaxis='y2',
+                    width=0.4,  # Largura mais fina das barras
+                    opacity=0.6
+                ))
+                
+                fig.update_layout(
+                    title='🏆 Sua Evolução no Bolão',
+                    xaxis_title='Data',
+                    yaxis=dict(
+                        title='Pontos Acumulados',
+                        range=[0, y_max]
+                    ),
+                    yaxis2=dict(
+                        title='Pontos no Dia',
+                        overlaying='y',
+                        side='right',
+                        range=[0, y_max]  # Mesma escala do eixo esquerdo
+                    ),
+                    legend=dict(
+                        orientation='h',
+                        yanchor='bottom',
+                        y=1.02,
+                        xanchor='right',
+                        x=1
+                    ),
+                    hovermode='x unified',
+                    plot_bgcolor='white',
+                    paper_bgcolor='white'
+                )
+                
+                # Atualiza cores dos eixos e linhas de grade
+                fig.update_xaxes(
+                    title_font_color='black', 
+                    tickfont_color='black',
+                    showgrid=True,
+                    gridcolor='rgba(200, 200, 200, 0.3)',
+                    gridwidth=1
+                )
+                fig.update_yaxes(
+                    title_font_color='black', 
+                    tickfont_color='black',
+                    showgrid=True,
+                    gridcolor='rgba(200, 200, 200, 0.3)',
+                    gridwidth=1
+                )
+                # Remove linhas de grade do eixo Y secundário para evitar duplicação
+                fig.update_yaxes(showgrid=False, selector=dict(overlaying='y'))
+                
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("📊 Ainda não há dados suficientes para o gráfico de evolução.")
+        else:
+            st.info("📊 Você ainda não pontuou em nenhum jogo. Aguarde os resultados!")
+        
+        st.divider()
+        
+        # ========================================
+        # GRÁFICO DE DISTRIBUIÇÃO DE PONTOS
+        # ========================================
+        st.subheader("🎯 Distribuição de Acertos")
+        
+        # Conta tipos de acertos baseado no campo points_type
+        # SÓ considera jogos que já começaram E têm placar registrado
+        from sqlalchemy import func
+        from datetime import datetime
+        import pytz
+        
+        brazil_tz = pytz.timezone('America/Sao_Paulo')
+        now_br = datetime.now(brazil_tz)
+        now_naive = now_br.replace(tzinfo=None)
+        
+        # Busca IDs de jogos que já começaram E têm placar registrado
+        jogos_com_resultado = session.query(Match.id).filter(
+            Match.datetime <= now_naive,
+            Match.team1_score.isnot(None),
+            Match.team2_score.isnot(None)
+        ).all()
+        jogos_com_resultado_ids = [j[0] for j in jogos_com_resultado]
+        
+        # Busca contagem por tipo de acerto apenas de jogos com resultado
+        if jogos_com_resultado_ids:
+            tipos_acertos = session.query(
+                Prediction.points_type,
+                func.count(Prediction.id).label('count')
+            ).filter(
+                Prediction.user_id == st.session_state.user['id'],
+                Prediction.match_id.in_(jogos_com_resultado_ids),
+                Prediction.points_awarded > 0,
+                Prediction.points_type.isnot(None)
+            ).group_by(Prediction.points_type).all()
+        else:
+            tipos_acertos = []
+        
+        # Mapeamento de tipos para labels e cores
+        tipo_config = {
+            'placar_exato': ('Placar Exato (20pts)', '#3CAC3B'),
+            'resultado_gols': ('Resultado + Gols (15pts)', '#2ECC71'),
+            'apenas_resultado': ('Resultado Correto (10pts)', '#2A398D'),
+            'apenas_gols': ('Gols de um Time (5pts)', '#F39C12'),
+        }
+        
+        if tipos_acertos:
+            labels = []
+            values = []
+            colors = []
+            
+            for tipo, count in tipos_acertos:
+                if tipo in tipo_config:
+                    label, color = tipo_config[tipo]
+                    labels.append(label)
+                    values.append(count)
+                    colors.append(color)
+            
+            # Só mostra o gráfico se houver dados válidos
+            if values and sum(values) > 0:
+                # Ajusta pull dinamicamente baseado no número de categorias
+                pull_values = [0.05] + [0.02] * (len(values) - 1) if len(values) > 1 else [0.05]
+                
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=0.4,
+                    marker_colors=colors,
+                    textinfo='percent',
+                    textposition='inside',
+                    insidetextfont=dict(size=14, color='white'),
+                    pull=pull_values
+                )])
+                
+                fig_pie.update_layout(
+                    title='Tipos de Acertos',
+                    showlegend=True,
+                    legend=dict(
+                        orientation='h',
+                        yanchor='bottom',
+                        y=-0.2,
+                        xanchor='center',
+                        x=0.5,
+                        font=dict(size=12, color='#333333'),
+                        bgcolor='rgba(255,255,255,0.9)',
+                        bordercolor='#E0E0E0',
+                        borderwidth=1
+                    ),
+                    plot_bgcolor='#FAFAFA',
+                    paper_bgcolor='#FAFAFA',
+                    font=dict(color='#333333'),
+                    margin=dict(t=50, b=100, l=20, r=20)
+                )
+                
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
+        else:
+            st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
+    
+    finally:
+        session.close()
+
+# =============================================================================
+# PÁGINA DE CONFIGURAÇÕES
+# =============================================================================
+def page_configuracoes():
+    """Página de configurações do usuário"""
+    render_page_header()
+    st.markdown("## ⚙️ Configurações")
+    
+    session = get_session(engine)
+    
+    try:
+        st.subheader("🔐 Alterar Senha")
+        
+        with st.form("change_password"):
+            current_password = st.text_input("Senha atual", type="password")
+            new_password = st.text_input("Nova senha", type="password")
+            confirm_password = st.text_input("Confirmar nova senha", type="password")
+            
+            if st.form_submit_button("Alterar Senha"):
+                if not all([current_password, new_password, confirm_password]):
+                    st.warning("Preencha todos os campos!")
+                elif new_password != confirm_password:
+                    st.error("As senhas não coincidem!")
+                elif len(new_password) < 4:
+                    st.error("A senha deve ter pelo menos 4 caracteres!")
+                else:
+                    user = session.query(User).get(st.session_state.user['id'])
+                    if change_password(session, user, current_password, new_password):
+                        st.success("Senha alterada com sucesso!")
+                    else:
+                        st.error("Senha atual incorreta!")
+    
+    finally:
+        session.close()
+
+def admin_gerenciar_repescagem(session):
+    """
+    Página de administração para definir os times classificados da repescagem
+    """
+    st.subheader("🔄 Gerenciar Times da Repescagem")
+    
+    st.info("""
+    **Instruções:**
+    Selecione as seleções que se classificaram em cada vaga da repescagem.
+    Após selecionar, clique em "Salvar" para atualizar os jogos automaticamente.
+    """)
+    
+    if True:  # Mantém a indentação
+        # Para cada vaga de repescagem
+        for vaga, opcoes in SELECOES_REPESCAGEM.items():
+            with st.expander(f"📋 Vaga: {vaga}", expanded=False):
+                # Verifica se já existe um time definido para essa vaga
+                team_atual = session.query(Team).filter(Team.code == vaga).first()
+                
+                if team_atual and team_atual.name != vaga:
+                    st.success(f"✅ Definido: {team_atual.flag} {team_atual.name}")
+                else:
+                    st.warning(f"⏳ Aguardando definição")
+                
+                # Cria opções para o selectbox
+                opcoes_select = [{"code": "", "name": "Selecione...", "flag": ""}] + opcoes
+                
+                selecao = st.selectbox(
+                    f"Selecione a seleção classificada para {vaga}:",
+                    options=range(len(opcoes_select)),
+                    format_func=lambda i: f"{opcoes_select[i]['flag']} {opcoes_select[i]['name']}" if opcoes_select[i]['code'] else "Selecione...",
+                    key=f"repescagem_{vaga}"
+                )
+                
+                if st.button(f"💾 Salvar {vaga}", key=f"btn_salvar_{vaga}"):
+                    if selecao > 0:
+                        selecao_escolhida = opcoes_select[selecao]
+                        
+                        # Atualiza ou cria o time
+                        if team_atual:
+                            team_atual.code = selecao_escolhida['code']
+                            team_atual.name = selecao_escolhida['name']
+                            team_atual.flag = selecao_escolhida['flag']
+                        else:
+                            novo_team = Team(
+                                code=selecao_escolhida['code'],
+                                name=selecao_escolhida['name'],
+                                flag=selecao_escolhida['flag'],
+                                group=None  # Será definido pelo jogo
+                            )
+                            session.add(novo_team)
+                            session.flush()
+                            
+                            # Atualiza os jogos que usam essa vaga
+                            jogos_team1 = session.query(Match).filter(Match.team1_code == vaga).all()
+                            for jogo in jogos_team1:
+                                jogo.team1_id = novo_team.id
+                                jogo.team1_code = selecao_escolhida['code']
+                            
+                            jogos_team2 = session.query(Match).filter(Match.team2_code == vaga).all()
+                            for jogo in jogos_team2:
+                                jogo.team2_id = novo_team.id
+                                jogo.team2_code = selecao_escolhida['code']
+                        
+                        session.commit()
+                        st.success(f"✅ {selecao_escolhida['flag']} {selecao_escolhida['name']} definido para {vaga}!")
+                        st.rerun()
+                    else:
+                        st.error("Selecione uma seleção válida!")
+        
+        st.divider()
+        
+        # Resumo das vagas
+        st.subheader("📊 Resumo das Vagas de Repescagem")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**🇪🇺 Repescagem Europa:**")
+            for vaga in ["EUR_A", "EUR_B", "EUR_C", "EUR_D"]:
+                team = session.query(Team).filter(Team.code == vaga).first()
+                if team and team.name != vaga:
+                    st.write(f"• {vaga}: {team.flag} {team.name}")
+                else:
+                    st.write(f"• {vaga}: ⏳ Aguardando")
+        
+        with col2:
+            st.markdown("**🌍 Repescagem Intercontinental:**")
+            for vaga in ["INT_1", "INT_2"]:
+                team = session.query(Team).filter(Team.code == vaga).first()
+                if team and team.name != vaga:
+                    st.write(f"• {vaga}: {team.flag} {team.name}")
+                else:
+                    st.write(f"• {vaga}: ⏳ Aguardando")
+
+
+
+def admin_repescagem(session):
+    """Aba de gerenciamento de repescagem no painel admin"""
+    admin_gerenciar_repescagem(session)
+
+
+# =============================================================================
+# PÁGINA DE ADMINISTRAÇÃO
+# =============================================================================
+def page_admin():
+    """Página de administração"""
+    if st.session_state.user['role'] != 'admin':
+        st.error("Acesso negado!")
+        return
+    
+    render_page_header()
+    st.markdown("## 🔧 Painel Administrativo")
+    
+    session = get_session(engine)
+    
+    try:
+        tabs = st.tabs([
+            "👥 Participantes",
+            "🏳️ Seleções",
+            "⚽ Jogos",
+            "📝 Resultados",
+            "🏅 Grupos",
+            "🏆 Pódio",
+            "⭐ Pontuação",
+            "💰 Premiação",
+            "📋 Palpites",
+            "🔄 Repescagem"
+        ])
+        
+        with tabs[0]:
+            admin_participantes(session)
+        
+        with tabs[1]:
+            admin_selecoes(session)
+        
+        with tabs[2]:
+            admin_jogos(session)
+        
+        with tabs[3]:
+            admin_resultados(session)
+        
+        with tabs[4]:
+            admin_grupos(session)
+        
+        with tabs[5]:
+            admin_podio(session)
+        
+        with tabs[6]:
+            admin_pontuacao(session)
+        
+        with tabs[7]:
+            admin_premiacao(session)
+        
+        with tabs[8]:
+            admin_palpites(session)
+        
+        with tabs[9]:
+            admin_repescagem(session)
+    
+    finally:
+        session.close()
+
+
+def admin_participantes(session):
+    """Gerenciamento de participantes"""
+    st.subheader("👥 Gerenciar Participantes")
+    
+    # Formulário para novo participante
+    with st.expander("➕ Adicionar Participante"):
+        with st.form("new_participant"):
+            name = st.text_input("Nome completo")
+            username = st.text_input("Usuário")
+            password = st.text_input("Senha", type="password")
+            
+            if st.form_submit_button("Criar Participante"):
+                if name and username and password:
+                    user = create_user(session, name, username, password, 'player')
+                    if user:
+                        st.success(f"Participante '{name}' criado com sucesso!")
+                        log_action(session, st.session_state.user['id'], 'participante_criado', user.id)
+                        st.rerun()
+                    else:
+                        st.error("Usuário já existe!")
+                else:
+                    st.warning("Preencha todos os campos!")
+    
+    # Lista de participantes
+    users = session.query(User).filter(User.role == 'player').order_by(User.name).all()
+    
+    for user in users:
+        status = "✅ Ativo" if user.active else "❌ Inativo"
+        
+        with st.expander(f"{user.name} (@{user.username}) - {status}"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if user.active:
+                    if st.button(f"🚫 Desativar", key=f"deactivate_{user.id}"):
+                        user.active = False
+                        session.commit()
+                        log_action(session, st.session_state.user['id'], 'participante_desativado', user.id)
+                        st.rerun()
+                else:
+                    if st.button(f"✅ Ativar", key=f"activate_{user.id}"):
+                        user.active = True
+                        session.commit()
+                        log_action(session, st.session_state.user['id'], 'participante_ativado', user.id)
+                        st.rerun()
+            
+            with col2:
+                if st.button(f"🔑 Resetar Senha", key=f"reset_{user.id}"):
+                    user.password_hash = hash_password("123456")
+                    session.commit()
+                    st.success(f"Senha resetada para '123456'")
+                    log_action(session, st.session_state.user['id'], 'senha_resetada', user.id)
+            
+            with col3:
+                # Botão de excluir com confirmação
+                if st.button(f"🗑️ Excluir", key=f"delete_{user.id}", type="secondary"):
+                    st.session_state[f'confirm_delete_{user.id}'] = True
+                
+                # Confirmação de exclusão
+                if st.session_state.get(f'confirm_delete_{user.id}', False):
+                    st.warning(f"⚠️ Tem certeza que deseja EXCLUIR '{user.name}'?")
+                    st.caption("Esta ação é irreversível! Todos os palpites serão perdidos.")
+                    
+                    confirm_col1, confirm_col2 = st.columns(2)
+                    with confirm_col1:
+                        if st.button("✅ Sim, excluir", key=f"confirm_yes_{user.id}", type="primary"):
+                            # Deletar palpites do usuário
+                            session.query(Prediction).filter(Prediction.user_id == user.id).delete()
+                            session.query(GroupPrediction).filter(GroupPrediction.user_id == user.id).delete()
+                            session.query(PodiumPrediction).filter(PodiumPrediction.user_id == user.id).delete()
+                            
+                            # Registrar ação antes de deletar
+                            log_action(session, st.session_state.user['id'], 'participante_excluido', user.id, 
+                                      f"Excluído: {user.name} (@{user.username})")
+                            
+                            # Deletar usuário
+                            session.delete(user)
+                            session.commit()
+                            
+                            st.success(f"Participante '{user.name}' excluído com sucesso!")
+                            st.session_state[f'confirm_delete_{user.id}'] = False
+                            st.rerun()
+                    
+                    with confirm_col2:
+                        if st.button("❌ Cancelar", key=f"confirm_no_{user.id}"):
+                            st.session_state[f'confirm_delete_{user.id}'] = False
+                            st.rerun()
+
+
+def admin_selecoes(session):
+    """Gerenciamento de seleções"""
+    st.subheader("🏳️ Gerenciar Seleções")
+    
+    teams = session.query(Team).order_by(Team.group, Team.name).all()
+    
+    for team in teams:
+        with st.expander(f"{team.flag} {team.name} - Grupo {team.group}"):
+            with st.form(f"team_{team.id}"):
+                new_name = st.text_input("Nome", value=team.name, key=f"team_name_{team.id}")
+                new_flag = st.text_input("Bandeira (emoji)", value=team.flag, key=f"team_flag_{team.id}")
+                new_group = st.selectbox(
+                    "Grupo",
+                    options=GRUPOS,
+                    index=GRUPOS.index(team.group) if team.group in GRUPOS else 0,
+                    key=f"team_group_{team.id}"
+                )
+                
+                if st.form_submit_button("💾 Salvar"):
+                    team.name = new_name
+                    team.flag = new_flag
+                    team.group = new_group
+                    session.commit()
+                    st.success("Seleção atualizada!")
+                    st.rerun()
+
+
+def admin_jogos(session):
+    """Gerenciamento de jogos"""
+    st.subheader("⚽ Gerenciar Jogos")
+    
+    # Filtros
+    col1, col2 = st.columns(2)
+    with col1:
+        fase_filter = st.selectbox(
+            "Filtrar por Fase",
+            options=["Todas"] + list(FASES.keys()),
+            key="admin_fase_filter"
+        )
+    with col2:
+        grupo_filter = st.selectbox(
+            "Filtrar por Grupo",
+            options=["Todos"] + GRUPOS + ["Mata-mata"],
+            key="admin_grupo_filter"
+        )
+    
+    query = session.query(Match).order_by(Match.match_number)
+    
+    if fase_filter != "Todas":
+        query = query.filter(Match.phase == fase_filter)
+    if grupo_filter != "Todos":
+        if grupo_filter == "Mata-mata":
+            query = query.filter(Match.group.is_(None))
+        else:
+            query = query.filter(Match.group == grupo_filter)
+    
+    jogos = query.all()
+    
+    st.markdown(f"**Total de jogos:** {len(jogos)}")
+    
+    teams = session.query(Team).order_by(Team.name).all()
+    team_options = {t.id: f"{t.flag} {t.name}" for t in teams}
+    team_ids = [None] + list(team_options.keys())
+    
+    for match in jogos:
+        team1_display = get_team_display(match.team1, match.team1_code)
+        team2_display = get_team_display(match.team2, match.team2_code)
+        
+        with st.expander(f"#{match.match_number} - {team1_display} vs {team2_display} | {format_datetime(match.datetime)}"):
+            with st.form(f"match_{match.id}"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    current_team1_idx = team_ids.index(match.team1_id) if match.team1_id in team_ids else 0
+                    new_team1 = st.selectbox(
+                        "Time 1",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, f"🏳️ {match.team1_code}") if x else f"🏳️ {match.team1_code}",
+                        index=current_team1_idx,
+                        key=f"match_t1_{match.id}"
+                    )
+                    
+                    new_date = st.date_input(
+                        "Data",
+                        value=match.datetime.date(),
+                        key=f"match_date_{match.id}"
+                    )
+                
+                with col2:
+                    current_team2_idx = team_ids.index(match.team2_id) if match.team2_id in team_ids else 0
+                    new_team2 = st.selectbox(
+                        "Time 2",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, f"🏳️ {match.team2_code}") if x else f"🏳️ {match.team2_code}",
+                        index=current_team2_idx,
+                        key=f"match_t2_{match.id}"
+                    )
+                    
+                    new_time = st.time_input(
+                        "Horário",
+                        value=match.datetime.time(),
+                        key=f"match_time_{match.id}"
+                    )
+                
+                new_city = st.text_input("Cidade", value=match.city or "", key=f"match_city_{match.id}")
+                
+                if st.form_submit_button("💾 Salvar Alterações"):
+                    match.team1_id = new_team1
+                    match.team2_id = new_team2
+                    match.datetime = datetime.combine(new_date, new_time)
+                    match.city = new_city
+                    session.commit()
+                    st.success("Jogo atualizado!")
+                    log_action(session, st.session_state.user['id'], 'jogo_editado', details=f"Jogo #{match.match_number}")
+                    st.rerun()
+
+
+def _auto_update_group_result(session, group_name):
+    """
+    Atualiza automaticamente o resultado do grupo baseado nos resultados dos jogos.
+    Chamada sempre que um resultado de jogo da fase de grupos é atualizado.
+    """
+    from group_standings import get_official_group_standings
+    
+    standings = get_official_group_standings(session, group_name)
+    if standings and len(standings) >= 2:
+        result = session.query(GroupResult).filter_by(group_name=group_name).first()
+        if result:
+            result.first_place_team_id = standings[0]['team'].id
+            result.second_place_team_id = standings[1]['team'].id
+        else:
+            result = GroupResult(
+                group_name=group_name,
+                first_place_team_id=standings[0]['team'].id,
+                second_place_team_id=standings[1]['team'].id
+            )
+            session.add(result)
+        
+        session.commit()
+        
+        # Processa pontuação dos palpites de grupo
+        process_group_predictions(session, group_name)
+
+
+def admin_resultados(session):
+    """Lançamento de resultados"""
+    st.subheader("📝 Lançar Resultados")
+    
+    # Filtros
+    col1, col2 = st.columns(2)
+    with col1:
+        fase_filter = st.selectbox("Fase", ["Todas as Fases", "Grupos", "Oitavas32", "Oitavas16", "Quartas", "Semifinal", "Terceiro", "Final"])
+    with col2:
+        grupo_filter = st.selectbox("Grupo", ["Todos os Grupos", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"])
+    
+    # Todos os jogos pendentes de resultado
+    query = session.query(Match).filter(Match.status == 'scheduled')
+    
+    # Aplica filtros
+    if fase_filter != "Todas as Fases":
+        query = query.filter(Match.phase == fase_filter)
+    if grupo_filter != "Todos os Grupos":
+        query = query.filter(Match.group == grupo_filter)
+    
+    jogos_pendentes = query.order_by(Match.datetime).all()
+    
+    st.markdown(f"**Total de jogos pendentes:** {len(jogos_pendentes)}")
+    
+    # Mostra todos os jogos pendentes (podem receber resultado mesmo com placeholder)
+    if jogos_pendentes:
+        st.markdown("### ⚽ Jogos prontos para resultado")
+        
+        for match in jogos_pendentes:
+            team1_display = get_team_display(match.team1, match.team1_code)
+            team2_display = get_team_display(match.team2, match.team2_code)
+            
+            with st.expander(f"#{match.match_number} - {team1_display} vs {team2_display} | {format_datetime(match.datetime)}"):
+                with st.form(f"result_{match.id}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        gols1 = st.number_input(f"Gols {team1_display}", min_value=0, max_value=20, value=match.team1_score if match.team1_score is not None else 0, key=f"res_gols1_{match.id}")
+                    with col2:
+                        gols2 = st.number_input(f"Gols {team2_display}", min_value=0, max_value=20, value=match.team2_score if match.team2_score is not None else 0, key=f"res_gols2_{match.id}")
+                    
+                    # Mostra placar atual se existir
+                    if match.team1_score is not None and match.team2_score is not None:
+                        st.info(f"🔴 Placar atual: {match.team1_score} x {match.team2_score} (jogo em andamento)")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        if st.form_submit_button("🔄 Atualizar Placar", use_container_width=True):
+                            match.team1_score = gols1
+                            match.team2_score = gols2
+                            # NÃO muda o status, continua 'scheduled'
+                            session.commit()
+                            
+                            # Atualiza automaticamente a classificação do grupo
+                            if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                                _auto_update_group_result(session, match.team1.group)
+                            
+                            st.success(f"🔴 Placar atualizado: {gols1} x {gols2} (jogo em andamento)")
+                            log_action(session, st.session_state.user['id'], 'placar_atualizado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
+                            st.rerun()
+                    
+                    with col_btn2:
+                        if st.form_submit_button("✅ Confirmar Resultado Final", use_container_width=True):
+                            match.team1_score = gols1
+                            match.team2_score = gols2
+                            match.status = 'finished'
+                            session.commit()
+                            
+                            # Processa pontuação dos palpites
+                            process_match_predictions(session, match.id)
+                            
+                            # Atualiza automaticamente a classificação do grupo
+                            if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                                _auto_update_group_result(session, match.team1.group)
+                            
+                            st.success(f"✅ Resultado final confirmado: {gols1} x {gols2}")
+                            log_action(session, st.session_state.user['id'], 'resultado_lancado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
+                            st.rerun()
+    
+    st.divider()
+    
+    # Jogos já finalizados (para correção)
+    st.subheader("📋 Jogos Finalizados")
+    
+    jogos_finalizados = session.query(Match).filter(
+        Match.status == 'finished'
+    ).order_by(Match.datetime.desc()).limit(10).all()
+    
+    if jogos_finalizados:
+        for match in jogos_finalizados:
+            team1_display = get_team_display(match.team1, match.team1_code)
+            team2_display = get_team_display(match.team2, match.team2_code)
+            
+            with st.expander(f"#{match.match_number} - {team1_display} **{match.team1_score}** x **{match.team2_score}** {team2_display}"):
+                st.info("✏️ Você pode editar o resultado caso tenha digitado errado")
+                with st.form(f"edit_result_{match.id}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        gols1_edit = st.number_input(f"Gols {team1_display}", min_value=0, max_value=20, value=match.team1_score, key=f"edit_gols1_{match.id}")
+                    with col2:
+                        gols2_edit = st.number_input(f"Gols {team2_display}", min_value=0, max_value=20, value=match.team2_score, key=f"edit_gols2_{match.id}")
+                    
+                    col_submit, col_delete = st.columns([3, 1])
+                    
+                    with col_submit:
+                        submit_edit = st.form_submit_button("✏️ Atualizar Resultado", use_container_width=True)
+                    
+                    with col_delete:
+                        delete_result = st.form_submit_button("🗑️ Apagar", type="secondary", use_container_width=True)
+                    
+                    if submit_edit:
+                        match.team1_score = gols1_edit
+                        match.team2_score = gols2_edit
+                        session.commit()
+                        
+                        # Reprocessa pontuação dos palpites
+                        process_match_predictions(session, match.id)
+                        
+                        # Atualiza automaticamente a classificação do grupo
+                        if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                            _auto_update_group_result(session, match.team1.group)
+                        
+                        st.success(f"Resultado atualizado: {gols1_edit} x {gols2_edit}")
+                        log_action(session, st.session_state.user['id'], 'resultado_editado', details=f"Jogo #{match.match_number}: {gols1_edit}x{gols2_edit}")
+                        st.rerun()
+                    
+                    if delete_result:
+                        # Guarda o grupo antes de apagar
+                        grupo_do_jogo = match.team1.group if match.team1 else None
+                        
+                        # Apagar resultado e voltar jogo para status 'scheduled'
+                        match.team1_score = None
+                        match.team2_score = None
+                        match.status = 'scheduled'
+                        session.commit()
+                        
+                        # Reprocessa pontuação dos palpites (zera pontos deste jogo)
+                        process_match_predictions(session, match.id)
+                        
+                        # Atualiza automaticamente a classificação do grupo
+                        if match.phase == 'Fase de Grupos' and grupo_do_jogo:
+                            _auto_update_group_result(session, grupo_do_jogo)
+                        
+                        st.success(f"Resultado apagado! Jogo voltou para status 'Agendado'.")
+                        log_action(session, st.session_state.user['id'], 'resultado_apagado', details=f"Jogo #{match.match_number}")
+                        st.rerun()
+    else:
+        st.info("Nenhum jogo finalizado ainda.")
+
+
+def admin_grupos(session):
+    """Definir classificados dos grupos"""
+    st.subheader("🏅 Classificados dos Grupos")
+    st.info("Defina os classificados de cada grupo após o término da fase de grupos")
+    
+    # Botão para preencher automaticamente todos os grupos
+    from group_standings import get_official_group_standings
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if st.button("🤖 Preencher Todos Automaticamente", help="Preenche todos os grupos com base nos resultados dos jogos"):
+            grupos_preenchidos = 0
+            for grupo in GRUPOS:
+                standings = get_official_group_standings(session, grupo)
+                if standings and len(standings) >= 2:
+                    result = session.query(GroupResult).filter_by(group_name=grupo).first()
+                    if result:
+                        result.first_place_team_id = standings[0]['team'].id
+                        result.second_place_team_id = standings[1]['team'].id
+                    else:
+                        result = GroupResult(
+                            group_name=grupo,
+                            first_place_team_id=standings[0]['team'].id,
+                            second_place_team_id=standings[1]['team'].id
+                        )
+                        session.add(result)
+                    
+                    session.commit()
+                    process_group_predictions(session, grupo)
+                    grupos_preenchidos += 1
+            
+            if grupos_preenchidos > 0:
+                st.success(f"✅ {grupos_preenchidos} grupos preenchidos automaticamente!")
+                log_action(session, st.session_state.user['id'], 'grupos_auto', details=f"{grupos_preenchidos} grupos")
+                st.rerun()
+            else:
+                st.warning("⚠️ Nenhum grupo tem resultados suficientes para preencher automaticamente.")
+    
+    with col2:
+        if st.button("🗑️ Apagar Todos os Grupos", type="secondary"):
+            # Zera pontos de todos os palpites de grupo
+            all_group_preds = session.query(GroupPrediction).all()
+            for gp in all_group_preds:
+                gp.points_awarded = 0
+                gp.breakdown = None
+            
+            # Remove todos os resultados de grupo
+            session.query(GroupResult).delete()
+            session.commit()
+            
+            st.success("✅ Todos os resultados de grupos apagados!")
+            log_action(session, st.session_state.user['id'], 'grupos_apagados_todos')
             st.rerun()
     
     st.divider()
     
-    # Histórico de resultados
-    if estrategia.resultados:
-        st.markdown('<h3>📜 Histórico de Resultados</h3>', unsafe_allow_html=True)
+    teams = session.query(Team).order_by(Team.name).all()
+    
+    for grupo in GRUPOS:
+        grupo_teams = [t for t in teams if t.group == grupo]
         
-        df_resultados = pd.DataFrame(estrategia.resultados)
-        if not df_resultados.empty:
-            df_display = df_resultados[['rodada', 'pontos', 'valorizacao']].copy()
-            df_display.columns = ['Rodada', 'Pontos', 'Valorização']
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
-    
-    st.divider()
-    
-    st.markdown('<h3>⚠️ Resetar Temporada</h3>', unsafe_allow_html=True)
-    st.warning("Isso irá apagar todo o histórico e reiniciar o orçamento para C$ 100,00")
-    
-    if st.button("🗑️ Resetar Temporada"):
-        estrategia.resetar_temporada()
-        # Remover escalação salva
-        if os.path.exists('escalacao_atual.json'):
-            os.remove('escalacao_atual.json')
-        st.success("✅ Temporada resetada!")
-        st.rerun()
+        if not grupo_teams:
+            continue
+        
+        team_options = {t.id: f"{t.flag} {t.name}" for t in grupo_teams}
+        team_ids = [None] + list(team_options.keys())
+        
+        result = session.query(GroupResult).filter_by(group_name=grupo).first()
+        
+        # Calcula classificação oficial baseada nos resultados dos jogos
+        from group_standings import get_official_group_standings
+        standings = get_official_group_standings(session, grupo)
+        
+        with st.expander(f"Grupo {grupo}"):
+            if standings and len(standings) >= 2:
+                st.markdown("**📊 Classificação Oficial (baseada nos resultados lançados):**")
+                for i, team_stat in enumerate(standings[:4], 1):
+                    st.caption(f"{i}º {team_stat['team'].flag} {team_stat['team'].name} - {team_stat['points']} pts ({team_stat['wins']}V {team_stat['draws']}E {team_stat['losses']}D) | Saldo: {team_stat['goal_difference']:+d}")
+                st.caption("⚠️ Sugestão: O sistema calculou automaticamente, mas você pode ajustar se necessário")
+                st.divider()
+            
+            with st.form(f"group_result_{grupo}"):
+                # Define valores padrão baseados na classificação oficial ou resultado já salvo
+                default_first = None
+                default_second = None
+                
+                if result:
+                    default_first = result.first_place_team_id
+                    default_second = result.second_place_team_id
+                elif standings and len(standings) >= 2:
+                    default_first = standings[0]['team'].id
+                    default_second = standings[1]['team'].id
+                
+                primeiro = st.selectbox(
+                    "1º Lugar",
+                    options=team_ids,
+                    format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                    index=team_ids.index(default_first) if default_first and default_first in team_ids else 0,
+                    key=f"gr_{grupo}_1"
+                )
+                
+                segundo = st.selectbox(
+                    "2º Lugar",
+                    options=team_ids,
+                    format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                    index=team_ids.index(default_second) if default_second and default_second in team_ids else 0,
+                    key=f"gr_{grupo}_2"
+                )
+                
+                col_save, col_delete = st.columns([1, 1])
+                
+                with col_save:
+                    save_btn = st.form_submit_button("💾 Salvar")
+                
+                if save_btn:
+                    if primeiro and segundo and primeiro != segundo:
+                        if result:
+                            result.first_place_team_id = primeiro
+                            result.second_place_team_id = segundo
+                        else:
+                            result = GroupResult(
+                                group_name=grupo,
+                                first_place_team_id=primeiro,
+                                second_place_team_id=segundo
+                            )
+                            session.add(result)
+                        
+                        session.commit()
+                        
+                        # Processa pontuação dos palpites de grupo
+                        process_group_predictions(session, grupo)
+                        
+                        st.success(f"Classificados do Grupo {grupo} salvos!")
+                        log_action(session, st.session_state.user['id'], 'grupo_definido', details=f"Grupo {grupo}")
+                        st.rerun()
+                    else:
+                        st.error("Selecione dois times diferentes!")
+            
+            # Botão de apagar fora do form
+            if result:
+                if st.button(f"🗑️ Apagar Grupo {grupo}", key=f"del_gr_{grupo}"):
+                    # Zera pontos dos palpites de grupo
+                    group_preds = session.query(GroupPrediction).filter_by(group_name=grupo).all()
+                    for gp in group_preds:
+                        gp.points_awarded = 0
+                        gp.breakdown = None
+                    
+                    # Remove o resultado do grupo
+                    session.delete(result)
+                    session.commit()
+                    
+                    st.success(f"Resultado do Grupo {grupo} apagado!")
+                    log_action(session, st.session_state.user['id'], 'grupo_apagado', details=f"Grupo {grupo}")
+                    st.rerun()
 
 
-def main():
-    """Função principal."""
-    # Verificar e executar atualização automática ao carregar
-    try:
-        estrategia = EstrategiaV7()
-        api = CartolaFCAPI()
-        resultado_auto = estrategia.verificar_e_atualizar_automatico(api)
-        if resultado_auto and resultado_auto.get('sucesso'):
-            st.toast(f"🔄 Rodada {resultado_auto['rodada']} atualizada automaticamente! Pontos: {resultado_auto['pontos']:.1f}", icon="✅")
-    except Exception as e:
-        pass  # Silenciosamente ignora erros na atualização automática
+def admin_podio(session):
+    """Definir pódio do torneio"""
+    st.subheader("🏆 Pódio do Torneio")
+    st.info("Defina o Campeão, Vice-Campeão e 3º Lugar após o término da Copa")
     
-    with st.sidebar:
+    teams = session.query(Team).order_by(Team.name).all()
+    team_options = {t.id: f"{t.flag} {t.name}" for t in teams}
+    team_ids = [None] + list(team_options.keys())
+    
+    campeao = session.query(TournamentResult).filter_by(result_type='champion').first()
+    vice = session.query(TournamentResult).filter_by(result_type='runner_up').first()
+    terceiro = session.query(TournamentResult).filter_by(result_type='third_place').first()
+    
+    with st.form("podio_result"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            new_campeao = st.selectbox(
+                "🥇 Campeão",
+                options=team_ids,
+                format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                index=team_ids.index(campeao.team_id) if campeao and campeao.team_id in team_ids else 0,
+                key="podio_res_1"
+            )
+        
+        with col2:
+            new_vice = st.selectbox(
+                "🥈 Vice-Campeão",
+                options=team_ids,
+                format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                index=team_ids.index(vice.team_id) if vice and vice.team_id in team_ids else 0,
+                key="podio_res_2"
+            )
+        
+        with col3:
+            new_terceiro = st.selectbox(
+                "🥉 3º Lugar",
+                options=team_ids,
+                format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                index=team_ids.index(terceiro.team_id) if terceiro and terceiro.team_id in team_ids else 0,
+                key="podio_res_3"
+            )
+        
+        if st.form_submit_button("💾 Salvar Pódio"):
+            if new_campeao and new_vice and new_terceiro and len(set([new_campeao, new_vice, new_terceiro])) == 3:
+                # Salva ou atualiza cada posição
+                for result_type, team_id in [('champion', new_campeao), ('runner_up', new_vice), ('third_place', new_terceiro)]:
+                    result = session.query(TournamentResult).filter_by(result_type=result_type).first()
+                    if result:
+                        result.team_id = team_id
+                    else:
+                        result = TournamentResult(result_type=result_type, team_id=team_id)
+                        session.add(result)
+                
+                session.commit()
+                
+                # Processa pontuação dos palpites de pódio
+                process_podium_predictions(session)
+                
+                st.success("Pódio salvo!")
+                log_action(session, st.session_state.user['id'], 'podio_definido')
+                st.rerun()
+            else:
+                st.error("Selecione três times diferentes!")
+    
+    # Botão de apagar pódio fora do form
+    if campeao or vice or terceiro:
+        st.divider()
+        if st.button("🗑️ Apagar Pódio", key="del_podio"):
+            # Zera pontos dos palpites de pódio
+            podium_preds = session.query(PodiumPrediction).all()
+            for pp in podium_preds:
+                pp.points_awarded = 0
+                pp.breakdown = None
+            
+            # Remove os resultados do pódio
+            session.query(TournamentResult).delete()
+            session.commit()
+            
+            st.success("Pódio apagado!")
+            log_action(session, st.session_state.user['id'], 'podio_apagado')
+            st.rerun()
+
+
+def admin_pontuacao(session):
+    """Configuração de pontuação"""
+    st.subheader("⭐ Configuração de Pontuação")
+    
+    # Pontuação por jogo
+    st.markdown("### Pontuação por Jogo")
+    
+    pontos_config = {
+        'placar_exato': ('Placar Exato (acertou tudo)', 20),
+        'resultado_gols': ('Resultado + Gols de um time', 15),
+        'apenas_resultado': ('Apenas Resultado (vitória/empate)', 10),
+        'apenas_gols': ('Apenas Gols de um time', 5),
+        'nenhum': ('Nenhum acerto', 0),
+    }
+    
+    with st.form("pontuacao_jogos"):
+        pontos_values = {}
+        for key, (label, default) in pontos_config.items():
+            current = get_config_value(session, f'pontos_{key}', str(default))
+            pontos_values[key] = st.number_input(label, min_value=0, max_value=100, value=int(current), key=f"pts_{key}")
+        
+        if st.form_submit_button("💾 Salvar Pontuação de Jogos"):
+            for key, value in pontos_values.items():
+                set_config_value(session, f'pontos_{key}', value, category='pontuacao')
+            st.success("Pontuação de jogos salva!")
+    
+    # Pontuação de grupos
+    st.markdown("### Pontuação de Classificação dos Grupos")
+    
+    grupo_config = {
+        'ordem_correta': ('Acertou os 2 na ordem correta', 20),
+        'ordem_invertida': ('Acertou os 2 em ordem invertida', 10),
+        'um_certo': ('Acertou apenas 1 na posição errada', 5),
+    }
+    
+    with st.form("pontuacao_grupos"):
+        grupo_values = {}
+        for key, (label, default) in grupo_config.items():
+            current = get_config_value(session, f'grupo_{key}', str(default))
+            grupo_values[key] = st.number_input(label, min_value=0, max_value=100, value=int(current), key=f"grp_{key}")
+        
+        if st.form_submit_button("💾 Salvar Pontuação de Grupos"):
+            for key, value in grupo_values.items():
+                set_config_value(session, f'grupo_{key}', value, category='grupo')
+            st.success("Pontuação de grupos salva!")
+    
+    # Pontuação de pódio
+    st.markdown("### Pontuação de Pódio")
+    
+    podio_config = {
+        'completo': ('Acertou Campeão, Vice e 3º na ordem', 150),
+        'campeao': ('Acertou o Campeão', 100),
+        'vice': ('Acertou o Vice-Campeão', 50),
+        'terceiro': ('Acertou o 3º Lugar', 30),
+        'fora_ordem': ('Acertou posição fora de ordem', 20),
+    }
+    
+    with st.form("pontuacao_podio"):
+        podio_values = {}
+        for key, (label, default) in podio_config.items():
+            current = get_config_value(session, f'podio_{key}', str(default))
+            podio_values[key] = st.number_input(label, min_value=0, max_value=500, value=int(current), key=f"pod_{key}")
+        
+        if st.form_submit_button("💾 Salvar Pontuação de Pódio"):
+            for key, value in podio_values.items():
+                set_config_value(session, f'podio_{key}', value, category='podio')
+            st.success("Pontuação de pódio salva!")
+    
+    # Data de início da Copa
+    st.markdown("### Data de Início da Copa")
+    st.info("Após esta data, os palpites de pódio serão bloqueados")
+    
+    data_inicio = get_config_value(session, 'data_inicio_copa', '')
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        try:
+            dt = datetime.strptime(data_inicio, "%Y-%m-%d %H:%M") if data_inicio else datetime(2026, 6, 11, 13, 0)
+            new_date = st.date_input("Data", value=dt.date(), key="copa_date")
+        except:
+            new_date = st.date_input("Data", value=datetime(2026, 6, 11).date(), key="copa_date")
+    
+    with col2:
+        try:
+            dt = datetime.strptime(data_inicio, "%Y-%m-%d %H:%M") if data_inicio else datetime(2026, 6, 11, 13, 0)
+            new_time = st.time_input("Horário", value=dt.time(), key="copa_time")
+        except:
+            new_time = st.time_input("Horário", value=datetime(2026, 6, 11, 13, 0).time(), key="copa_time")
+    
+    if st.button("💾 Salvar Data de Início"):
+        dt_str = datetime.combine(new_date, new_time).strftime("%Y-%m-%d %H:%M")
+        set_config_value(session, 'data_inicio_copa', dt_str, category='sistema')
+        st.success("Data de início salva!")
+
+
+def admin_premiacao(session):
+    """Configuração de premiação"""
+    st.subheader("💰 Configuração de Premiação")
+    
+    with st.form("premiacao"):
+        valor_inscricao = st.text_input(
+            "Valor de Inscrição",
+            value=get_config_value(session, 'premiacao_valor_inscricao', ''),
+            placeholder="Ex: R$ 50,00"
+        )
+        
+        premio_1 = st.text_input(
+            "Prêmio 1º Lugar",
+            value=get_config_value(session, 'premiacao_primeiro', ''),
+            placeholder="Ex: 60% do total"
+        )
+        
+        premio_2 = st.text_input(
+            "Prêmio 2º Lugar",
+            value=get_config_value(session, 'premiacao_segundo', ''),
+            placeholder="Ex: 30% do total"
+        )
+        
+        premio_3 = st.text_input(
+            "Prêmio 3º Lugar",
+            value=get_config_value(session, 'premiacao_terceiro', ''),
+            placeholder="Ex: 10% do total"
+        )
+        
+        observacoes = st.text_area(
+            "Observações",
+            value=get_config_value(session, 'premiacao_observacoes', ''),
+            placeholder="Informações adicionais sobre a premiação..."
+        )
+        
+        if st.form_submit_button("💾 Salvar Premiação"):
+            set_config_value(session, 'premiacao_valor_inscricao', valor_inscricao, category='premiacao')
+            set_config_value(session, 'premiacao_primeiro', premio_1, category='premiacao')
+            set_config_value(session, 'premiacao_segundo', premio_2, category='premiacao')
+            set_config_value(session, 'premiacao_terceiro', premio_3, category='premiacao')
+            set_config_value(session, 'premiacao_observacoes', observacoes, category='premiacao')
+            st.success("Premiação salva!")
+
+
+def admin_palpites(session):
+    """Edição de palpites de participantes"""
+    st.subheader("📋 Editar Palpites de Participantes")
+    st.info("Use esta função para corrigir palpites de participantes quando necessário")
+    
+    users = session.query(User).filter(User.role == 'player').order_by(User.name).all()
+    
+    if not users:
+        st.warning("Nenhum participante cadastrado")
+        return
+    
+    user_options = {u.id: u.name for u in users}
+    selected_user_id = st.selectbox(
+        "Selecione o Participante",
+        options=list(user_options.keys()),
+        format_func=lambda x: user_options[x]
+    )
+    
+    if selected_user_id:
+        tabs = st.tabs(["Jogos", "Grupos", "Pódio"])
+        
+        with tabs[0]:
+            st.markdown("### Palpites de Jogos")
+            
+            # Filtros de Fase e Grupo
+            col_fase, col_grupo = st.columns(2)
+            with col_fase:
+                fases_opcoes = ["Todas as Fases", "Grupos", "Oitavas32", "Oitavas16", "Quartas", "Semifinal", "Terceiro", "Final"]
+                fase_filter = st.selectbox("Fase", fases_opcoes, key="admin_palpite_fase")
+            with col_grupo:
+                grupos_opcoes = ["Todos os Grupos"] + list(GRUPOS)
+                grupo_filter = st.selectbox("Grupo", grupos_opcoes, key="admin_palpite_grupo")
+            
+            # Query base
+            query = session.query(Match)
+            
+            # Aplicar filtro de fase
+            if fase_filter != "Todas as Fases":
+                query = query.filter(Match.phase == fase_filter)
+            
+            # Aplicar filtro de grupo
+            if grupo_filter != "Todos os Grupos":
+                query = query.filter(Match.group == grupo_filter)
+            
+            matches = query.order_by(Match.datetime).all()
+            
+            if not matches:
+                st.info("Nenhum jogo encontrado com os filtros selecionados.")
+            
+            for match in matches:
+                team1_display = get_team_display(match.team1, match.team1_code)
+                team2_display = get_team_display(match.team2, match.team2_code)
+                
+                pred = session.query(Prediction).filter_by(
+                    user_id=selected_user_id,
+                    match_id=match.id
+                ).first()
+                
+                with st.expander(f"#{match.match_number} - {team1_display} vs {team2_display}"):
+                    with st.form(f"admin_pred_{match.id}_{selected_user_id}"):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            gols1 = st.number_input(
+                                f"Gols {team1_display}",
+                                min_value=0, max_value=20,
+                                value=pred.pred_team1_score if pred else 0,
+                                key=f"admin_g1_{match.id}_{selected_user_id}"
+                            )
+                        with col2:
+                            gols2 = st.number_input(
+                                f"Gols {team2_display}",
+                                min_value=0, max_value=20,
+                                value=pred.pred_team2_score if pred else 0,
+                                key=f"admin_g2_{match.id}_{selected_user_id}"
+                            )
+                        
+                        if st.form_submit_button("💾 Salvar"):
+                            if pred:
+                                pred.pred_team1_score = gols1
+                                pred.pred_team2_score = gols2
+                            else:
+                                pred = Prediction(
+                                    user_id=selected_user_id,
+                                    match_id=match.id,
+                                    pred_team1_score=gols1,
+                                    pred_team2_score=gols2
+                                )
+                                session.add(pred)
+                            session.commit()
+                            log_action(session, st.session_state.user['id'], 'palpite_editado', selected_user_id, f"Jogo #{match.match_number}")
+                            st.success("Palpite salvo!")
+        
+        with tabs[1]:
+            st.markdown("### Palpites de Grupos")
+            
+            teams = session.query(Team).order_by(Team.name).all()
+            
+            for grupo in GRUPOS:
+                grupo_teams = [t for t in teams if t.group == grupo]
+                
+                if not grupo_teams:
+                    continue
+                
+                team_options = {t.id: f"{t.flag} {t.name}" for t in grupo_teams}
+                team_ids = [None] + list(team_options.keys())
+                
+                pred = session.query(GroupPrediction).filter_by(
+                    user_id=selected_user_id,
+                    group_name=grupo
+                ).first()
+                
+                with st.expander(f"Grupo {grupo}"):
+                    with st.form(f"admin_grupo_{grupo}_{selected_user_id}"):
+                        primeiro = st.selectbox(
+                            "1º Lugar",
+                            options=team_ids,
+                            format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                            index=team_ids.index(pred.first_place_team_id) if pred and pred.first_place_team_id in team_ids else 0,
+                            key=f"admin_g_{grupo}_1_{selected_user_id}"
+                        )
+                        
+                        segundo = st.selectbox(
+                            "2º Lugar",
+                            options=team_ids,
+                            format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                            index=team_ids.index(pred.second_place_team_id) if pred and pred.second_place_team_id in team_ids else 0,
+                            key=f"admin_g_{grupo}_2_{selected_user_id}"
+                        )
+                        
+                        if st.form_submit_button("💾 Salvar"):
+                            if primeiro and segundo and primeiro != segundo:
+                                if pred:
+                                    pred.first_place_team_id = primeiro
+                                    pred.second_place_team_id = segundo
+                                else:
+                                    pred = GroupPrediction(
+                                        user_id=selected_user_id,
+                                        group_name=grupo,
+                                        first_place_team_id=primeiro,
+                                        second_place_team_id=segundo
+                                    )
+                                    session.add(pred)
+                                session.commit()
+                                log_action(session, st.session_state.user['id'], 'palpite_grupo_editado', selected_user_id, f"Grupo {grupo}")
+                                st.success("Palpite salvo!")
+                            else:
+                                st.error("Selecione dois times diferentes!")
+        
+        with tabs[2]:
+            st.markdown("### Palpite de Pódio")
+            
+            teams = session.query(Team).order_by(Team.name).all()
+            team_options = {t.id: f"{t.flag} {t.name}" for t in teams}
+            team_ids = [None] + list(team_options.keys())
+            
+            pred = session.query(PodiumPrediction).filter_by(user_id=selected_user_id).first()
+            
+            with st.form(f"admin_podio_{selected_user_id}"):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    campeao = st.selectbox(
+                        "🥇 Campeão",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(pred.champion_team_id) if pred and pred.champion_team_id in team_ids else 0,
+                        key=f"admin_pod_c_{selected_user_id}"
+                    )
+                
+                with col2:
+                    vice = st.selectbox(
+                        "🥈 Vice-Campeão",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(pred.runner_up_team_id) if pred and pred.runner_up_team_id in team_ids else 0,
+                        key=f"admin_pod_v_{selected_user_id}"
+                    )
+                
+                with col3:
+                    terceiro = st.selectbox(
+                        "🥉 3º Lugar",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(pred.third_place_team_id) if pred and pred.third_place_team_id in team_ids else 0,
+                        key=f"admin_pod_t_{selected_user_id}"
+                    )
+                
+                if st.form_submit_button("💾 Salvar"):
+                    if campeao and vice and terceiro and len(set([campeao, vice, terceiro])) == 3:
+                        if pred:
+                            pred.champion_team_id = campeao
+                            pred.runner_up_team_id = vice
+                            pred.third_place_team_id = terceiro
+                        else:
+                            pred = PodiumPrediction(
+                                user_id=selected_user_id,
+                                champion_team_id=campeao,
+                                runner_up_team_id=vice,
+                                third_place_team_id=terceiro
+                            )
+                            session.add(pred)
+                        
+                        session.commit()
+                        log_action(session, st.session_state.user['id'], 'palpite_podio_editado', selected_user_id)
+                        st.success("Palpite de pódio salvo!")
+                    else:
+                        st.error("Selecione três times diferentes!")
+
+
+# =============================================================================
+# PÁGINA DE VISUALIZAÇÃO AO VIVO
+# =============================================================================
+def page_visualizacao_ao_vivo():
+    """
+    Página de visualização em tempo real dos jogos.
+    Mostra palpites de todos os participantes e variação de ranking.
+    Só mostra palpites após o jogo começar.
+    """
+    import streamlit as st
+    from datetime import datetime
+    import pytz
+    from db import get_session, get_config_value
+    from live_scoring import (
+        get_ongoing_matches, get_live_match_predictions, 
+        calculate_live_ranking, get_podium_zone_info
+    )
+    
+    render_page_header()
+    st.header("📺 Visualização ao Vivo")
+    st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
+    
+    with get_session(engine) as session:
+        # Pega jogos que já começaram
+        matches = get_ongoing_matches(session)
+        
+        if not matches:
+            st.info("Nenhum jogo disponível para visualização ainda.")
+            return
+        
+        # Filtra apenas jogos que já começaram
+        started_matches = [m for m in matches if m['has_started']]
+        
+        if not started_matches:
+            st.info("Aguardando início dos jogos...")
+            return
+        
+        # Seletor de jogo
+        st.subheader("🎮 Selecione o Jogo")
+        
+        match_options = {0: "🎯 Todos os jogos"}
+        for match in started_matches:
+            score_display = ""
+            if match['team1_score'] is not None and match['team2_score'] is not None:
+                score_display = f" - {match['team1_score']} x {match['team2_score']}"
+            
+            status_icon = "🔴" if match['is_live'] else "✅"
+            match_label = f"{status_icon} Jogo {match['match_number']}: {match['team1']} vs {match['team2']}{score_display}"
+            match_options[match['id']] = match_label
+        
+        selected_match_id = st.selectbox(
+            "Escolha o jogo:",
+            options=list(match_options.keys()),
+            format_func=lambda x: match_options[x],
+            index=0,
+            key="select_match_live"
+        )
+        
+        # CSS específico para esta página
         st.markdown("""
-        <div style="text-align: center; padding: 20px 0;">
-            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAAA8CAIAAAC1nk4lAAAPwElEQVR4nNVaeZgV1ZU/595br97W73U/mt4QmmYV0EQIOBJRTPxckpgYxTgyJn4qjolhMInfJIOZqCOJKzqZMYkx6oy4L4njFlwgKriwKCJIA6JD6JamaXrv12+vuufMH1X1lqY3gT8y54/uelW3zv3dc88993fOLSTSAAgAAFx0MZSg9xSHbTag/YhqR6MHEBGAmUl5GmGwiyHfH0WzI24/gjCDKrJEifXyJuIB9xGBgQEQgZkLcBCBwW2IyFykFIqmB6DwmtPUReI8R68te9fs3i8aMubdY8CDv1lhIlH49f8BMQAAQhHoo1ooA0VrrbU+hgo9YQBWRb+PmamZWUoJAEyM4pjPILqWPlbuzMyaCBEffeq5Z55bjQKPvb25YGk+Jpa2tTaUuu2u396zuYeyqf6+niWXf9eybMNQI788KsGCpY+JoS3bNpS674FVv3+v2+xpiprwqxd3rV79smEoy7KPQQcAAFy8EI8KNTM7Nr7/wYdvWf2JSHSEaiZ2NW5UZuDHD7yxbt26Y4q7JHqMHmPJLyICQCXlyl//7tY1zYadKqsaP/2SnxLDwTeeNGLHXf3rF9e8+pphKNu2SzaWw7WNLoAdEeiiWbFtLYTQufR1N9z+2829umOfFHDilT/LxrtRCDDM/WtWiWjND+5d+/gTTyulGJA0DaVtdPPN4ojZDBERs1Ly0493n//9Xzy7F3yJts7Gd0N1U5jYtagQKH0tax8xwpHrn2284Vd3gc4KKWxbD2LyUQqDKGz1oxatSWsSQgigB//7kUU3PrxH11LTB+POWFQ5c34u0QvoEDJAYkAUZnD/2idUuu/RPXj+93+xfesHSklEtLVmppH7O0xKo8fQg2diIrK1BgAphZTi7fXrLlq6YsUrTf2pbO+mZ4+/9Od188+wknEhFLDDgAr8SIXLD76/Nrv7rZ25qktueWbFHfd0tLUqKRGF1qS1JmdyRsd21YDfg8B1+heIgALAzqTWv7vp8Vc3v7UvmdXsz3ba2iZphKrGWwlCIZ2o5HI3BHToH5FRVh5vbUq1t4z54hkPbE38edt/XnTK5Iu/ccbEKdPyfREzssObhxaGkWO+o6K7ve3jT/e9s3X3mx81727PaEbu/kwoNfOHt/S3HtjyH8u0bfukYOTSN73uEYC0NAPM3Pbey6HKuo5pJ9/zTvujGx76u4kVC0+aPO8Lx08YXxeMVIyIB2BY0EQkhNiydfvylQ+mglUHu/ozWvgNCYnOivFTmxvXTf76FdGG8Z07t6MQjhsjI7OzvSIXc3NwqA4BghGMZuK9qXef98eqsX7ma3vNV/fuiL60o7rM8CU7bv3nJXNOOtHpeigrqiKVAyeFiIWAtzd9sCURi8XblZS+/q6uvY0LbnqqfPr09l2brWSccoxS5Vm8t6wZtBbg3S6JxMykEaUKRXOp/sy2dVIZZvnYnoqqZEV1XFS8tWnrnJNOdLoeSobdEREAoC1uhShp+oNzrr1lwlcWS3/YjNVYCc22BSgBsQCUSQpAIGWiCMUsLYTAQTYPREBwoQciaPgz8e743sauTa9EfHigu38oOHlMwr0YbNk63tzWHbdyudj0OUY4ZGfTzJq1BcIJ8MxMQqASaPr9bIqufrJEqHN/V/Ofbh7jO5TMkEBUEoVwgiq6hBI96EwMjFLKQAhNfzaTOtSTAADE4XY94Y4fB0EthAC2e9I2soWGnzU7BItBMKNjW+UXySx291n79jQ1rfrXb81oiXX8BZ5e/Nj3Mh/8z7Ibr6jp68319Gb705wnwcVG93wTgZlsC0n3pmwgWwzLwvOJ7cBGzIAIOptLZ20phPAFgdzw5fovsy8U2bdhe93O2y+5pm5349XXLJo975v3d3+6NZvYXzvv3wBg+Y/K0/23jq2Z9OZ7+1993w4FFHHR4mHvrxfQUetUVutcVvrVMGR5mIXIAGhr29aEDNIwC4NDAABpqN6ueMOHdzx253cCUy6Fvi1QNkeLitiM2QBAmhBZVJ57292TITD1R4dWf+uKf//Lhxw0UXMRZC70xgBAtkVs2bYcluB7Pj1EA2YmZgBGWShfOMUCZZidn+1dOEMGpvwgZUc5eiZhhcgPVyCiUL4yCszJUpmsvuhLM2O5XksIJzRCqX+7NAIFMHu8ZejtUXhjHFyklEogCkG25Q4D3Q3atnKxuvqNn1jc+nhQpXJ9uwSSTv41c+h1ndrvVkIAONut7C7r4LMhIz13Tiid07bmAiB0XA5d26GQAp38chjGp9ynh02GEzqUYZg+g4jtVBLB64wYgW3LrqsZ0zJ+2cXX/vyfLlw9NfoZ+et18lCq+5OqExaPmbvS6v8U0Jfr2da9faVWFRcuiC39tnz5vcQ/3t2lCYVw6z3OTuQIoPQrYfgMGDZtFW7gGCx6EDEqM+KXmsFO9UsfAgpglFIJiShENhE//uxTt4xbvur5j5Wd7N63OZ3o0hTu/HRN2ztXH3p3qU7ttzXIzIEHXsnMXtJ82o9bzpwdvvycSDKhJTLbFmsNwKwtsi1gQGVGAgqVScOSJ+Hwm0HF4Y1jI35Gme46kInH7XSSgbP9Pdl4HxORlUu094VUOhz2E0MgNq6ibhJzzh+MJtu297XuVMGxKA0lRcaCpAhs25V9c2tyzlQfMAvD5yuLqUAYAIxw1BepUIEQKmNsNAiATEOigkL0GGytOuthXCzkK4u1bHjps02vsm2RbW2480oAtFOJlo2rO7a/3t2V+eo3/MwJYGLWAKwCQRUoyybbUwdeyyS6SLOvrGzGoiv2PHmnEAzSB6zr5p93/OKlrRvXf/TwL+f95N5QzXEfP76yM54aXz0JBpT7BgPNyAiDsUHn3rT6OikOSMOf6WwThg8E2v19AABCUC6ds1I6DYhRZ+AMAhiYiIG0DR07HkqnsrGgKaRCZQIDCsEAQKx8AX8k4lo6VKF8ITuT9BnGlHFjAUbIu4bbLZ21OHNqfQByvoo6AEapkBGlQqkQEYUUygDhBToG9GYMAYE4NKbBDI0BsgAkKj9lbJvAkAjEzJo0s9YAgEIk2pqz6VSZ35g1dSIAiGEptRh8DTrPBDLA5EkN48qkiIwFJk8V57cG5vwO6YRvyj9CVAAagFAalOnt3vLaCbPCC2epjz5DWTGGSKNAQGQm5Q/0Ne20CMdFjcmTJrLDIIYFPVzdX2tt+INzGmIQiBiBEBMNMnEITjUa0dvfmQGZQTOzFNiXgmu+pt5ctmvj7ya8sbHllb6F1ZMbrGzWGz0zc/++RvaXza4vN/zBEStp+QENDt1BeO6CkwTrYHW9zmUGyfgZBKJmJ82SwE7EdSKpIma/D9Zs4xv+ZF54Y+stTUumXnQtZZIIghEYSCoz2dbc39Zk+n3nfvkLMII/l4Ae4rEQzHDqKXPHm2mzdhqQjShc7yg4BmRtDgWMTH9Por1ZCpnqaUt1tSqpMt0H0vHuirD66IB/vbF4/U6a9vXLfFIykRuHNalAuP3DN2wVGh+wFpwylxmEkEcFGhG11v5g+IL5U8kXClXWkWW5NkYERCIIBMSfN6U2NFf4I7EcmCJSo1VYq7CWwb54Ilhe+dbHcmvyxJknNgQMbaXi5KWuyCCEtOJdXY3vQLD8glOmmcGw1nr4vLY4sR2yoZSCmS/7znmr3rxDTpmb2PCCCkeZtLPNErAysKNPX3xboq7Sxx5BF4ZZOfN0aQY7tq9PR0+dfe1Puz/aqAnAZV7sIEOpcvEuc+45Qer57qIlzCzkyEWvkVsgIhFVVtdcdvp07Y9GxjXoXKaYGDCDqYRAbm7L7G/L7m/LNbemW7qx/GvLqy++6WAyHB43JVIZtHM5J1sB70QJmYHtstp6Hai4bOH0qpo6TTR8sHOcclS1PCEEEV1z5T/U6YPhGaehbSEKrx6TTxLR7xOmIUyf8PvQNEBYSWlpvw/YymiL0Tv/AgYBCExCYceH66InfKXWarnm8r8nIjlspCvgyY9gmEaIyAyhssjNV30z299TO/fsXKIHlcrHa1cFuYuT2InTAlACoEOuHQM6f0nbgVhN0+trk50Hbdu6+arzwpFyHrFMcxjoEURKobU++5yzvjevKh0aG5s0y0r2o5TFGw0AADKgR9AKPJnByQOdCyIVCLbvePvghhfsivGXfDFy9tln2VrLUXizM+zPUVQXQmhNN//L0tn+9sCsr4Yra6xMEqQsHIA69RlGwJI5cLMGZgRkbUtTCOWL79tJ1dPnRhO/XL5M69E6hqNtVO7hokJERMMMPLRyeVXfrujJ5wejFTqTQnTjrndgy25jBi/L8SaDyIxWdv/vHp3srT7ryjE9jQ/cep3PH3QzgFEJDjhHHFmEQNJUWVXzxJ3XRbsaY6deEh5TayX7BvHvwjUjOMdeWpmB9m3rdz+ywjd1fkXvnmfu/llVTR1pGr5gUCoM/PlPAoQUWtPEyVOe/831Nb07giedW3X8l3LxbkREtypSUM8OI9FaKPSVlScPNTetfUzWzxlvNf/xrp/UT5qstR5NYB6IId/D6MVZlMdNmPjS/Svmhw/p2hnHnXYBWxltZVBKd6IRAIC0Jk2+SKz/4KGmNQ9POH2Rrp4+L9j24n0rJjRM0prcHPbIQH/eowQpJRFFY5VP/P62pfMitrarz7oiUtdgJ/rItlFIJxv3BaU0/a2bX97xX7dSWS2hWDY/9vR9t5fHxhDRKMPF4eJ+hYBDlz6GEadEIQRu3LDhhnv/uCsbC7CV+GRzvPWvZqz21OtXde58t+Wd52RlA/mjs8LJm64678sLTnMr50d4/MxMlAd9pOeIDJq0lNLOpv+w6qlVr+9sg3KRTVgHPzHCUctXJsoqa0TisoXTfrjkUmUGbK2VkEdxaslMjEQEbjp45JryNfDO9raHnnz+hfebmtImEdUHshec3HDl4m9XVtcWNzsKYWbKgz7ac2bnKF9JCQDJvp6X1qwDIc87c0G4PAYAttbSrYgdbT+Udw8At0qN7j8s/jCoUAouPQRjzCeYTu0XgVmTVqpwKmLbWkin+JXfFfMHMezt8aWaS8vB+Q+DAICBHEvnPwfKoyxBPFDX4XpLRwLIzKA1AYCUAhGgGGV+jxxe8yAAGBAZiKn4I5XSMZfUcAZU+w5PE0tvIqKSsrieAADsmaxEW6m/MLJXbnHweDzGmUmPcSn2UievZUEvl37K5boDFtuKvUOUQjPPwQbMrecJHtfzOsz3UlrLQKf4XjKwvDMOFfJG4W2HXQ/u+kO94pmmUOcdWrM3T8QM7HxZ4xypYlGd0rVWniOzt+Sc9VawrlvxcOseedfL3y+CiEVTVkDlscI8PcwbC5358c6XwK3vcd7SxRb2vhQcWJPMW4+BARGL2+UXb6G7Qd50l6SH0T3zL7L8wCEV3SiMCRj+DwlMFqdbqR88AAAAAElFTkSuQmCC" style="width: 180px !important; height: 180px !important; max-width: 180px; display: block; margin: 0 auto;">
-            <h2 style="color: #54b4f7; margin: 10px 0;">Dervé FC</h2>
-            <p style="color: #FFFFFF; font-size: 0.9rem;">Escalação Automática</p>
+        <style>
+            /* Marca d'água do logo Copa 2026 */
+            .live-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 350px;
+                height: 350px;
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+                opacity: 0.05;
+                pointer-events: none;
+                z-index: 0;
+            }
+            
+            /* Corrige texto do selectbox na visualização ao vivo */
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+                background-color: #ffffff !important;
+                border: 1px solid #ccc !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
+                color: #1a1a2e !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+                color: #1a1a2e !important;
+            }
+            
+            /* Corrige fundo da tabela de palpites */
+            .live-table {
+                background-color: #ffffff !important;
+            }
+            .live-table td {
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            .live-table tr {
+                background-color: #ffffff !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Adiciona marca d'água do logo Copa 2026
+        st.markdown('<div class="live-watermark"></div>', unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # Se selecionou "Todos os jogos"
+        if selected_match_id == 0:
+            # Separa jogos em andamento e finalizados
+            jogos_em_andamento = [m for m in started_matches if m['is_live']]
+            jogos_finalizados = [m for m in started_matches if m.get('is_finished', False)]
+            
+            # Mostra jogos em andamento
+            if jogos_em_andamento:
+                st.subheader("🔴 Jogos em Andamento")
+                for match in jogos_em_andamento:
+                    score = f"{match['team1_score']} x {match['team2_score']}" if match['team1_score'] is not None else "- x -"
+                    st.markdown(f"🔴 **Jogo {match['match_number']}:** {match['team1']} **{score}** {match['team2']}")
+            
+            # Mostra jogos finalizados
+            if jogos_finalizados:
+                st.subheader("✅ Jogos Finalizados")
+                for match in jogos_finalizados:
+                    score = f"{match['team1_score']} x {match['team2_score']}" if match['team1_score'] is not None else "- x -"
+                    st.markdown(f"✅ **Jogo {match['match_number']}:** {match['team1']} **{score}** {match['team2']} - **FINALIZADO**")
+            
+            # Se não há jogos em andamento nem finalizados
+            if not jogos_em_andamento and not jogos_finalizados:
+                st.info("Nenhum jogo do dia ainda.")
+            
+            st.divider()
+            
+            # Calcula soma total de pontos por participante em todos os jogos do dia
+            titulo_pontuacao = "🏆 Pontuação Total (Jogos do Dia)" if jogos_finalizados else "🏆 Pontuação Total (Jogos em Andamento)"
+            st.subheader(titulo_pontuacao)
+            
+            # Dicionário para somar pontos de cada usuário
+            total_points_by_user = {}
+            
+            for match in started_matches:
+                predictions = get_live_match_predictions(session, match['id'])
+                for pred in predictions:
+                    user_name = pred['user_name']
+                    if user_name not in total_points_by_user:
+                        total_points_by_user[user_name] = {'points': 0, 'user_id': pred['user_id']}
+                    total_points_by_user[user_name]['points'] += pred['points']
+            
+            # Ordena por pontos (maior primeiro)
+            sorted_users = sorted(total_points_by_user.items(), key=lambda x: x[1]['points'], reverse=True)
+            
+            # Mostra pontuação total em tabela
+            if sorted_users:
+                # Calcula ranking ao vivo para variação
+                live_ranking = calculate_live_ranking(session, started_matches[0]['id'] if started_matches else None)
+                variacao_map = {user['user_id']: user for user in live_ranking}
+                
+                # Pega informações de pódio e rebaixamento
+                zone_info = get_podium_zone_info(session)
+                total_users = len(live_ranking)
+                rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
+                
+                # CSS para cards de ranking estilo claro
+                st.markdown("""
+                <style>
+                .ranking-card-light {
+                    background: #ffffff;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 12px;
+                    padding: 14px 20px;
+                    margin: 8px 0;
+                    color: #333333;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    flex-wrap: wrap;
+                    gap: 10px;
+                }
+                .ranking-card-light.top1 {
+                    background: linear-gradient(135deg, #fffef5 0%, #fff9e6 100%);
+                    border: 2px solid #FFD700;
+                }
+                .ranking-card-light.top2 {
+                    background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+                    border: 2px solid #C0C0C0;
+                }
+                .ranking-card-light.top3 {
+                    background: linear-gradient(135deg, #fff8f2 0%, #ffe8d6 100%);
+                    border: 2px solid #CD7F32;
+                }
+                .ranking-card-light.rebaixamento {
+                    background: linear-gradient(135deg, #fff8f8 0%, #ffefef 100%);
+                    border-left: 4px solid #E61D25;
+                }
+                .ranking-card-light .posicao {
+                    font-size: 1.4em;
+                    font-weight: bold;
+                    min-width: 45px;
+                    text-align: center;
+                    color: #1a1a2e;
+                }
+                .ranking-card-light .info {
+                    flex: 1;
+                    min-width: 120px;
+                }
+                .ranking-card-light .nome {
+                    font-size: 1.05em;
+                    font-weight: 600;
+                    color: #1a1a2e;
+                }
+                .ranking-card-light .pontos-badge {
+                    background: #2A398D !important;
+                    color: #ffffff !important;
+                    padding: 6px 16px;
+                    border-radius: 20px;
+                    font-weight: bold;
+                    font-size: 1em;
+                }
+                .ranking-card-light .variacao-badge {
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    font-size: 0.85em;
+                    font-weight: 600;
+                }
+                .ranking-card-light .variacao-badge.up { background: #d4edda; color: #155724; }
+                .ranking-card-light .variacao-badge.down { background: #f8d7da; color: #721c24; }
+                .ranking-card-light .variacao-badge.same { background: #e9ecef; color: #495057; }
+                .ranking-card-light .status-badge {
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    font-size: 0.85em;
+                    font-weight: 600;
+                }
+                .ranking-card-light .status-badge.podio { background: #FFF3CD; color: #856404; }
+                .ranking-card-light .status-badge.rebaixamento { background: #F8D7DA; color: #721C24; }
+                .ranking-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+                @media (max-width: 768px) {
+                    .ranking-card-light {
+                        flex-direction: column;
+                        text-align: center;
+                        gap: 8px;
+                    }
+                    .ranking-card-light .posicao {
+                        margin-bottom: 5px;
+                    }
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                
+                # Gera cards individuais usando st.markdown separado para cada um
+                for i, (user_name, data) in enumerate(sorted_users):
+                    pos = i + 1
+                    points = data['points']
+                    user_id = data['user_id']
+                    
+                    # Variação de posição
+                    user_rank = variacao_map.get(user_id, {})
+                    variacao = user_rank.get('variacao', 0)
+                    posicao_atual = user_rank.get('posicao_atual', pos)
+                    
+                    if variacao > 0:
+                        var_text = f"⬆️ +{variacao}"
+                        var_class = "up"
+                    elif variacao < 0:
+                        var_text = f"⬇️ {variacao}"
+                        var_class = "down"
+                    else:
+                        var_text = "➡️ 0"
+                        var_class = "same"
+                    
+                    # Status especial e classe do card
+                    status_html = ""
+                    card_class = "ranking-card-light"
+                    if pos == 1:
+                        card_class = "ranking-card-light top1"
+                        pos_display = "🥇"
+                        status_html = '<span class="status-badge podio">🏆 Pódio</span>'
+                    elif pos == 2:
+                        card_class = "ranking-card-light top2"
+                        pos_display = "🥈"
+                        status_html = '<span class="status-badge podio">🏆 Pódio</span>'
+                    elif pos == 3:
+                        card_class = "ranking-card-light top3"
+                        pos_display = "🥉"
+                        status_html = '<span class="status-badge podio">🏆 Pódio</span>'
+                    elif rebaixamento_inicio and pos >= rebaixamento_inicio:
+                        card_class = "ranking-card-light rebaixamento"
+                        pos_display = f"{pos}º"
+                        status_html = '<span class="status-badge rebaixamento">⚠️ Rebaixamento</span>'
+                    else:
+                        pos_display = f"{pos}º"
+                    
+                    # Renderiza cada card individualmente
+                    st.markdown(f'''
+                    <div class="{card_class}">
+                        <div class="posicao">{pos_display}</div>
+                        <div class="info">
+                            <div class="nome">{user_name}</div>
+                        </div>
+                        <span class="pontos-badge">{points} pts</span>
+                        <span class="variacao-badge {var_class}">{var_text}</span>
+                        {status_html}
+                    </div>
+                    ''', unsafe_allow_html=True)
+            else:
+                st.info("Nenhum palpite registrado para os jogos em andamento.")
+            
+            st.divider()
+            
+            # Botão de atualização
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("🔄 Atualizar", use_container_width=True, key="refresh_all"):
+                    st.rerun()
+            
+            return
+        
+        # Pega informações do jogo selecionado (jogo único)
+        selected_match = next((m for m in started_matches if m['id'] == selected_match_id), None)
+        
+        if not selected_match:
+            return
+        
+        # Mostra placar atual
+        st.subheader("⚽ Placar Atual")
+        
+        col1, col2, col3 = st.columns([2, 1, 2])
+        
+        with col1:
+            st.markdown(f"### {selected_match['team1']}")
+        
+        with col2:
+            if selected_match['team1_score'] is not None and selected_match['team2_score'] is not None:
+                st.markdown(f"### <center>{selected_match['team1_score']} x {selected_match['team2_score']}</center>", unsafe_allow_html=True)
+            else:
+                st.markdown("### <center>- x -</center>", unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"### {selected_match['team2']}")
+        
+        # Status do jogo
+        if selected_match['is_live']:
+            st.success("🔴 **Jogo em andamento!**")
+        elif selected_match['status'] == 'finished':
+            st.info("✅ **Jogo finalizado**")
+        else:
+            st.warning("⏸️ **Aguardando atualização do placar**")
+        
+        st.divider()
+        
+        # Pega palpites de todos os participantes
+        predictions = get_live_match_predictions(session, selected_match_id)
+        
+        if not predictions:
+            st.info("Nenhum palpite registrado para este jogo.")
+            return
+        
+        # Calcula ranking ao vivo
+        live_ranking = calculate_live_ranking(session, selected_match_id)
+        
+        # Cria mapa de variação de posição
+        variacao_map = {user['user_id']: user for user in live_ranking}
+        
+        # Pega informações de pódio e rebaixamento
+        zone_info = get_podium_zone_info(session)
+        total_users = len(live_ranking)
+        rebaixamento_inicio = total_users - zone_info['rebaixamento_quantidade'] + 1 if zone_info['rebaixamento_quantidade'] > 0 else None
+        
+        # Mostra palpites em cards estilo escuro
+        st.subheader("📊 Palpites e Pontuação")
+        
+        # CSS para cards estilo claro
+        st.markdown("""
+        <style>
+        .palpite-card-light {
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin: 10px 0;
+            color: #333333;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .palpite-card-light.podio {
+            border-left: 4px solid #FFD700;
+            background: linear-gradient(135deg, #fffef5 0%, #fff9e6 100%);
+        }
+        .palpite-card-light.rebaixamento {
+            border-left: 4px solid #E61D25;
+            background: linear-gradient(135deg, #fff8f8 0%, #ffefef 100%);
+        }
+        .palpite-card-light .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .palpite-card-light .nome {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+        .palpite-card-light .stats {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        /* Esconde qualquer elemento com fundo escuro dentro dos cards */
+        .palpite-card-light div[style*="background"],
+        .palpite-card-light iframe,
+        .palpite-card-light button {
+            display: none !important;
+        }
+        .palpite-card-light .palpite-badge {
+            background: #2A398D !important;
+            color: #ffffff !important;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .palpite-card-light .pontos-badge {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .palpite-card-light .pontos-badge.pts-20 { background: #28a745 !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-15 { background: #20c997 !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-10 { background: #2A398D !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-5 { background: #fd7e14 !important; color: #ffffff !important; }
+        .palpite-card-light .pontos-badge.pts-0 { background: #6c757d !important; color: #ffffff !important; }
+        .palpite-card-light .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #666666;
+        }
+        .palpite-card-light .status-badge {
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .palpite-card-light .status-badge.podio { background: #FFF3CD !important; color: #856404 !important; }
+        .palpite-card-light .status-badge.rebaixamento { background: #F8D7DA !important; color: #721C24 !important; }
+        
+        /* Esconde elementos vazios e garante fundo transparente */
+        .palpite-card-light .status-badge:empty { display: none !important; }
+        .palpite-card-light .info-row:empty { display: none !important; }
+        div[data-testid="stMarkdownContainer"]:has(.palpite-card-light) {
+            background: transparent !important;
+            background-color: transparent !important;
+        }
+        .stMarkdown:has(.palpite-card-light) {
+            background: transparent !important;
+        }
+        .palpites-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Gera cards individuais usando st.markdown separado para cada um
+        for pred in predictions:
+            user_id = pred['user_id']
+            user_rank = variacao_map.get(user_id, {})
+            
+            # Variação de posição
+            variacao = user_rank.get('variacao', 0)
+            posicao_atual = user_rank.get('posicao_atual', '-')
+            
+            if variacao > 0:
+                var_text = f"⬆️ +{variacao}"
+            elif variacao < 0:
+                var_text = f"⬇️ {variacao}"
+            else:
+                var_text = f"➡️ 0"
+            
+            # Status especial e classe CSS
+            status_html = ""
+            card_class = "palpite-card-light"
+            if isinstance(posicao_atual, int):
+                if posicao_atual <= 3:
+                    status_html = '<span class="status-badge podio">🏆 Pódio</span>'
+                    card_class = "palpite-card-light podio"
+                elif rebaixamento_inicio and posicao_atual >= rebaixamento_inicio:
+                    status_html = '<span class="status-badge rebaixamento">⚠️ Rebaixamento</span>'
+                    card_class = "palpite-card-light rebaixamento"
+            
+            # Classe de pontos
+            points = pred['points']
+            if points >= 20:
+                pts_class = "pts-20"
+            elif points >= 15:
+                pts_class = "pts-15"
+            elif points >= 10:
+                pts_class = "pts-10"
+            elif points >= 5:
+                pts_class = "pts-5"
+            else:
+                pts_class = "pts-0"
+            
+            # Renderiza cada card individualmente
+            # Só inclui o status se existir
+            info_row_html = f'<span>{var_text} → {posicao_atual}º lugar</span>'
+            if status_html:
+                info_row_html += f' {status_html}'
+            
+            st.markdown(f'''
+            <div class="{card_class}">
+                <div class="header-row">
+                    <span class="nome">{pred['user_name']}</span>
+                    <div class="stats">
+                        <span class="palpite-badge">{pred['prediction']}</span>
+                        <span class="pontos-badge {pts_class}">⚽ {points} pts</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    {info_row_html}
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        # Legenda de pontos
+        st.markdown("""
+        <div style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-top: 15px; color: #666666; font-size: 0.9em;">
+            <strong style="color: #333333;">Legenda:</strong>
+            <span style="color: #28a745;">● 20 pts</span> Placar exato &nbsp;
+            <span style="color: #20c997;">● 15 pts</span> Resultado + gols &nbsp;
+            <span style="color: #2A398D;">● 10 pts</span> Resultado &nbsp;
+            <span style="color: #fd7e14;">● 5 pts</span> Gols de um time &nbsp;
+            <span style="color: #6c757d;">● 0 pts</span> Não pontuou
         </div>
         """, unsafe_allow_html=True)
         
+        # Botão de atualização
         st.divider()
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("🔄 Atualizar", use_container_width=True):
+                st.rerun()
+        
+        # Auto-refresh a cada 30 segundos se o jogo estiver ao vivo
+        if selected_match['is_live']:
+            st.markdown("<small>🔄 Página atualiza automaticamente a cada 30 segundos</small>", unsafe_allow_html=True)
+            import time
+            time.sleep(30)
+            st.rerun()
+
+
+# =============================================================================
+# PÁGINA DE RESUMO DIÁRIO
+# =============================================================================
+def page_resumo_diario():
+    """
+    Página de resumo diário.
+    Gera resumos automáticos com resultados, pontuadores e variações de ranking.
+    Permite copiar para WhatsApp.
+    """
+    import streamlit as st
+    from datetime import datetime, timedelta
+    import pytz
+    from db import get_session
+    from daily_summary import generate_daily_summary, get_brazil_time
     
-    pagina = st.sidebar.radio(
-        "Navegação",
-        ["⚽ Escalação", "🔬 Simulação Histórica", "📜 Histórico", "🔄 Atualizar Resultados"],
-        label_visibility="collapsed"
-    )
+    st.header("📄 Resumo Diário")
+    st.markdown("Gere resumos automáticos dos jogos e compartilhe no WhatsApp!")
     
-    if pagina == "⚽ Escalação":
-        pagina_escalacao()
-    elif pagina == "🔬 Simulação Histórica":
-        pagina_simulacao()
-    elif pagina == "📜 Histórico":
-        pagina_historico()
-    elif pagina == "🔄 Atualizar Resultados":
-        pagina_atualizar()
+    with get_session(engine) as session:
+        # Seletor de data
+        st.subheader("📅 Selecione a Data")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            target_date = st.date_input(
+                "Data do resumo:",
+                value=get_brazil_time().date(),
+                help="Selecione a data para gerar o resumo"
+            )
+        
+        with col2:
+            format_type = st.selectbox(
+                "Formato:",
+                options=['rich', 'plain'],
+                format_func=lambda x: 'Rico (com emojis)' if x == 'rich' else 'Simples (texto puro)',
+                index=0
+            )
+        
+        # Converte date para datetime
+        brazil_tz = pytz.timezone('America/Sao_Paulo')
+        target_datetime = datetime.combine(target_date, datetime.min.time())
+        target_datetime = brazil_tz.localize(target_datetime)
+        
+        st.divider()
+        
+        # Botão para gerar resumo
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col2:
+            if st.button("📝 Gerar Resumo", use_container_width=True):
+                with st.spinner('Gerando resumo...'):
+                    summary = generate_daily_summary(session, target_datetime, format_type)
+                    st.session_state['daily_summary'] = summary
+        
+        # Mostra resumo se existir
+        if 'daily_summary' in st.session_state:
+            st.divider()
+            st.subheader("📜 Resumo Gerado")
+            
+            # Mostra preview
+            st.text_area(
+                "Preview:",
+                value=st.session_state['daily_summary'],
+                height=400,
+                help="Copie este texto e cole no WhatsApp"
+            )
+            
+            # Botões de ação
+            col1, col2, col3 = st.columns([1, 1, 1])
+            
+            with col1:
+                # Botão de copiar (usando componente nativo do Streamlit)
+                st.download_button(
+                    label="📋 Baixar como TXT",
+                    data=st.session_state['daily_summary'],
+                    file_name=f"resumo_{target_date.strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+            
+            with col2:
+                # JavaScript para copiar para área de transferência
+                st.markdown("""
+                <script>
+                function copyToClipboard() {
+                    const text = document.querySelector('textarea').value;
+                    navigator.clipboard.writeText(text).then(function() {
+                        alert('✅ Texto copiado para a área de transferência!');
+                    }, function(err) {
+                        alert('❌ Erro ao copiar texto');
+                    });
+                }
+                </script>
+                """, unsafe_allow_html=True)
+                
+                if st.button("📋 Copiar para Área de Transferência", use_container_width=True):
+                    st.success("✅ Use Ctrl+C para copiar o texto acima!")
+            
+            with col3:
+                # Link para WhatsApp Web (abre com texto pré-preenchido)
+                import urllib.parse
+                # Codifica o texto para URL - WhatsApp aceita UTF-8 encoded
+                summary_text = st.session_state['daily_summary']
+                # Usa quote diretamente na string (não em bytes)
+                # O quote converte caracteres especiais e emojis corretamente
+                whatsapp_text = urllib.parse.quote(summary_text)
+                whatsapp_url = f"https://wa.me/?text={whatsapp_text}"
+                
+                st.markdown(
+                    f'<a href="{whatsapp_url}" target="_blank" style="display: inline-block; padding: 0.5rem 1rem; background-color: #25D366; color: white; text-decoration: none; border-radius: 5px; text-align: center; width: 100%;">'
+                    f'📱 Enviar pelo WhatsApp</a>',
+                    unsafe_allow_html=True
+                )
+            
+            st.divider()
+            
+            # Instruções
+            with st.expander("💡 Como usar"):
+                st.markdown("""
+                **Opção 1: Copiar manualmente**
+                1. Selecione todo o texto no campo acima
+                2. Pressione Ctrl+C (ou Cmd+C no Mac)
+                3. Cole no WhatsApp
+                
+                **Opção 2: Baixar arquivo**
+                1. Clique em "Baixar como TXT"
+                2. Abra o arquivo
+                3. Copie e cole no WhatsApp
+                
+                **Opção 3: Enviar direto pelo WhatsApp**
+                1. Clique em "Enviar pelo WhatsApp"
+                2. Escolha o contato ou grupo
+                3. Envie a mensagem
+                
+                💡 **Dica:** O formato "Rico" usa emojis e *negrito* que funcionam no WhatsApp!
+                """)
+        
+        # Geração automática ao final do dia
+        st.divider()
+        
+        with st.expander("⚙️ Geração Automática"):
+            st.info("""
+            🕒 **Geração Automática**
+            
+            O resumo pode ser gerado automaticamente ao final de cada dia de jogos.
+            
+            Para implementar:
+            1. Configure um agendador (cron job)
+            2. Execute o script de geração às 23:00
+            3. O resumo será salvo e poderá ser enviado automaticamente
+            
+            🚧 Funcionalidade em desenvolvimento
+            """)
+
+
+# =============================================================================
+# PÁGINA DE RESULTADOS POR GRUPO
+# =============================================================================
+def page_resultados_grupos():
+    """
+    Página que mostra os resultados dos jogos e classificação por grupo.
+    Atualiza em tempo real conforme os resultados são lançados.
+    """
+    import pandas as pd
+    from group_standings import get_official_group_standings
     
-    st.sidebar.divider()
-    st.sidebar.markdown("""
-    <div style="text-align: center; padding: 10px;">
-        <p style="color: #6C757D; font-size: 0.8rem;">Estratégia v9</p>
-        <p style="color: #54b4f7; font-size: 0.9rem; font-weight: 600;">94.1 pts/rodada</p>
-    </div>
+    render_page_header()
+    st.header("🏆 Resultados por Grupo")
+    st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
+    
+    # CSS e marca d'água do logo Copa 2026
+    st.markdown("""
+    <style>
+        .grupos-watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 350px;
+            height: 350px;
+            background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.05;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+    <div class="grupos-watermark"></div>
     """, unsafe_allow_html=True)
+    
+    with get_session(engine) as session:
+        # Seletor de grupo
+        grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        
+        # Opção para ver todos os grupos ou selecionar um
+        view_mode = st.radio(
+            "Visualização:",
+            ["Todos os Grupos", "Selecionar Grupo"],
+            horizontal=True
+        )
+        
+        if view_mode == "Selecionar Grupo":
+            grupo_selecionado = st.selectbox(
+                "Selecione o Grupo:",
+                grupos,
+                format_func=lambda x: f"Grupo {x}"
+            )
+            grupos_para_mostrar = [grupo_selecionado]
+        else:
+            grupos_para_mostrar = grupos
+        
+        st.divider()
+        
+        # Mostra cada grupo
+        for grupo in grupos_para_mostrar:
+            with st.expander(f"🏅 Grupo {grupo}", expanded=(view_mode == "Selecionar Grupo")):
+                # Busca classificação do grupo
+                standings = get_official_group_standings(session, grupo)
+                
+                # Busca jogos do grupo
+                jogos_grupo = session.query(Match).filter(
+                    Match.group == grupo,
+                    Match.phase == 'Fase de Grupos'
+                ).order_by(Match.datetime).all()
+                
+                if not jogos_grupo:
+                    # Tenta com 'Grupos' ao invés de 'Fase de Grupos'
+                    jogos_grupo = session.query(Match).filter(
+                        Match.group == grupo,
+                        Match.phase == 'Grupos'
+                    ).order_by(Match.datetime).all()
+                
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    st.markdown("#### 📊 Classificação")
+                    
+                    if standings:
+                        # Cria tabela de classificação
+                        table_data = []
+                        for i, team_stats in enumerate(standings, 1):
+                            team = team_stats['team']
+                            
+                            # Determina nome e bandeira
+                            if hasattr(team, 'flag') and team.flag:
+                                flag = team.flag
+                            else:
+                                flag = "🏳️"
+                            
+                            if hasattr(team, 'name') and team.name:
+                                name = team.name
+                            elif hasattr(team, 'code'):
+                                name = team.code
+                            else:
+                                name = "TBD"
+                            
+                            # Destaque para classificados
+                            if i <= 2:
+                                pos_icon = "🟢" if i == 1 else "🟡"
+                            else:
+                                pos_icon = ""
+                            
+                            table_data.append({
+                                "Pos": f"{pos_icon} {i}º",
+                                "Seleção": f"{flag} {name}",
+                                "P": team_stats['points'],
+                                "J": team_stats['played'],
+                                "V": team_stats['wins'],
+                                "E": team_stats['draws'],
+                                "D": team_stats['losses'],
+                                "GP": team_stats['goals_for'],
+                                "GC": team_stats['goals_against'],
+                                "SG": team_stats['goal_difference']
+                            })
+                        
+                        df = pd.DataFrame(table_data)
+                        st.dataframe(
+                            df,
+                            hide_index=True,
+                            use_container_width=True,
+                            column_config={
+                                "Pos": st.column_config.TextColumn("Pos", width="small"),
+                                "Seleção": st.column_config.TextColumn("Seleção", width="medium"),
+                                "P": st.column_config.NumberColumn("Pts", width="small"),
+                                "J": st.column_config.NumberColumn("J", width="small"),
+                                "V": st.column_config.NumberColumn("V", width="small"),
+                                "E": st.column_config.NumberColumn("E", width="small"),
+                                "D": st.column_config.NumberColumn("D", width="small"),
+                                "GP": st.column_config.NumberColumn("GP", width="small"),
+                                "GC": st.column_config.NumberColumn("GC", width="small"),
+                                "SG": st.column_config.NumberColumn("SG", width="small")
+                            }
+                        )
+                        
+                        st.caption("🟢 1º lugar | 🟡 2º lugar | P=Pontos | J=Jogos | V=Vitórias | E=Empates | D=Derrotas | GP=Gols Pró | GC=Gols Contra | SG=Saldo")
+                    else:
+                        st.info("Nenhum resultado lançado ainda para este grupo.")
+                
+                with col2:
+                    st.markdown("#### ⚽ Jogos")
+                    
+                    if jogos_grupo:
+                        for jogo in jogos_grupo:
+                            # Determina times
+                            if jogo.team1:
+                                team1_name = f"{jogo.team1.flag} {jogo.team1.name}"
+                            elif jogo.team1_code:
+                                team1_name = f"🏳️ {jogo.team1_code}"
+                            else:
+                                team1_name = "TBD"
+                            
+                            if jogo.team2:
+                                team2_name = f"{jogo.team2.flag} {jogo.team2.name}"
+                            elif jogo.team2_code:
+                                team2_name = f"🏳️ {jogo.team2_code}"
+                            else:
+                                team2_name = "TBD"
+                            
+                            # Formata data
+                            data_jogo = jogo.datetime.strftime("%d/%m %H:%M") if jogo.datetime else "TBD"
+                            
+                            # Determina placar e status
+                            if jogo.status == 'finished':
+                                placar = f"**{jogo.team1_score}** x **{jogo.team2_score}**"
+                                status_icon = "✅"
+                            elif jogo.team1_score is not None and jogo.team2_score is not None:
+                                placar = f"**{jogo.team1_score}** x **{jogo.team2_score}**"
+                                status_icon = "🔴"
+                            else:
+                                placar = "vs"
+                                status_icon = "⏰"
+                            
+                            st.markdown(
+                                f"{status_icon} {team1_name} {placar} {team2_name}  \n"
+                                f"<small style='color: gray;'>{data_jogo}</small>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.info("Nenhum jogo encontrado para este grupo.")
+        
+        # Legenda
+        st.divider()
+        st.markdown("""
+        **Legenda:**
+        - ✅ Jogo finalizado
+        - 🔴 Jogo em andamento
+        - ⏰ Jogo agendado
+        - 🟢 Classificado em 1º lugar
+        - 🟡 Classificado em 2º lugar
+        """)
+
+
+# =============================================================================
+# NAVEGAÇÃO PRINCIPAL
+# =============================================================================
+
+def get_notification_badges(session, user_id):
+    """Retorna contagem de notificações para badges no menu"""
+    from datetime import datetime
+    badges = {}
+    
+    try:
+        now = get_brazil_time().replace(tzinfo=None)
+        
+        # Jogos em andamento (ao vivo)
+        jogos_ao_vivo = session.query(Match).filter(
+            Match.status == 'in_progress'
+        ).count()
+        
+        # Jogos que começaram nas últimas 24h (novos resultados)
+        from datetime import timedelta
+        ontem = now - timedelta(hours=24)
+        jogos_recentes = session.query(Match).filter(
+            Match.status == 'finished',
+            Match.datetime >= ontem
+        ).count()
+        
+        # Palpites pendentes (jogos futuros sem palpite)
+        jogos_futuros = session.query(Match).filter(
+            Match.datetime > now,
+            Match.status == 'scheduled'
+        ).all()
+        
+        palpites_feitos = session.query(Prediction).filter(
+            Prediction.user_id == user_id
+        ).count()
+        
+        palpites_pendentes = len(jogos_futuros) - palpites_feitos
+        if palpites_pendentes < 0:
+            palpites_pendentes = 0
+        
+        badges['ao_vivo'] = jogos_ao_vivo
+        badges['novos_resultados'] = jogos_recentes
+        badges['palpites_pendentes'] = min(palpites_pendentes, 99)  # Max 99
+        
+    except Exception:
+        badges = {'ao_vivo': 0, 'novos_resultados': 0, 'palpites_pendentes': 0}
+    
+    return badges
+
+def main():
+    """Função principal do aplicativo"""
+    
+    # ========================================================================
+    # ========================================================================
+    
+    if st.session_state.user is None:
+        page_login()
+    else:
+        # Sidebar com navegação
+        with st.sidebar:
+            st.markdown(f"### 👋 Olá, {st.session_state.user['name']}!")
+            st.divider()
+            
+            # Busca badges de notificação
+            with get_session(engine) as session:
+                badges = get_notification_badges(session, st.session_state.user['id'])
+            
+            # Menu de navegação - diferente para admin e participantes
+            if st.session_state.user['role'] == 'admin':
+                # Admin só vê opções administrativas
+                menu_options = {
+                    "🏠 Início": "home",
+                    "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
+                    "🏆 Resultados por Grupo": "resultados_grupos",
+                    "📊 Ranking": "ranking",
+                    "📄 Resumo Diário": "resumo_diario",
+                    "📈 Estatísticas": "estatisticas",
+                    "⚙️ Configurações": "configuracoes",
+                    "🔧 Admin": "admin",
+                }
+            else:
+                # Participantes veem todas as opções de palpites
+                # Adiciona badges dinâmicos
+                palpites_badge = f" 🔴{badges['palpites_pendentes']}" if badges['palpites_pendentes'] > 0 else ""
+                ao_vivo_badge = " 🔴 AO VIVO" if badges['ao_vivo'] > 0 else ""
+                
+                menu_options = {
+                    "🏠 Início": "home",
+                    f"📝 Palpites - Jogos{palpites_badge}": "palpites_jogos",
+                    "🏅 Palpites - Grupos": "palpites_grupos",
+                    "🏆 Palpites - Pódio": "palpites_podio",
+                    f"📺 Visualização ao Vivo{ao_vivo_badge}": "visualizacao_ao_vivo",
+                    "🏆 Resultados por Grupo": "resultados_grupos",
+                    "📊 Ranking": "ranking",
+                    "💡 Dicas": "dicas",
+                    "📈 Estatísticas": "estatisticas",
+                    "⚙️ Configurações": "configuracoes",
+                }
+            
+            for label, page in menu_options.items():
+                if st.button(label, use_container_width=True):
+                    st.session_state.page = page
+                    st.rerun()
+            
+            st.divider()
+            
+            if st.button("🚪 Sair", use_container_width=True):
+                st.session_state.user = None
+                st.session_state.page = 'home'
+                st.rerun()
+        
+        # Renderiza a página selecionada
+        pages = {
+            "home": page_home,
+            "palpites_jogos": page_palpites_jogos,
+            "palpites_grupos": page_palpites_grupos,
+            "palpites_podio": page_palpites_podio,
+            "visualizacao_ao_vivo": page_visualizacao_ao_vivo,
+            "resultados_grupos": page_resultados_grupos,
+            "ranking": page_ranking,
+            "resumo_diario": page_resumo_diario,
+            "dicas": page_dicas,
+            "estatisticas": page_estatisticas,
+            "configuracoes": page_configuracoes,
+            "admin": page_admin,
+        }
+        
+        page_func = pages.get(st.session_state.page, page_home)
+        page_func()
+        
+        # Rodapé com identidade visual da Copa 2026
+        st.markdown("""
+        <div style="
+            margin-top: 50px;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #1E3A5F 0%, #2A398D 100%);
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        ">
+            <div style="font-size: 1.5rem; margin-bottom: 10px;">
+                🇨🇦 🇲🇽 🇺🇸
+            </div>
+            <div style="
+                font-size: 1.8rem;
+                font-weight: 800;
+                color: #FFD700;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                letter-spacing: 3px;
+                margin-bottom: 8px;
+            ">
+                #WeAre26
+            </div>
+            <div style="
+                font-size: 0.9rem;
+                color: #ffffff;
+                opacity: 0.9;
+            ">
+                🏆 FIFA World Cup 2026™ | 🍁 Canadá • 🦅 México • ⭐ Estados Unidos
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
