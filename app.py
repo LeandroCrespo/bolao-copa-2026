@@ -2765,17 +2765,24 @@ def pagina_escalacao():
             
             # Exibir reservas se houver
             reservas = esc_atual.get('reservas', {})
-            if reservas:
+            reserva_luxo = esc_atual.get('reserva_luxo')
+            
+            # Debug: mostrar se há reservas
+            st.divider()
+            if reservas or reserva_luxo:
                 st.markdown('<h4>🔄 Reservas</h4>', unsafe_allow_html=True)
+                
+                # Exibir reservas normais
                 for pos_id, reserva in reservas.items():
                     if reserva and not reserva.get('is_reserva_luxo'):
                         exibir_jogador_card(reserva, is_capitao=False)
-            
-            # Exibir reserva de luxo se houver
-            reserva_luxo = esc_atual.get('reserva_luxo')
-            if reserva_luxo:
-                st.markdown('<h4>⭐ Reserva de Luxo</h4>', unsafe_allow_html=True)
-                exibir_jogador_card(reserva_luxo, is_capitao=False)
+                
+                # Exibir reserva de luxo
+                if reserva_luxo:
+                    st.markdown('<h4>⭐ Reserva de Luxo</h4>', unsafe_allow_html=True)
+                    exibir_jogador_card(reserva_luxo, is_capitao=False)
+            else:
+                st.info('💡 Reservas serão calculados após a substituição.')
             
             if st.button("🗑️ Limpar Substituições", use_container_width=True):
                 del st.session_state.escalacao_atualizada
