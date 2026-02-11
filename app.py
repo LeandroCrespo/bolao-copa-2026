@@ -1679,8 +1679,13 @@ def page_dicas():
     ### 📊 Sobre o Ranking FIFA
     
     O **Ranking FIFA/Coca-Cola** é a classificação oficial das seleções masculinas de futebol, 
-    atualizado mensalmente pela FIFA. Ele considera os resultados das partidas internacionais, 
+    atualizado periodicamente pela FIFA. Ele considera os resultados das partidas internacionais, 
     a importância dos jogos e a força dos adversários enfrentados.
+    
+    **Última atualização do ranking:** 19 de janeiro de 2026 | **Próxima atualização:** 01 de abril de 2026
+    
+    **Destaque:** Marrocos subiu para o **8º lugar** (melhor posição de sua história) após ser vice da Copa Africana. 
+    Senegal, campeão da AFCON 2025, saltou para o **12º lugar** (subiu 7 posições).
     
     """)
     
@@ -1784,7 +1789,7 @@ def page_dicas():
         (1, "🇪🇸", "Espanha", "#1", 1877, "H"),
         (2, "🇦🇷", "Argentina", "#2", 1873, "J"),
         (3, "🇫🇷", "França", "#3", 1870, "I"),
-        (4, "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Inglaterra", "#4", 1834, "L"),
+        (4, "🏴‍", "Inglaterra", "#4", 1834, "L"),
         (5, "🇧🇷", "Brasil", "#5", 1760, "C"),
     ]
     for item in tier1_data:
@@ -1797,9 +1802,9 @@ def page_dicas():
     tier2_data = [
         (6, "🇵🇹", "Portugal", "#6", 1760, "K"),
         (7, "🇳🇱", "Holanda", "#7", 1756, "F"),
-        (8, "🇧🇪", "Bélgica", "#8", 1731, "G"),
-        (9, "🇩🇪", "Alemanha", "#9", 1724, "E"),
-        (10, "🇭🇷", "Croácia", "#10", 1717, "L"),
+        (8, "🇲🇦", "Marrocos", "#8", 1737, "C"),
+        (9, "🇧🇪", "Bélgica", "#9", 1731, "G"),
+        (10, "🇩🇪", "Alemanha", "#10", 1724, "E"),
     ]
     for item in tier2_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
@@ -1809,16 +1814,16 @@ def page_dicas():
     st.markdown("### 🥈 COMPETITIVAS")
     st.markdown(render_header(), unsafe_allow_html=True)
     tier3_data = [
-        (11, "🇲🇦", "Marrocos", "#11", 1716, "C"),
-        (12, "🇨🇴", "Colômbia", "#13", 1701, "K"),
-        (13, "🇺🇸", "Estados Unidos", "#14", 1682, "D"),
-        (14, "🇲🇽", "México", "#15", 1676, "A"),
-        (15, "🇺🇾", "Uruguai", "#16", 1673, "H"),
-        (16, "🇨🇭", "Suíça", "#17", 1655, "B"),
-        (17, "🇯🇵", "Japão", "#18", 1650, "F"),
-        (18, "🇸🇳", "Senegal", "#19", 1648, "I"),
+        (11, "🇭🇷", "Croácia", "#11", 1717, "L"),
+        (12, "🇸🇳", "Senegal", "#12", 1707, "I"),
+        (13, "🇨🇴", "Colômbia", "#14", 1701, "K"),
+        (14, "🇺🇸", "Estados Unidos", "#15", 1682, "D"),
+        (15, "🇲🇽", "México", "#16", 1676, "A"),
+        (16, "🇺🇾", "Uruguai", "#17", 1673, "H"),
+        (17, "🇨🇭", "Suíça", "#18", 1655, "B"),
+        (18, "🇯🇵", "Japão", "#19", 1650, "F"),
         (19, "🇮🇷", "Irã", "#20", 1617, "G"),
-        (20, "🇰🇷", "Coreia do Sul", "#22", 1599, "A"),
+        (20, "🇰🇷", "Coreia do Sul", "#22", 1601, "A"),
     ]
     for item in tier3_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
@@ -1830,14 +1835,14 @@ def page_dicas():
     tier4_data = [
         (21, "🇪🇨", "Equador", "#23", 1592, "E"),
         (22, "🇦🇹", "Áustria", "#24", 1586, "J"),
-        (23, "🇦🇺", "Austrália", "#26", 1574, "D"),
-        (24, "🇨🇦", "Canadá", "#27", 1559, "B"),
-        (25, "🇳🇴", "Noruega", "#29", 1553, "I"),
-        (26, "🇵🇦", "Panamá", "#30", 1540, "L"),
-        (27, "🇩🇿", "Argélia", "#34", 1518, "J"),
-        (28, "🇪🇬", "Egito", "#35", 1515, "G"),
-        (29, "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Escócia", "#36", 1507, "C"),
-        (30, "🇵🇾", "Paraguai", "#39", 1502, "D"),
+        (23, "🇦🇺", "Austrália", "#27", 1574, "D"),
+        (24, "🇨🇦", "Canadá", "#29", 1559, "B"),
+        (25, "🇳🇴", "Noruega", "#32", 1553, "I"),
+        (26, "🇵🇦", "Panamá", "#33", 1539, "L"),
+        (27, "🇩🇿", "Argélia", "#28", 1561, "J"),
+        (28, "🇪🇬", "Egito", "#31", 1557, "G"),
+        (29, "🏴‍", "Escócia", "#38", 1507, "C"),
+        (30, "🇵🇾", "Paraguai", "#40", 1502, "D"),
     ]
     for item in tier4_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
@@ -1847,18 +1852,18 @@ def page_dicas():
     st.markdown("### 🦓 ZEBRAS POTENCIAIS")
     st.markdown(render_header(), unsafe_allow_html=True)
     tier5_data = [
-        (31, "🇹🇳", "Tunísia", "#41", 1495, "F"),
-        (32, "🇨🇮", "Costa do Marfim", "#42", 1490, "E"),
-        (33, "🇺🇿", "Uzbequestão", "#50", 1462, "K"),
-        (34, "🇶🇦", "Qatar", "#54", 1455, "B"),
-        (35, "🇸🇦", "Arábia Saudita", "#60", 1429, "H"),
-        (36, "🇿🇦", "África do Sul", "#61", 1427, "A"),
+        (31, "🇨🇮", "Costa do Marfim", "#37", 1522, "E"),
+        (32, "🇹🇳", "Tunísia", "#47", 1479, "F"),
+        (33, "🇺🇿", "Uzbequistão", "#52", 1462, "K"),
+        (34, "🇶🇦", "Qatar", "#56", 1455, "B"),
+        (35, "🇸🇦", "Arábia Saudita", "#61", 1429, "H"),
+        (36, "🇿🇦", "África do Sul", "#60", 1433, "A"),
         (37, "🇯🇴", "Jordânia", "#64", 1389, "J"),
         (38, "🇨🇻", "Cabo Verde", "#67", 1370, "H"),
         (39, "🇬🇭", "Gana", "#72", 1351, "L"),
-        (40, "🇨🇼", "Curaçao", "#82", 1303, "E"),
-        (41, "🇭🇹", "Haiti", "#84", 1294, "C"),
-        (42, "🇳🇿", "Nova Zelândia", "#87", 1279, "G"),
+        (40, "🇨🇼", "Curaçao", "#81", 1303, "E"),
+        (41, "🇭🇹", "Haiti", "#83", 1294, "C"),
+        (42, "🇳🇿", "Nova Zelândia", "#85", 1279, "G"),
     ]
     for item in tier5_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
