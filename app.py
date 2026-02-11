@@ -21,6 +21,13 @@ from scoring import (
     get_ranking, get_user_stats, get_scoring_config, 
     process_match_predictions, process_group_predictions, process_podium_predictions
 )
+from novas_funcionalidades import (
+    render_countdown_timer, render_next_match_countdown,
+    render_ranking_evolution_chart, render_achievements,
+    render_best_predictions, render_comparison,
+    page_regras, render_general_stats,
+    export_ranking_pdf, admin_backup_database
+)
 
 SELECOES_REPESCAGEM = {
     # Repescagem Europa (4 vagas)
@@ -1243,9 +1250,15 @@ def page_home():
     # Cabeçalho padrão
     render_page_header()
     
+    # Timer regressivo para a Copa
+    render_countdown_timer()
+    
     session = get_session(engine)
     
     try:
+        # Timer do próximo jogo
+        render_next_match_countdown(session)
+        
         user_stats = get_user_stats(session, st.session_state.user['id'])
         ranking = get_ranking(session)
         
@@ -2463,6 +2476,27 @@ def page_ranking():
             7. **Menos palpites zerados**
             8. **Ordem de inscrição** (quem se inscreveu primeiro)
             """)
+        
+        # ========================================
+        # GRÁFICO DE EVOLUÇÃO DO RANKING
+        # ========================================
+        st.divider()
+        render_ranking_evolution_chart(session)
+        
+        # ========================================
+        # EXPORTAR RANKING EM PDF
+        # ========================================
+        st.divider()
+        if st.button("📄 Exportar Ranking em PDF", key="btn_export_pdf"):
+            pdf_path = export_ranking_pdf(session)
+            if pdf_path:
+                with open(pdf_path, 'rb') as f:
+                    st.download_button(
+                        label="⬇️ Baixar PDF",
+                        data=f,
+                        file_name="ranking_bolao_copa2026.pdf",
+                        mime="application/pdf"
+                    )
 
 
 # =============================================================================
@@ -2726,6 +2760,25 @@ def page_estatisticas():
                 st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
         else:
             st.info("🎯 Ainda não há acertos para mostrar no gráfico.")
+        
+        # ========================================
+        # MEDALHAS E CONQUISTAS
+        # ========================================
+        st.divider()
+        st.subheader("🏅 Suas Conquistas")
+        render_achievements(session, st.session_state.user['id'])
+        
+        # ========================================
+        # MELHOR PALPITE DA RODADA
+        # ========================================
+        st.divider()
+        render_best_predictions(session)
+        
+        # ========================================
+        # COMPARATIVO ENTRE PARTICIPANTES
+        # ========================================
+        st.divider()
+        render_comparison(session)
     
     finally:
         session.close()
@@ -2892,7 +2945,8 @@ def page_admin():
             "⭐ Pontuação",
             "💰 Premiação",
             "📋 Palpites",
-            "🔄 Repescagem"
+            "🔄 Repescagem",
+            "💾 Backup"
         ])
         
         with tabs[0]:
@@ -2924,6 +2978,9 @@ def page_admin():
         
         with tabs[9]:
             admin_repescagem(session)
+        
+        with tabs[10]:
+            admin_backup_database(session)
     
     finally:
         session.close()
@@ -4870,6 +4927,24 @@ def get_notification_badges(session, user_id):
     
     return badges
 
+# =============================================================================
+# NOVAS PÁGINAS - WRAPPERS
+# =============================================================================
+def page_estatisticas_gerais():
+    """Página de estatísticas gerais do bolão"""
+    render_page_header()
+    session = get_session(engine)
+    try:
+        render_general_stats(session)
+    finally:
+        session.close()
+
+def page_regras_wrapper():
+    """Página de regras e pontuação"""
+    render_page_header()
+    page_regras(get_session, engine)
+
+
 def main():
     """Função principal do aplicativo"""
     
@@ -4898,6 +4973,8 @@ def main():
                     "📊 Ranking": "ranking",
                     "📄 Resumo Diário": "resumo_diario",
                     "📈 Estatísticas": "estatisticas",
+                    "📊 Estatísticas Gerais": "estatisticas_gerais",
+                    "📋 Regras": "regras",
                     "⚙️ Configurações": "configuracoes",
                     "🔧 Admin": "admin",
                 }
@@ -4917,6 +4994,8 @@ def main():
                     "📊 Ranking": "ranking",
                     "💡 Dicas": "dicas",
                     "📈 Estatísticas": "estatisticas",
+                    "📊 Estatísticas Gerais": "estatisticas_gerais",
+                    "📋 Regras": "regras",
                     "⚙️ Configurações": "configuracoes",
                 }
             
@@ -4944,6 +5023,8 @@ def main():
             "resumo_diario": page_resumo_diario,
             "dicas": page_dicas,
             "estatisticas": page_estatisticas,
+            "estatisticas_gerais": page_estatisticas_gerais,
+            "regras": page_regras_wrapper,
             "configuracoes": page_configuracoes,
             "admin": page_admin,
         }
