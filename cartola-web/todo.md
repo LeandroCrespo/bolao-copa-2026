@@ -87,3 +87,19 @@
 - [x] BUG: Dashboard - valor do patrimônio está errado (deve ser igual ao Streamlit) - corrigido para usar orcamento_disponivel + valorizacao_com_sub da ÚLTIMA rodada apenas
 - [x] TESTS: Testes de valorização com substituições (5 testes: titulares, reserva normal, reserva luxo, patrimônio vs Streamlit)
 - [x] TESTS: Todos os 38 testes passando
+- [x] FIX: Sidebar - remover "Análise" como item separado (no Streamlit está dentro do Mercado)
+- [x] FIX: Sidebar - labels devem ser: Dashboard, Escalação, Mercado, Simulação, Histórico, Atualizar, Status Coleta (7 itens, não 8)
+- [x] FIX: Escalação campo - zagueiros no CENTRO, laterais nas PONTAS (LAT-ZAG-ZAG-LAT)
+- [x] FIX: Escalação - adicionar lista lateral ao lado do campo (igual Streamlit campo_layout.py)
+- [x] FIX: Mercado - gráfico de análise do jogador deve combinar TODAS as rodadas em um único gráfico (brasileiro + coleta paralela juntos)
+- [x] FIX: Simulação Histórica - adicionar justificativas completas nos detalhes de cada rodada (fatores, resumo, motivo)
+- [x] FIX: Simulação Histórica - adicionar substituições nos detalhes de cada rodada
+- [x] FIX: Simulação Histórica - melhor time possível com indicação de escalado/não escalado
+- [x] FIX: Simulação Histórica - coluna Aproveitamento Acumulado na tabela
+- [x] FIX: Simulação Histórica - reserva de luxo nos detalhes
+- [x] FIX: Simulação Histórica - cards com escudo do clube e preço detalhado
+- [x] FIX: Histórico - verificar e adicionar todos os elementos faltantes vs Streamlit
+- [x] FIX: Histórico - gráfico Evolução do Orçamento
+- [x] FIX: Histórico - gráfico Distribuição de Justificativas (pizza)
+- [x] FIX: Histórico - gauges Aproveitamento por Justificativa
+- [x] FIX: Análise de jogador deve ser acessível via clique no Mercado (não como página separada no sidebar) - já funciona via /jogador/:id, sidebar já corrigido

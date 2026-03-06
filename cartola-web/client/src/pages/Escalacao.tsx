@@ -1,5 +1,4 @@
 import { trpc } from "@/lib/trpc";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -70,17 +69,38 @@ export default function Escalacao() {
   }, [escalacao, mercadoStatus]);
 
   // Group titulares by position for field layout
+  // IMPORTANT: Defense line = LAT(left) + ZAG(center) + LAT(right) - matching Streamlit
   const linhas = useMemo(() => {
-    if (!escalacao) return { gol: [], zag: [], lat: [], mei: [], ata: [], tec: [] };
+    if (!escalacao) return { gol: [], defesa: [], mei: [], ata: [], tec: [] };
     const group = (posIds: number[]) => escalacao.titulares.filter((j: any) => posIds.includes(j.pos_id));
+    const lat = group([2]);
+    const zag = group([3]);
+    // Combine defense: LAT[0] + all ZAG + LAT[1] (laterais nas pontas, zagueiros no centro)
+    let defesa: any[] = [];
+    if (lat.length >= 2) {
+      defesa = [lat[0], ...zag, lat[1]];
+    } else if (lat.length === 1) {
+      defesa = [lat[0], ...zag];
+    } else {
+      defesa = zag;
+    }
     return {
       ata: group([5]),
       mei: group([4]),
-      lat: group([2]),
-      zag: group([3]),
+      defesa,
       gol: group([1]),
       tec: group([6]),
     };
+  }, [escalacao]);
+
+  // Ordered list for side panel (GOL, LAT, ZAG, MEI, ATA, TEC)
+  const titularesOrdenados = useMemo(() => {
+    if (!escalacao) return [];
+    const ordered: any[] = [];
+    for (const posId of [1, 2, 3, 4, 5, 6]) {
+      ordered.push(...escalacao.titulares.filter((j: any) => j.pos_id === posId));
+    }
+    return ordered;
   }, [escalacao]);
 
   const rodadaAtual = mercadoStatus?.rodada_atual || 0;
@@ -181,49 +201,142 @@ export default function Escalacao() {
             </div>
           </div>
 
-          {/* Football Field */}
-          <div className="relative rounded-b-xl overflow-hidden" style={{
-            background: "linear-gradient(180deg, #1a6b30 0%, #15802d 15%, #1a6b30 30%, #15802d 45%, #1a6b30 60%, #15802d 75%, #1a6b30 90%, #15802d 100%)",
-            border: "1px solid rgba(148, 163, 184, 0.15)", borderTop: "2px solid rgba(255,255,255,0.2)",
-          }}>
-            {/* Field lines */}
-            <div className="absolute" style={{ top: 0, left: "5%", right: "5%", bottom: 0, border: "2px solid rgba(255,255,255,0.2)", borderTop: "none" }} />
-            <div className="absolute" style={{ top: "50%", left: "5%", right: "5%", height: 2, background: "rgba(255,255,255,0.15)" }} />
-            <div className="absolute" style={{ top: "50%", left: "50%", width: 70, height: 70, border: "2px solid rgba(255,255,255,0.15)", borderRadius: "50%", transform: "translate(-50%, -50%)" }} />
-            <div className="absolute" style={{ top: 0, left: "25%", right: "25%", height: 55, border: "2px solid rgba(255,255,255,0.15)", borderTop: "none" }} />
-            <div className="absolute" style={{ bottom: 0, left: "25%", right: "25%", height: 55, border: "2px solid rgba(255,255,255,0.15)", borderBottom: "none" }} />
+          {/* Football Field + Side List */}
+          <div className="flex gap-0" style={{ minHeight: 580 }}>
+            {/* Field */}
+            <div className="flex-[3] relative rounded-bl-xl overflow-hidden" style={{
+              background: "linear-gradient(180deg, #1a6b30 0%, #15802d 15%, #1a6b30 30%, #15802d 45%, #1a6b30 60%, #15802d 75%, #1a6b30 90%, #15802d 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.15)", borderTop: "2px solid rgba(255,255,255,0.2)", borderRight: "none",
+            }}>
+              {/* Field lines */}
+              <div className="absolute" style={{ top: 0, left: "5%", right: "5%", bottom: 0, border: "2px solid rgba(255,255,255,0.2)", borderTop: "none" }} />
+              <div className="absolute" style={{ top: "50%", left: "5%", right: "5%", height: 2, background: "rgba(255,255,255,0.15)" }} />
+              <div className="absolute" style={{ top: "50%", left: "50%", width: 70, height: 70, border: "2px solid rgba(255,255,255,0.15)", borderRadius: "50%", transform: "translate(-50%, -50%)" }} />
+              <div className="absolute" style={{ top: 0, left: "25%", right: "25%", height: 55, border: "2px solid rgba(255,255,255,0.15)", borderTop: "none" }} />
+              <div className="absolute" style={{ bottom: 0, left: "25%", right: "25%", height: 55, border: "2px solid rgba(255,255,255,0.15)", borderBottom: "none" }} />
 
-            {/* Players */}
-            <div className="relative z-10 flex flex-col justify-between py-4 gap-2" style={{ minHeight: 540 }}>
-              <FieldRow jogadores={linhas.ata} capitaoId={escalacao.capitao?.atleta_id} onClickJogador={(id) => setLocation(`/jogador/${id}`)} />
-              <FieldRow jogadores={linhas.mei} capitaoId={escalacao.capitao?.atleta_id} onClickJogador={(id) => setLocation(`/jogador/${id}`)} />
-              {/* Laterais + Zagueiros together as defense line */}
-              <FieldRow jogadores={[...linhas.zag, ...linhas.lat].sort((a: any, b: any) => a.pos_id - b.pos_id)} capitaoId={escalacao.capitao?.atleta_id} onClickJogador={(id) => setLocation(`/jogador/${id}`)} />
-              {/* Goleiro + Técnico */}
-              <div className="flex justify-center items-start px-5 relative">
-                <div className="flex-1" />
-                <div className="flex-shrink-0">
-                  {linhas.gol.map((j: any) => (
-                    <FieldPlayer key={j.atleta_id} jogador={j} isCap={escalacao.capitao?.atleta_id === j.atleta_id} onClick={() => setLocation(`/jogador/${j.atleta_id}`)} />
-                  ))}
+              {/* Players */}
+              <div className="relative z-10 flex flex-col justify-between py-4 gap-2" style={{ minHeight: 540 }}>
+                <FieldRow jogadores={linhas.ata} capitaoId={escalacao.capitao?.atleta_id} onClickJogador={(id) => setLocation(`/jogador/${id}`)} />
+                <FieldRow jogadores={linhas.mei} capitaoId={escalacao.capitao?.atleta_id} onClickJogador={(id) => setLocation(`/jogador/${id}`)} />
+                {/* Defense: LAT(left) + ZAG(center) + LAT(right) */}
+                <FieldRow jogadores={linhas.defesa} capitaoId={escalacao.capitao?.atleta_id} onClickJogador={(id) => setLocation(`/jogador/${id}`)} />
+                {/* Goleiro + Técnico */}
+                <div className="flex justify-center items-start px-5 relative">
+                  <div className="flex-1" />
+                  <div className="flex-shrink-0">
+                    {linhas.gol.map((j: any) => (
+                      <FieldPlayer key={j.atleta_id} jogador={j} isCap={escalacao.capitao?.atleta_id === j.atleta_id} onClick={() => setLocation(`/jogador/${j.atleta_id}`)} />
+                    ))}
+                  </div>
+                  <div className="flex-1 flex justify-end pr-2">
+                    {linhas.tec.map((j: any) => (
+                      <FieldPlayer key={j.atleta_id} jogador={j} isCap={false} isTec onClick={() => setLocation(`/jogador/${j.atleta_id}`)} />
+                    ))}
+                  </div>
                 </div>
-                <div className="flex-1 flex justify-end pr-2">
-                  {linhas.tec.map((j: any) => (
-                    <FieldPlayer key={j.atleta_id} jogador={j} isCap={false} isTec onClick={() => setLocation(`/jogador/${j.atleta_id}`)} />
-                  ))}
-                </div>
+              </div>
+
+              {/* Formation watermark */}
+              <div className="absolute bottom-4 left-4 z-20">
+                <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "1.6rem", fontWeight: 800, fontFamily: "var(--font-heading)", letterSpacing: 1 }}>
+                  {escalacao.formacao}
+                </span>
               </div>
             </div>
 
-            {/* Formation watermark */}
-            <div className="absolute bottom-4 left-4 z-20">
-              <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "1.6rem", fontWeight: 800, fontFamily: "var(--font-heading)", letterSpacing: 1 }}>
-                {escalacao.formacao}
-              </span>
+            {/* Side List - matching Streamlit campo_layout.py gerar_lista_lateral_markdown */}
+            <div className="flex-[2] rounded-br-xl overflow-y-auto" style={{
+              background: "linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(30, 41, 59, 0.6) 100%)",
+              border: "1px solid rgba(148, 163, 184, 0.15)", borderLeft: "none", borderTop: "2px solid rgba(148, 163, 184, 0.15)",
+              padding: "8px 12px",
+            }}>
+              {/* Header */}
+              <div className="flex justify-between items-center pb-2 mb-1" style={{ borderBottom: "2px solid rgba(148, 163, 184, 0.2)" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[0.65rem] font-bold tracking-wider" style={{ color: "#64748b", minWidth: 28 }}>POS</span>
+                  <span className="text-[0.65rem] font-bold tracking-wider" style={{ color: "#64748b" }}>JOGADOR</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[0.65rem] font-bold tracking-wider" style={{ color: "#4da8f0", minWidth: 60, textAlign: "right" }}>PREÇO</span>
+                  <span className="text-[0.65rem] font-bold tracking-wider" style={{ color: "#34d399", minWidth: 42, textAlign: "right" }}>PTS</span>
+                </div>
+              </div>
+
+              {/* Titulares */}
+              {titularesOrdenados.map((j: any) => {
+                const isCap = escalacao.capitao?.atleta_id === j.atleta_id;
+                const pos = POSICOES[j.pos_id] || "?";
+                return (
+                  <button key={j.atleta_id} onClick={() => setLocation(`/jogador/${j.atleta_id}`)}
+                    className="w-full flex justify-between items-center py-1.5 hover:opacity-80"
+                    style={{ borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[0.7rem] font-semibold" style={{ color: "#64748b", minWidth: 28 }}>{pos}</span>
+                      {isCap && (
+                        <span className="inline-flex items-center justify-center rounded-full shrink-0"
+                          style={{ width: 16, height: 16, background: "#FFD700", color: "#000", fontSize: "0.55rem", fontWeight: 800 }}>C</span>
+                      )}
+                      <span className="text-[0.8rem] font-bold truncate" style={{ color: "#f1f5f9" }}>{j.apelido?.toUpperCase()}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[0.75rem] font-semibold" style={{ color: "#4da8f0", minWidth: 60, textAlign: "right" }}>C$ {j.preco?.toFixed(2)}</span>
+                      <span className="text-[0.8rem] font-bold" style={{ color: "#34d399", minWidth: 42, textAlign: "right" }}>{j.pontuacao_esperada?.toFixed(1)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Banco de Reservas separator */}
+              <div className="flex items-center justify-center my-3 gap-2">
+                <div className="flex-1 h-px" style={{ background: "rgba(148, 163, 184, 0.2)" }} />
+                <span className="text-[0.65rem] font-bold tracking-widest whitespace-nowrap" style={{ color: "#94a3b8" }}>BANCO DE RESERVAS</span>
+                <div className="flex-1 h-px" style={{ background: "rgba(148, 163, 184, 0.2)" }} />
+              </div>
+
+              {/* Reservas */}
+              {escalacao.reservas && Object.entries(escalacao.reservas).map(([posId, reserva]) => {
+                if (!reserva) return null;
+                const r = reserva as any;
+                const isLuxo = escalacao.reserva_luxo?.atleta_id === r.atleta_id;
+                const pos = POSICOES[Number(posId)] || posId;
+                return (
+                  <button key={posId} onClick={() => setLocation(`/jogador/${r.atleta_id}`)}
+                    className="w-full flex justify-between items-center py-1.5 hover:opacity-80"
+                    style={{ borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[0.7rem] font-semibold" style={{ color: "#64748b", minWidth: 28 }}>{pos}</span>
+                      {isLuxo && <span className="text-[0.55rem] mr-0.5">⭐</span>}
+                      <span className="text-[0.8rem] font-bold truncate" style={{ color: "#cbd5e1" }}>{r.apelido?.toUpperCase()}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[0.75rem] font-semibold" style={{ color: "#64748b", minWidth: 60, textAlign: "right" }}>C$ {r.preco?.toFixed(2)}</span>
+                      <span className="text-[0.8rem] font-bold" style={{ color: "#64748b", minWidth: 42, textAlign: "right" }}>{r.pontuacao_esperada?.toFixed(1)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Reserva de Luxo (if separate from reservas) */}
+              {escalacao.reserva_luxo && !Object.values(escalacao.reservas || {}).some((r: any) => r?.atleta_id === escalacao.reserva_luxo?.atleta_id) && (
+                <button onClick={() => setLocation(`/jogador/${escalacao.reserva_luxo!.atleta_id}`)}
+                  className="w-full flex justify-between items-center py-1.5 hover:opacity-80"
+                  style={{ borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[0.7rem] font-semibold" style={{ color: "#64748b", minWidth: 28 }}>{POSICOES[escalacao.reserva_luxo.pos_id] || "?"}</span>
+                    <span className="text-[0.55rem] mr-0.5">⭐</span>
+                    <span className="text-[0.8rem] font-bold truncate" style={{ color: "#cbd5e1" }}>{escalacao.reserva_luxo.apelido?.toUpperCase()}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[0.75rem] font-semibold" style={{ color: "#64748b", minWidth: 60, textAlign: "right" }}>C$ {escalacao.reserva_luxo.preco?.toFixed(2)}</span>
+                    <span className="text-[0.8rem] font-bold" style={{ color: "#64748b", minWidth: 42, textAlign: "right" }}>{escalacao.reserva_luxo.pontuacao_esperada?.toFixed(1)}</span>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Capitão + Vice + Reservas + Luxo */}
+          {/* Capitão + Vice */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Capitão */}
             {escalacao.capitao && (
@@ -257,51 +370,6 @@ export default function Escalacao() {
                     </div>
                   </div>
                   <p className="text-lg font-bold" style={{ color: "#cbd5e1" }}>{escalacao.vice_capitao.pontuacao_esperada?.toFixed(1)} pts</p>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Reservas + Luxo */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl p-4" style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(148, 163, 184, 0.15)" }}>
-              <h4 className="font-bold mb-3" style={{ color: "#94a3b8" }}>🔄 Reservas</h4>
-              <div className="space-y-2">
-                {escalacao.reservas && Object.entries(escalacao.reservas).map(([posId, reserva]) => {
-                  if (!reserva) return null;
-                  const pos = POSICOES[Number(posId)] || posId;
-                  return (
-                    <button key={posId} onClick={() => setLocation(`/jogador/${(reserva as any).atleta_id}`)}
-                      className="w-full flex items-center justify-between py-1.5 px-2 rounded hover:opacity-80"
-                      style={{ borderBottom: "1px solid rgba(148, 163, 184, 0.08)" }}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold" style={{ color: "#64748b", minWidth: 28 }}>{pos}</span>
-                        <ClubeBadge clubeId={(reserva as any).clube_id} size={16} showName={false} />
-                        <span className="text-sm font-bold" style={{ color: "#cbd5e1" }}>{(reserva as any).apelido}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs">
-                        <span style={{ color: "#64748b" }}>C$ {(reserva as any).preco?.toFixed(2)}</span>
-                        <span style={{ color: "#34d399" }}>{(reserva as any).pontuacao_esperada?.toFixed(1)}p</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {escalacao.reserva_luxo && (
-              <div className="rounded-xl p-4" style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(168, 85, 247, 0.2)" }}>
-                <h4 className="font-bold mb-3" style={{ color: "#A855F7" }}>⭐ Reserva de Luxo</h4>
-                <button onClick={() => setLocation(`/jogador/${escalacao.reserva_luxo!.atleta_id}`)}
-                  className="w-full flex items-center justify-between p-2 rounded-lg hover:opacity-80">
-                  <div className="flex items-center gap-3">
-                    <ClubeBadge clubeId={escalacao.reserva_luxo.clube_id} size={24} />
-                    <div className="text-left">
-                      <p className="font-bold" style={{ color: "#f1f5f9" }}>{escalacao.reserva_luxo.apelido}</p>
-                      <p className="text-xs" style={{ color: "#94a3b8" }}>{escalacao.reserva_luxo.posicao} | {escalacao.reserva_luxo.clube} | C$ {escalacao.reserva_luxo.preco?.toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <p className="text-lg font-bold" style={{ color: "#A855F7" }}>{escalacao.reserva_luxo.pontuacao_esperada?.toFixed(1)} pts</p>
                 </button>
               </div>
             )}

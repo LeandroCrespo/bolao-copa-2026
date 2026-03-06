@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Shirt, Store, FlaskConical, History, RefreshCw, Radio, BarChart3 } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Shirt, Store, FlaskConical, History, RefreshCw, Radio } from "lucide-react";
 
 const DERVE_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310419663031516744/oTZR9ZkHbDCNQCXXcPwoHW/distintivo_derve_final_400_9982f663.png";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -33,7 +33,6 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Shirt, label: "Escalação", path: "/escalacao" },
   { icon: Store, label: "Mercado", path: "/mercado" },
-  { icon: BarChart3, label: "Análise", path: "/jogador" },
   { icon: FlaskConical, label: "Simulação", path: "/simulacao" },
   { icon: History, label: "Histórico", path: "/historico" },
   { icon: RefreshCw, label: "Atualizar", path: "/atualizar" },

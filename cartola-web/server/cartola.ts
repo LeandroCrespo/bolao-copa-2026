@@ -165,6 +165,42 @@ export async function getJogadorHistorico(atletaId: string, limite = 50): Promis
   `, [atletaId, limite]);
 }
 
+/** Combined history: Brasileirão + competições paralelas in chronological order */
+export async function getJogadorHistoricoCompleto(atletaId: string, limite = 50) {
+  // Brasileirão history
+  const brasileiro = await neonQuery<any>(`
+    SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome,
+           rodada, ano, pontos, media, preco, variacao, jogos,
+           entrou_em_campo, status_id, data_jogo, 'Brasileirão' as competicao
+    FROM jogadores_historico 
+    WHERE atleta_id = $1 AND competicao = 'Brasileirão'
+    ORDER BY ano ASC, rodada ASC
+    LIMIT $2
+  `, [atletaId, limite]);
+
+  // Parallel competitions
+  const paralelas = await neonQuery<any>(`
+    SELECT atleta_id, apelido, NULL as posicao_id, NULL as clube_id, clube_nome,
+           NULL as rodada, temporada as ano, pontuacao_simulada as pontos, 
+           NULL as media, NULL as preco, NULL as variacao, NULL as jogos,
+           true as entrou_em_campo, NULL as status_id, data_jogo, competicao
+    FROM competicoes_paralelas 
+    WHERE atleta_id = $1 
+    ORDER BY data_jogo ASC
+    LIMIT $2
+  `, [atletaId, limite]);
+
+  // Combine and sort chronologically
+  const combined = [...brasileiro, ...paralelas];
+  combined.sort((a, b) => {
+    const dateA = a.data_jogo ? new Date(a.data_jogo).getTime() : (a.ano * 10000 + (a.rodada || 0) * 100);
+    const dateB = b.data_jogo ? new Date(b.data_jogo).getTime() : (b.ano * 10000 + (b.rodada || 0) * 100);
+    return dateA - dateB;
+  });
+
+  return combined;
+}
+
 export async function getJogadoresRodada(rodada: number, ano: number): Promise<JogadorHistorico[]> {
   return neonQuery<JogadorHistorico>(`
     SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome,

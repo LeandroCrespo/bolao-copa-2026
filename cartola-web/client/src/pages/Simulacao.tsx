@@ -338,6 +338,7 @@ export default function Simulacao() {
                         <th className="py-2 px-2 text-right text-xs" style={{ color: "#94a3b8" }}>Previsto</th>
                         <th className="py-2 px-2 text-right text-xs" style={{ color: "#94a3b8" }}>Ideal</th>
                         <th className="py-2 px-2 text-right text-xs" style={{ color: "#94a3b8" }}>Aprov.</th>
+                        <th className="py-2 px-2 text-right text-xs" style={{ color: "#94a3b8" }}>Acum.</th>
                         <th className="py-2 px-2 text-center text-xs" style={{ color: "#94a3b8" }}>Acertos</th>
                         <th className="py-2 px-2 text-left text-xs" style={{ color: "#94a3b8" }}>Capitão</th>
                         <th className="py-2 px-2 text-left text-xs" style={{ color: "#94a3b8" }}>Cap. Ideal</th>
@@ -360,6 +361,7 @@ export default function Simulacao() {
                         <td className="py-2 px-2 text-right font-bold" style={{ color: "#34d399" }}>{data.total_pontos_reais.toFixed(1)}</td>
                         <td className="py-2 px-2 text-right font-bold" style={{ color: "#54b4f7" }}>{data.total_pontos_esperada.toFixed(1)}</td>
                         <td className="py-2 px-2 text-right font-bold" style={{ color: "#eab308" }}>{data.total_pontos_ideal.toFixed(1)}</td>
+                        <td className="py-2 px-2 text-right font-bold" style={{ color: "#06b6d4" }}>{data.aproveitamento_total.toFixed(1)}%</td>
                         <td className="py-2 px-2 text-right font-bold" style={{ color: "#06b6d4" }}>{data.aproveitamento_total.toFixed(1)}%</td>
                         <td className="py-2 px-2 text-center" style={{ color: "#94a3b8" }}>—</td>
                         <td className="py-2 px-2" style={{ color: "#94a3b8" }}>—</td>
@@ -532,6 +534,9 @@ function RodadaRow({ r, isExpanded, onToggle }: { r: any; isExpanded: boolean; o
         <td className="py-2 px-2 text-right" style={{ color: r.aproveitamento >= 70 ? '#34d399' : r.aproveitamento >= 50 ? '#eab308' : '#f87171' }}>
           {r.aproveitamento.toFixed(1)}%
         </td>
+        <td className="py-2 px-2 text-right" style={{ color: r.aproveitamento_acumulado >= 70 ? '#34d399' : r.aproveitamento_acumulado >= 50 ? '#eab308' : '#f87171' }}>
+          {r.aproveitamento_acumulado.toFixed(1)}%
+        </td>
         <td className="py-2 px-2 text-center" style={{ color: "#f1f5f9" }}>{r.acertos}/12</td>
         <td className="py-2 px-2 text-sm" style={{ color: "#cbd5e1" }}>{r.capitao}</td>
         <td className="py-2 px-2 text-sm" style={{ color: "#cbd5e1" }}>{r.capitao_ideal}</td>
@@ -541,7 +546,7 @@ function RodadaRow({ r, isExpanded, onToggle }: { r: any; isExpanded: boolean; o
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={11} className="p-0">
+            <td colSpan={12} className="p-0">
             <RodadaDetails r={r} />
           </td>
         </tr>
@@ -552,6 +557,10 @@ function RodadaRow({ r, isExpanded, onToggle }: { r: any; isExpanded: boolean; o
 
 function RodadaDetails({ r }: { r: any }) {
   const POS_ORDER = ['GOL', 'LAT', 'ZAG', 'MEI', 'ATA', 'TEC'];
+  const JUSTIFICATIVA_BORDER: Record<string, string> = {
+    'Boa Fase': '#22c55e', 'Consistente': '#3b82f6', 'Recuperação': '#f59e0b',
+    'Premium': '#8b5cf6', 'Custo-Benefício': '#06b6d4', 'Aposta': '#ef4444', 'Em Queda': '#6b7280'
+  };
 
   const titularesByPos = useMemo(() => {
     const grouped: Record<string, any[]> = {};
@@ -573,8 +582,38 @@ function RodadaDetails({ r }: { r: any }) {
     return grouped;
   }, [r.melhores]);
 
+  const escaladosSet = useMemo(() => new Set((r.titulares || []).map((t: any) => t.atleta_id)), [r.titulares]);
+
+  function getJustificativaResumo(explicacao: any): string {
+    if (!explicacao) return 'Consistente';
+    const resumo = (explicacao.resumo || '').toLowerCase();
+    if (resumo.includes('recuperação')) return 'Recuperação';
+    if (resumo.includes('boa fase')) return 'Boa Fase';
+    if (resumo.includes('queda')) return 'Em Queda';
+    if (resumo.includes('premium')) return 'Premium';
+    if (resumo.includes('custo')) return 'Custo-Benefício';
+    if (resumo.includes('aposta')) return 'Aposta';
+    return 'Consistente';
+  }
+
   return (
     <div className="p-4" style={{ background: "rgba(30, 41, 59, 0.3)", borderTop: "1px solid rgba(148, 163, 184, 0.1)" }}>
+      {/* Substituições */}
+      {r.substituicoes && r.substituicoes.length > 0 && (
+        <div className="mb-4 space-y-1">
+          {r.substituicoes.map((sub: any, i: number) => (
+            <div key={i} className="rounded-lg px-3 py-2 text-xs flex items-center gap-2"
+              style={{ background: "rgba(52, 211, 153, 0.08)", border: "1px solid rgba(52, 211, 153, 0.2)" }}>
+              <span>{sub.tipo === 'reserva_luxo' ? '⭐' : '🔄'}</span>
+              <span style={{ color: "#34d399" }}>{sub.tipo === 'reserva_luxo' ? 'Reserva Luxo:' : 'Substituição:'}</span>
+              <span style={{ color: "#f87171" }}>{sub.saiu}</span>
+              <span style={{ color: "#64748b" }}>→</span>
+              <span style={{ color: "#34d399" }}>{sub.entrou}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2 gap-6">
         {/* Left: Escalação Sugerida */}
         <div>
@@ -597,26 +636,78 @@ function RodadaDetails({ r }: { r: any }) {
             const players = titularesByPos[pos];
             if (!players || players.length === 0) return null;
             return (
-              <div key={pos} className="mb-2">
-                <div className="text-xs font-semibold mb-1" style={{ color: POS_COLORS[pos] }}>{pos}</div>
+              <div key={pos} className="mb-3">
+                <div className="text-xs font-bold mb-1 px-2 py-0.5 rounded inline-block" style={{ background: `${POS_COLORS[pos]}20`, color: POS_COLORS[pos] }}>{pos}</div>
                 {players.map((p: any) => {
                   const isCap = p.apelido === r.capitao;
+                  const justResumo = getJustificativaResumo(p.explicacao);
+                  const borderColor = JUSTIFICATIVA_BORDER[justResumo] || '#6b7280';
+                  const explicacao = p.explicacao || {};
                   return (
-                    <div key={p.atleta_id} className="flex items-center justify-between text-xs py-0.5 px-2 rounded"
-                      style={{ background: isCap ? "rgba(234, 179, 8, 0.08)" : "transparent" }}>
-                      <span style={{ color: "#f1f5f9", fontWeight: isCap ? 700 : 400 }}>
-                        {p.apelido} {isCap ? '©' : ''}
-                      </span>
-                      <span className="flex gap-3">
-                        <span style={{ color: "#94a3b8" }}>C$ {p.preco.toFixed(1)}</span>
-                        <span style={{ color: p.pontos_reais >= 0 ? '#34d399' : '#f87171' }}>{p.pontos_reais.toFixed(1)}</span>
-                      </span>
+                    <div key={p.atleta_id} className="rounded-lg px-3 py-2 mb-1"
+                      style={{
+                        background: isCap ? "rgba(234, 179, 8, 0.06)" : "rgba(15, 23, 42, 0.4)",
+                        borderLeft: `3px solid ${borderColor}`,
+                        border: isCap ? "1px solid rgba(234, 179, 8, 0.2)" : "1px solid rgba(148, 163, 184, 0.06)",
+                        borderLeftWidth: '3px',
+                        borderLeftColor: borderColor,
+                      }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {p.clube_id > 0 && <ClubeBadge clubeId={p.clube_id} size={16} showName={false} />}
+                          <span className="font-bold text-xs" style={{ color: "#f1f5f9" }}>
+                            {isCap ? '👑 ' : ''}{p.apelido}
+                          </span>
+                          {p.clube_nome && <span className="text-[10px]" style={{ color: "#64748b" }}>{p.clube_nome}</span>}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span style={{ color: "#4da8f0" }}>C$ {p.preco.toFixed(2)}</span>
+                          <span style={{ color: "#FFC107" }}>Prev: {p.score.toFixed(1)}</span>
+                          <span className="font-bold" style={{ color: p.pontos_reais >= 0 ? '#34d399' : '#f87171' }}>
+                            Real: {p.pontos_reais.toFixed(1)}
+                            {isCap && <span className="text-[9px] ml-0.5" style={{ color: "#EAB308" }}>(x1.5)</span>}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Justificativa */}
+                      {explicacao.resumo && (
+                        <div className="mt-1">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${borderColor}20`, color: borderColor }}>
+                            {justResumo}
+                          </span>
+                          <span className="text-[10px] ml-2" style={{ color: "#94a3b8" }}>{explicacao.resumo}</span>
+                        </div>
+                      )}
+                      {explicacao.motivo && (
+                        <p className="text-[10px] mt-0.5" style={{ color: "#64748b" }}>💡 {explicacao.motivo}</p>
+                      )}
+                      {explicacao.fatores && explicacao.fatores.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {explicacao.fatores.map((f: string, i: number) => (
+                            <span key={i} className="text-[9px] px-1 py-0.5 rounded" style={{ background: "rgba(148, 163, 184, 0.08)", color: "#94a3b8" }}>{f}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             );
           })}
+          {/* Capitão info */}
+          <div className="mt-2 text-xs" style={{ color: "#FFD700" }}>
+            👑 Capitão: <strong>{r.capitao}</strong>
+          </div>
+          {/* Reserva de Luxo */}
+          {r.reserva_luxo && (
+            <div className="mt-2 text-xs rounded-lg px-3 py-2" style={{ background: "rgba(234, 179, 8, 0.05)", border: "1px solid rgba(234, 179, 8, 0.2)" }}>
+              <span style={{ color: "#EAB308" }}>⭐ Reserva de Luxo: <strong>{r.reserva_luxo.apelido}</strong></span>
+              <span className="ml-2" style={{ color: "#94a3b8" }}>{r.reserva_luxo.posicao}</span>
+              <span className="ml-2 font-bold" style={{ color: r.reserva_luxo.pontos_reais >= 0 ? '#34d399' : '#f87171' }}>
+                {r.reserva_luxo.pontos_reais.toFixed(1)} pts
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right: Melhor Time Possível */}
@@ -636,26 +727,50 @@ function RodadaDetails({ r }: { r: any }) {
             const players = melhoresByPos[pos];
             if (!players || players.length === 0) return null;
             return (
-              <div key={pos} className="mb-2">
-                <div className="text-xs font-semibold mb-1" style={{ color: POS_COLORS[pos] }}>{pos}</div>
+              <div key={pos} className="mb-3">
+                <div className="text-xs font-bold mb-1 px-2 py-0.5 rounded inline-block" style={{ background: `${POS_COLORS[pos]}20`, color: POS_COLORS[pos] }}>{pos}</div>
                 {players.map((p: any) => {
-                  const isInEscalacao = r.titulares?.some((t: any) => t.atleta_id === p.atleta_id);
+                  const isInEscalacao = escaladosSet.has(p.atleta_id);
+                  const borderColor = isInEscalacao ? '#22c55e' : '#ef4444';
                   return (
-                    <div key={p.atleta_id} className="flex items-center justify-between text-xs py-0.5 px-2 rounded"
-                      style={{ background: isInEscalacao ? "rgba(34, 197, 94, 0.08)" : "transparent" }}>
-                      <span style={{ color: "#f1f5f9" }}>
-                        {isInEscalacao ? '✅ ' : ''}{p.apelido}
-                      </span>
-                      <span className="flex gap-3">
-                        <span style={{ color: "#94a3b8" }}>C$ {p.preco.toFixed(1)}</span>
-                        <span style={{ color: "#eab308" }}>{p.pontos.toFixed(1)}</span>
-                      </span>
+                    <div key={p.atleta_id} className="rounded-lg px-3 py-2 mb-1"
+                      style={{
+                        background: isInEscalacao ? "rgba(34, 197, 94, 0.06)" : "rgba(239, 68, 68, 0.04)",
+                        borderLeft: `3px solid ${borderColor}`,
+                        border: `1px solid ${isInEscalacao ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.1)'}`,
+                        borderLeftWidth: '3px',
+                        borderLeftColor: borderColor,
+                      }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {p.clube_id > 0 && <ClubeBadge clubeId={p.clube_id} size={16} showName={false} />}
+                          <span className="font-bold text-xs" style={{ color: "#f1f5f9" }}>
+                            {isInEscalacao ? '✅ ' : '❌ '}{p.apelido}
+                          </span>
+                          {p.clube_nome && <span className="text-[10px]" style={{ color: "#64748b" }}>{p.clube_nome}</span>}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span style={{ color: "#4da8f0" }}>C$ {p.preco.toFixed(2)}</span>
+                          <span style={{ color: "#94a3b8" }}>Prev: {p.score_previsto.toFixed(1)}</span>
+                          <span className="font-bold" style={{ color: "#eab308" }}>{p.pontos.toFixed(1)} pts</span>
+                        </div>
+                      </div>
+                      {!isInEscalacao && (
+                        <p className="text-[10px] mt-1" style={{ color: "#f87171" }}>
+                          Não escalado — Score previsto: {p.score_previsto.toFixed(1)} (menor que os escalados na posição)
+                        </p>
+                      )}
                     </div>
                   );
                 })}
               </div>
             );
           })}
+          {/* Capitão ideal */}
+          <div className="mt-2 text-xs" style={{ color: "#FFD700" }}>
+            👑 Capitão Ideal: <strong>{r.capitao_ideal}</strong>
+            {r.cap_ok ? <span className="ml-2" style={{ color: "#34d399" }}>✅ Acertou!</span> : <span className="ml-2" style={{ color: "#f87171" }}>❌ Errou</span>}
+          </div>
         </div>
       </div>
     </div>

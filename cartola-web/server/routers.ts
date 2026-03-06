@@ -19,6 +19,7 @@ import {
   getHistoricoRodadas,
   getMediaPosicao,
   getTopJogadoresRodada,
+  getJogadorHistoricoCompleto,
 } from "./cartola";
 import { EstrategiaV7, FORMACOES, POSICAO_MAP, type Escalacao, type Jogador } from "./estrategia";
 import { neonQuery } from "./neonDb";
@@ -197,6 +198,9 @@ export const appRouter = router({
     jogadorHistorico: protectedProcedure
       .input(z.object({ atletaId: z.string(), limite: z.number().default(20) }))
       .query(({ input }) => getJogadorHistorico(input.atletaId, input.limite)),
+    jogadorHistoricoCompleto: protectedProcedure
+      .input(z.object({ atletaId: z.string(), limite: z.number().default(50) }))
+      .query(({ input }) => getJogadorHistoricoCompleto(input.atletaId, input.limite)),
     jogadoresRodada: protectedProcedure
       .input(z.object({ rodada: z.number(), ano: z.number() }))
       .query(({ input }) => getJogadoresRodada(input.rodada, input.ano)),
@@ -407,8 +411,10 @@ export const appRouter = router({
           capitao: string;
           capitao_ideal: string;
           cap_ok: boolean;
-          titulares: Array<{ atleta_id: string; apelido: string; pos_id: number; posicao: string; preco: number; score: number; pontos_reais: number; explicacao_resumo: string; media: number; }>;
-          melhores: Array<{ atleta_id: string; apelido: string; pos_id: number; posicao: string; preco: number; pontos: number; }>;
+          titulares: Array<{ atleta_id: string; apelido: string; pos_id: number; posicao: string; preco: number; score: number; pontos_reais: number; explicacao_resumo: string; explicacao: any; media: number; clube_id: number; clube_nome: string; valorizacao_prevista: number; }>;
+          melhores: Array<{ atleta_id: string; apelido: string; pos_id: number; posicao: string; preco: number; pontos: number; clube_id: number; clube_nome: string; score_previsto: number; }>;
+          substituicoes: Array<{ tipo: string; saiu: string; entrou: string; }>;
+          reserva_luxo: { apelido: string; posicao: string; pontos_reais: number; } | null;
         }> = [];
         
         let orcamentoAtual = input.orcamento;
@@ -501,7 +507,11 @@ export const appRouter = router({
                 score: t.score || t.pontuacao_esperada || 0,
                 pontos_reais: ptsReal,
                 explicacao_resumo: t.explicacao?.resumo || '',
+                explicacao: t.explicacao || {},
                 media: t.media || 0,
+                clube_id: t.clube_id || 0,
+                clube_nome: t.clube || '',
+                valorizacao_prevista: t.valorizacao_prevista || 0,
               });
             }
             // Captain bonus
@@ -528,12 +538,17 @@ export const appRouter = router({
             let ptsIdeal = 0;
             const melhoresDetalhes: typeof resultados[0]['melhores'] = [];
             let melhorCapIdeal = { apelido: '', pontos: 0 };
+            const idsEscaladosSet = new Set(melhorEscalacao.titulares.map(t => t.atleta_id));
             for (const [posIdStr, count] of Object.entries(formConfig)) {
               const posId = Number(posIdStr);
               const candidates = byPos[posId] || [];
               for (let i = 0; i < count && i < candidates.length; i++) {
                 const c = candidates[i];
                 ptsIdeal += c.pontos;
+                // Find the full jogador data for clube info and score
+                const jogFull = jogadoresRodada.find((j: any) => String(j.atleta_id) === c.atleta_id);
+                // Check if this player was in our escalação
+                const wasEscalado = idsEscaladosSet?.has(c.atleta_id) ?? false;
                 melhoresDetalhes.push({
                   atleta_id: c.atleta_id,
                   apelido: c.apelido,
@@ -541,6 +556,9 @@ export const appRouter = router({
                   posicao: POS_MAP_INV[posId] || 'N/A',
                   preco: c.preco,
                   pontos: c.pontos,
+                  clube_id: jogFull ? Number(jogFull.clube_id) || 0 : 0,
+                  clube_nome: jogFull?.clube_nome || '',
+                  score_previsto: jogFull ? (parseFloat(String(jogFull.media)) || 0) : 0,
                 });
                 if (c.pontos > melhorCapIdeal.pontos) {
                   melhorCapIdeal = { apelido: c.apelido, pontos: c.pontos };
@@ -551,7 +569,7 @@ export const appRouter = router({
             ptsIdeal += melhorCapIdeal.pontos * 0.5;
             
             // Acertos: how many escalados are in the ideal team
-            const idsEscalados = new Set(melhorEscalacao.titulares.map(t => t.atleta_id));
+            const idsEscalados = idsEscaladosSet;
             const idsMelhores = new Set(melhoresDetalhes.map(m => m.atleta_id));
             const acertos = Array.from(idsEscalados).filter(id => idsMelhores.has(id)).length;
             
@@ -596,6 +614,19 @@ export const appRouter = router({
               cap_ok: capOk,
               titulares: titularesDetalhes,
               melhores: melhoresDetalhes,
+              substituicoes: ((melhorEscalacao as any).substituicoes || []).map((s: any) => ({
+                tipo: s.tipo || 'reserva',
+                saiu: s.saiu?.apelido || s.saiu || '',
+                entrou: s.entrou?.apelido || s.entrou || '',
+              })),
+              reserva_luxo: (melhorEscalacao as any).reserva_luxo ? {
+                apelido: (melhorEscalacao as any).reserva_luxo.apelido || '',
+                posicao: POS_MAP_INV[(melhorEscalacao as any).reserva_luxo.pos_id] || '',
+                pontos_reais: (() => {
+                  const rlJog = jogadoresRodada.find((j: any) => String(j.atleta_id) === (melhorEscalacao as any).reserva_luxo?.atleta_id);
+                  return rlJog ? (parseFloat(String(rlJog.pontos)) || 0) : 0;
+                })(),
+              } : null,
             });
           } catch (e) {
             console.error(`[Simulação] Erro na rodada ${rodada}:`, e);
@@ -698,6 +729,8 @@ export const appRouter = router({
             diferenca: r.diferenca,
             titulares: r.titulares,
             melhores: r.melhores,
+            substituicoes: r.substituicoes,
+            reserva_luxo: r.reserva_luxo,
           })),
           media_pontos_reais: resultados.length > 0 ? Math.round(totalPtsReais / resultados.length * 100) / 100 : 0,
           media_esperada: resultados.length > 0 ? Math.round(totalPtsEsperada / resultados.length * 100) / 100 : 0,

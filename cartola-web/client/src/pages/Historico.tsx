@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, ReferenceLine, Cell,
+  ResponsiveContainer, Legend, ReferenceLine, Cell, PieChart, Pie, BarChart, LabelList,
 } from "recharts";
 import { ClubeBadge } from "@/components/ClubeBadge";
 
@@ -60,6 +60,67 @@ export default function Historico() {
     const aproveitamento = totalPrevisto > 0 ? (totalReal / totalPrevisto) * 100 : 0;
     return { totalPrevisto, totalReal, melhor, pior, media, rodadas: processadas.length, aproveitamento };
   }, [parsedRows]);
+
+  // Orcamento evolution chart data
+  const chartOrcamento = useMemo(() => {
+    return [...parsedRows]
+      .sort((a, b) => a.rodada - b.rodada)
+      .map((e) => ({
+        rodada: `R${e.rodada}`,
+        orcamento: Number(e.esc?.orcamento_disponivel || 100),
+      }));
+  }, [parsedRows]);
+
+  // Justificativas distribution
+  const justificativasData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const e of parsedRows) {
+      for (const j of e.esc?.jogadores || []) {
+        const explicacao = j.explicacao || {};
+        const resumo = (explicacao.resumo || '').toLowerCase();
+        let just = 'Consistente';
+        if (resumo.includes('recupera\u00e7\u00e3o')) just = 'Recupera\u00e7\u00e3o';
+        else if (resumo.includes('boa fase')) just = 'Boa Fase';
+        else if (resumo.includes('queda')) just = 'Em Queda';
+        else if (resumo.includes('premium')) just = 'Premium';
+        else if (resumo.includes('custo')) just = 'Custo-Benef\u00edcio';
+        else if (resumo.includes('aposta')) just = 'Aposta';
+        counts[just] = (counts[just] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
+  }, [parsedRows]);
+
+  // Gauges: aproveitamento por justificativa
+  const justGauges = useMemo(() => {
+    const stats: Record<string, { acertos: number; total: number }> = {};
+    for (const e of parsedRows) {
+      for (const j of e.esc?.jogadores || []) {
+        const ptsReal = j.pontos_real ?? j.pontos_reais;
+        if (ptsReal == null) continue;
+        const explicacao = j.explicacao || {};
+        const medias = explicacao.medias || {};
+        const mediaHist = Number(medias.geral || j.media || 0);
+        const resumo = (explicacao.resumo || '').toLowerCase();
+        let just = 'Consistente';
+        if (resumo.includes('recupera\u00e7\u00e3o')) just = 'Recupera\u00e7\u00e3o';
+        else if (resumo.includes('boa fase')) just = 'Boa Fase';
+        else if (resumo.includes('queda')) just = 'Em Queda';
+        else if (resumo.includes('premium')) just = 'Premium';
+        else if (resumo.includes('custo')) just = 'Custo-Benef\u00edcio';
+        else if (resumo.includes('aposta')) just = 'Aposta';
+        if (!stats[just]) stats[just] = { acertos: 0, total: 0 };
+        stats[just].total++;
+        if (Number(ptsReal) >= mediaHist) stats[just].acertos++;
+      }
+    }
+    return stats;
+  }, [parsedRows]);
+
+  const JUSTIFICATIVA_COLORS: Record<string, string> = {
+    'Boa Fase': '#22c55e', 'Consistente': '#3b82f6', 'Recupera\u00e7\u00e3o': '#f59e0b',
+    'Premium': '#8b5cf6', 'Custo-Benef\u00edcio': '#06b6d4', 'Aposta': '#ef4444', 'Em Queda': '#6b7280'
+  };
 
   return (
     <div className="space-y-6">
@@ -132,6 +193,68 @@ export default function Historico() {
                     dot={{ r: 3, fill: "#FFC107" }} strokeDasharray="5 5" />
                 </ComposedChart>
               </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Orcamento Evolution Chart */}
+          {chartOrcamento.length > 1 && (
+            <div className="rounded-xl p-4" style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(148, 163, 184, 0.15)" }}>
+              <p className="font-bold mb-3" style={{ color: "#f1f5f9" }}>💰 Evolução do Orçamento</p>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={chartOrcamento} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
+                  <XAxis dataKey="rodada" stroke="#64748b" fontSize={11} />
+                  <YAxis stroke="#64748b" fontSize={11} />
+                  <Tooltip contentStyle={{ backgroundColor: "#1e293b", border: "1px solid rgba(148, 163, 184, 0.2)", borderRadius: "8px", color: "#f1f5f9" }}
+                    formatter={(value: any) => [`C$ ${Number(value).toFixed(2)}`, "Orçamento"]} />
+                  <ReferenceLine y={100} stroke="#64748b" strokeDasharray="5 5" label={{ value: "C$ 100", fill: "#64748b", fontSize: 10, position: "right" }} />
+                  <Line type="monotone" dataKey="orcamento" name="Orçamento" stroke="#28A745" strokeWidth={3}
+                    dot={{ r: 4, fill: "#28A745" }} fill="rgba(40, 167, 69, 0.1)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Justificativas + Gauges Row */}
+          {justificativasData.length > 0 && (
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Distribuição de Justificativas */}
+              <div className="rounded-xl p-4" style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(148, 163, 184, 0.15)" }}>
+                <p className="font-bold mb-3" style={{ color: "#f1f5f9" }}>📊 Distribuição de Justificativas</p>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={justificativasData} cx="50%" cy="50%" outerRadius={80} innerRadius={40} dataKey="value"
+                      label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                      {justificativasData.map((entry, i) => (
+                        <Cell key={i} fill={JUSTIFICATIVA_COLORS[entry.name] || '#6b7280'} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: 8, color: '#f1f5f9' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Aproveitamento por Justificativa (Gauges) */}
+              <div className="rounded-xl p-4" style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(148, 163, 184, 0.15)" }}>
+                <p className="font-bold mb-3" style={{ color: "#f1f5f9" }}>🎯 Aproveitamento por Justificativa</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(justGauges).map(([name, stats]) => {
+                    const pct = stats.total > 0 ? (stats.acertos / stats.total * 100) : 0;
+                    const barColor = pct >= 60 ? '#22c55e' : pct >= 40 ? '#eab308' : '#ef4444';
+                    const textColor = pct >= 60 ? '#34d399' : pct >= 40 ? '#eab308' : '#f87171';
+                    return (
+                      <div key={name} className="text-center p-3 rounded-lg" style={{ background: "rgba(30, 41, 59, 0.5)", border: "1px solid rgba(148, 163, 184, 0.1)" }}>
+                        <div className="text-2xl font-bold" style={{ color: textColor }}>{pct.toFixed(0)}%</div>
+                        <div className="text-xs mt-1" style={{ color: "#94a3b8" }}>{name}</div>
+                        <div className="text-xs" style={{ color: "#64748b" }}>{stats.acertos}/{stats.total} acima da média</div>
+                        <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: "#374151" }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
