@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1772818061532,
+      "tag": "0000_plain_the_renegades",
+      "breakpoints": true
+    }
+  ]
+}

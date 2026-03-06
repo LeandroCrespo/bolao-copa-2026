@@ -1,0 +1,89 @@
+# Project TODO
+
+- [x] Configure Neon PostgreSQL connection (read-only from existing DB)
+- [x] Dark premium theme with Dervé FC colors (glassmorphism)
+- [x] DashboardLayout with sidebar navigation (8 pages)
+- [x] Dashboard page - market status, round info, metrics cards, performance chart
+- [x] Escalação page - visual pitch, formation selector, captain/vice, reserves, luxury reserve
+- [x] Análise de Jogador - score history chart, scouts, parallel competitions, position avg comparison
+- [x] Mercado Completo - full athlete list, filters (position/team/price/status), sort, search
+- [x] Simulação Histórica - test past rounds, compare with real results, performance charts
+- [x] Histórico de Rodadas - saved lineups list, real vs predicted, substitutions, valorization, evolutionary analysis
+- [x] Atualizar Resultados - manually process finalized rounds, fetch real scores from Cartola API
+- [x] Status Coleta - parallel competition monitoring, collected fixtures, pending games
+- [x] Backend tRPC routes for Neon queries (jogadores_historico, competicoes_paralelas, escalacoes, etc)
+- [x] Backend tRPC proxy for Cartola FC API (mercado/status, atletas/mercado, atletas/pontuados, partidas)
+- [x] Authentication - owner-only access
+- [x] Vitest tests for backend routes
+- [x] Adicionar distintivo/logo do Dervé FC no sidebar e sistema
+- [x] Adicionar escudos dos clubes nas tabelas e cards
+- [x] Verificar completude de funcionalidades vs Streamlit
+- [x] Portar EstrategiaV7 completa para TypeScript (motor de escalação)
+- [x] Portar preparar_features_v9 (cálculo de scores preditivos)
+- [x] Portar analisar_todas_formacoes (análise multi-formação)
+- [x] Portar escalar_time (seleção de titulares, capitão, reservas)
+- [x] Portar reotimizar_orcamento
+- [x] Portar lógica de substituições (reserva normal + luxo)
+- [x] Portar cálculo de valorização com substituições
+- [x] Implementar salvar/restaurar escalação no banco
+- [x] Implementar atualização automática via API Cartola
+- [x] Implementar simulação histórica completa (todas as rodadas)
+- [x] Dashboard: gráfico desempenho por rodada (barras + linha previsto)
+- [x] Dashboard: mini-campo com escalação resumida
+- [x] Dashboard: alertas e próximos jogos
+- [x] Escalação: botão Escalar Time funcional
+- [x] Escalação: orçamento dinâmico calculado
+- [x] Escalação: métricas (Pts Esperada, Custo, Valorização)
+- [x] Escalação: salvar escalação
+- [x] Escalação: reotimizar e recalcular reservas
+- [x] Escalação: substituições manuais
+- [x] Mercado: score calculado pela EstrategiaV7
+- [x] Mercado: explicação detalhada de cada jogador
+- [x] Análise Jogador: tabela de médias (3/5/10 jogos)
+- [x] Análise Jogador: projeção detalhada
+- [x] Histórico: detalhes expandíveis por rodada
+- [x] Histórico: time ideal comparativo
+- [x] Histórico: aproveitamento (% do ideal)
+- [x] Atualizar: processamento real de rodadas via API
+- [x] Status Coleta: tabela detalhada Brasileirão vs Paralelo
+- [x] Status Coleta: status de migração
+- [x] Corrigir testes EstrategiaV7 para usar banco Neon real (não mock)
+- [x] BUG: Histórico em branco - não carrega rodadas registradas
+- [x] BUG: Análise de Jogador sem dados históricos (ex: Matheus Bidu)
+- [x] BUG: Escalação diferente do Streamlit - motor gerando jogadores diferentes
+- [x] BUG: Dashboard não indica jogos que não valem para o Cartola
+- [x] BUG: Mercado - clique no jogador não abre detalhes
+- [x] BUG: Simulação sem opção Formação Automática e Orçamento Variável
+- [x] Migrar 41 escalações JSON do repositório GitHub para banco Neon (escalacoes_salvas)
+- [x] Reescrever Histórico para ler escalações do banco (formato JSON completo)
+- [x] Fix getPartidas para incluir campo 'valida' da API
+- [x] Fix Dashboard para mostrar indicador de jogo que não vale para Cartola
+- [x] Fix Simulação: adicionar opção Formação Automática (auto) e Orçamento Dinâmico
+- [x] Fix Análise de Jogador: garantir que atleta_id string funciona na query (filtro Brasileirão)
+- [x] Fix Mercado: verificar navegação /jogador/:id (já funcionava)
+- [x] REFACTOR: Dashboard - replicar visual idêntico ao Streamlit (gráficos legíveis, cores, dados)
+- [x] REFACTOR: Escalação - campo com camisas Dervé FC, layout idêntico ao Streamlit
+- [x] REFACTOR: Mercado - visual e informações idênticas ao Streamlit
+- [x] REFACTOR: Análise Jogador - gráficos com cores visíveis, dados completos como Streamlit
+- [x] BUG: Simulação Histórica - fica rodando e para sem resultado (formação auto + orçamento variável)
+- [x] REFACTOR: Histórico - gráficos legíveis, detalhes completos como Streamlit
+- [x] BUG: Time escalado diferente do Streamlit - motor gerando jogadores diferentes
+- [x] BUG: Dashboard mostra dados errados - replicar exatamente Streamlit (4 cards: Pontos Totais, Média/Rodada, Patrimônio, Melhor Rodada + gráfico verde/vermelho)
+- [x] BUG: Simulação Histórica 2025 - erro timeout - otimizado para reutilizar engine (timeout servidor 5min)
+- [x] BUG: Escalação diferente do Streamlit - motor gerando jogadores diferentes (investigar)
+- [x] BUG: Histórico sem detalhamento suficiente por rodada - adicionado confrontos, scouts, explicações, reserva luxo, acurácia
+- [x] UI: Aumentar tamanho do distintivo/logo no sidebar
+- [x] ML: Integrar previsões do modelo RandomForest (Python) via tabela ml_predictions no Neon
+- [x] ML: escalarTime agora lê score_ml do banco em vez de usar score_geral_v9 heurístico
+- [x] ML: Fallback para score_geral_v9 quando previsão ML não disponível
+- [x] ML: 711 previsões ML carregadas, 684 jogadores do mercado correspondidos
+- [x] TESTS: Testes ML predictions (tabela existe, colunas corretas, valores válidos, diferença ML vs heurístico)
+- [x] TESTS: Todos os 33 testes passando
+- [x] BUG: Dashboard - linha de previsão no gráfico não mostra valores previstos (deve mostrar pontuação prevista de cada rodada)
+- [x] BUG: Escalação - time escalado diferente do Streamlit - implementado ILP optimizer (8/12 jogadores iguais, 92.2 pts previsto idêntico)
+- [x] BUG: Mercado - layout diferente do Streamlit (busca, filtros, toggle Por Posição/Tabela, escudos, detalhes)
+- [x] BUG: Simulação Histórica - reescrita completa com todos gráficos do Streamlit (Evolução, Aproveitamento, Posição, Justificativas, Gauges, Formações, Top5, Tabela)
+- [x] REFACTOR: Ler todo código Python do Streamlit e replicar exatamente cada página
+- [x] BUG: Dashboard - valor do patrimônio está errado (deve ser igual ao Streamlit) - corrigido para usar orcamento_disponivel + valorizacao_com_sub da ÚLTIMA rodada apenas
+- [x] TESTS: Testes de valorização com substituições (5 testes: titulares, reserva normal, reserva luxo, patrimônio vs Streamlit)
+- [x] TESTS: Todos os 38 testes passando

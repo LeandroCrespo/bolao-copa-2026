@@ -1,0 +1,8 @@
+{
+  "query": "\nSELECT column_name, data_type, udt_name \nFROM information_schema.columns \nWHERE table_schema = 'public' AND table_name = 'jogadores_historico'\nORDER BY ordinal_position\nLIMIT 20;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user PLabmDVuZAsarM8.ff113172a1ef --database oTZR9ZkHbDCNQCXXcPwoHW --execute \nSELECT column_name, data_type, udt_name \nFROM information_schema.columns \nWHERE table_schema = 'public' AND table_name = 'jogadores_historico'\nORDER BY ordinal_position\nLIMIT 20;\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 2: Unknown column 'udt_name' in 'field list'"
+  ]
+}
