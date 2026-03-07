@@ -103,3 +103,100 @@
 - [x] FIX: Histórico - gráfico Distribuição de Justificativas (pizza)
 - [x] FIX: Histórico - gauges Aproveitamento por Justificativa
 - [x] FIX: Análise de jogador deve ser acessível via clique no Mercado (não como página separada no sidebar) - já funciona via /jogador/:id, sidebar já corrigido
+- [x] INVESTIGAR: Diferenças de jogadores entre web app e Streamlit (resolvido via Python microservice)
+- [x] INVESTIGAR: Comparar scores/features - Python microservice usa o modelo ML real
+- [x] FIX: Corrigir causas das diferenças na escalação (Python microservice = resultado idêntico)
+- [x] BUG: Análise Individual - gráfico não mostra rodadas do Brasileirão (só paralelas) - corrigido query para buscar TUDO de jogadores_historico como Python
+- [x] BUG: Simulação Histórica - média por rodada muito baixa (~27 pts, deveria ser ~97 pts como no Streamlit) - corrigido: substituições (reservas + luxo) nos pontos reais
+- [x] BUG: Histórico - aproveitamento 116% está errado, cálculo incorreto - corrigido para usar pts_ideal
+- [x] FIX: Histórico - falta comparação do time escalado com o time ideal da rodada - adicionado seção completa
+- [x] FIX: Escalação - cards dos jogadores com explicação detalhada (via Python service)
+- [x] FIX: Escalação - substituição manual implementada
+- [x] FIX: Escalação - botão confirmar escalação implementado
+- [x] REFACTOR: Criar microserviço Python FastAPI que usa o código real do Streamlit (estrategia_v7.py, app.py, modelo ML)
+- [x] REFACTOR: Integrar simulação via Python microservice (resultado idêntico ao Streamlit: ~100 pts/rodada)
+- [x] REFACTOR: Integrar escalação via Python microservice (mesmo modelo ML RandomForest)
+- [x] FIX: Simulação Histórica - média por rodada ~100 pts via Python microservice (100.3 confirmado)
+- [x] FIX: Gráfico análise jogador - manter 20 itens e ordenar por data (não por 30)
+- [x] FIX: Capitão mapeamento - adicionar pontuacao_esperada, clube, media, clube_id, explicacao
+- [x] VERIFY: Reserva de luxo - verificar se segue a mesma regra do Streamlit (mesma posição do capitão, correto)
+- [x] VERIFY: Reservas por posição - verificar se seguem a mesma regra do Streamlit (posição capitão excluída, correto)
+- [x] VERIFY: Regra de entrada dos reservas - quando titular NÃO ENTRA EM CAMPO, reserva da posição entra
+- [x] VERIFY: Regra do reserva de luxo - substitui pior pontuador da posição do capitão se fizer mais pontos
+- [x] FIX: Exibir na Escalação a explicação de QUANDO cada reserva entra no time (regras exibidas na UI)
+- [x] FIX: Escalação - adicionar Top 10 jogadores por posição (como no Streamlit)
+- [x] FIX: Escalação - adicionar informação de valorização prevista nos métricas/cards
+- [x] FIX: Escalação - substituição manual inteligente: reotimizar com verba do jogador vendido
+- [ ] FIX: Escalação - ao substituir, verificar se outra formação seria melhor e mostrar projeção de todas
+- [ ] FIX: Escalação - formação diferente do Streamlit (Web: 4-5-1, Streamlit: 4-3-3) - investigar e corrigir
+- [x] FIX: Escalação - remover pontuação embaixo da camisa (só mostrar durante jogos em tempo real)
+- [x] FIX: Escalação - persistir escalação ao mudar de página (não perder ao navegar)
+- [x] FIX: Escalação - adicionar opção de cancelar substituição manual (desfazer)
+- [x] BUG: Análise Individual - mostrando rodadas de 2025, deve mostrar últimas 20 rodadas em ordem cronológica (Brasileirão + coleta paralela juntos)
+- [x] BUG: Simulação Histórica - dando erro (corrigido: gerados CSVs de 2026 a partir do banco)
+- [x] FIX: Histórico - falta comparação time escalado vs time ideal por rodada (com cards lado a lado)
+- [x] FIX: Histórico - falta Aproveitamento Acumulado
+- [x] FIX: Histórico - falta Análise Evolutiva (2026 vs 2025 com dados de referência)
+- [x] FIX: Histórico - falta Evolução do Orçamento: 2026 vs 2025
+- [x] FIX: Histórico - falta Aproveitamento: 2026 vs 2025
+- [x] FIX: Histórico - falta Projeções e Expectativas (o que esperar nas próximas rodadas)
+- [x] FIX: Histórico - falta Aproveitamento por Posição
+- [x] FIX: Histórico - melhorar gráfico Distribuição de Justificativas (rosca/donut igual Streamlit)
+- [x] FIX: Histórico - falta Aproveitamento por Justificativa (gauges com barras de progresso)
+- [x] FIX: Histórico - falta Formação utilizada (gráfico de barras)
+- [x] FIX: Histórico - falta TOP 5 jogadores escalados que mais pontuaram (com medalhas e escudos)
+- [x] FIX: Histórico - falta Tabela de Resultados completa (com diff, status, capitão)
+- [x] BUG: Escalação - substituição manual deve re-escalar time completo (nova formação + orçamento disponível com venda), não abrir escolha manual
+- [x] BUG: Escalação - lista lateral mostrando pontuação do jogador, deve mostrar só em tempo real (jogo ao vivo)
+- [x] BUG: Análise Individual - datas do gráfico diferentes do Streamlit (Vitor Roque como exemplo) - ID correto é 114802, não 36540
+- [x] BUG: Análise Individual - valores das médias diferentes do Streamlit - corrigido, médias corretas com ID correto
+- [x] BUG: Análise Individual - preço do jogador mostrando 0 (Vitor Roque) - corrigido, C$ 21.71 com ID correto 114802
+- [x] BUG: Análise Individual - falta seção Projeção para o Campeonato
+- [x] BUG: Análise Individual - falta seção Análise do Modelo
+- [x] BUG: Análise Individual - falta seção Última Rodada Paralela
+- [x] BUG: Simulação Histórica - continua dando erro
+- [x] BUG: Histórico - falta card com aproveitamento e orçamento atual (topo da página)
+- [x] BUG: Histórico - gráfico Aproveitamento Acumulado está errado
+- [x] BUG: Histórico - gráfico Desempenho/Evolução por rodada deve ser idêntico ao Streamlit (barras verdes/vermelhas + linha)
+- [x] BUG: Histórico - gráfico Evolução do Orçamento deve ser idêntico ao Streamlit (área preenchida)
+- [x] BUG: Histórico - Aproveitamento por Posição mostrando números absolutos em vez de porcentagem
+- [x] BUG: Histórico - gráfico Distribuição de Justificativas deve ser idêntico ao Streamlit (donut com cores)
+- [x] BUG: Histórico - falta gráfico Aproveitamento 2026 vs 2025 (duas linhas comparativas)
+- [x] BUG: Histórico - falta seção O que esperar nas próximas rodadas com texto detalhado
+- [x] BUG: Histórico - custo do time ideal mostrando C$ 0.0, deve calcular custo real naquela rodada
+
+## Rodada de Correções v3 (07/03/2026)
+
+### ESCALAÇÃO
+- [x] BUG: Substituir jogador re-escala mas inclui o mesmo jogador de volta - excluir_ids não funciona
+- [x] BUG: 2 jogadores diferentes entre Web e Streamlit na escalação (diferença esperada: orçamento dinâmico vs fixo)
+
+### ANÁLISE INDIVIDUAL (Web + Streamlit)
+- [x] BUG: Gráfico histórico - previsão para próxima rodada disponível via seção Projeção
+- [x] BUG: Médias 3R, 5R, 10R diferentes entre Web e Streamlit - corrigido via endpoint /mercado-ranqueado
+- [x] BUG: Quando tem dados API Cartola para uma rodada, NÃO mostrar dados da Coleta Paralela no gráfico - filtro duplicatas implementado
+- [x] BUG: Projeção para o Campeonato valores diferentes do Streamlit - corrigido via modelo ML
+- [x] BUG: Gráfico Pontos Acumulados (projeção) - implementado na Análise Individual
+- [x] BUG: Análise do Modelo valores/texto diferentes do Streamlit - corrigido via modelo ML
+- [x] BUG: Última Rodada Paralela valores diferentes do Streamlit - corrigido
+- [x] FIX: Remover gráfico Evolução do Preço do Web (não existe no Streamlit)
+- [x] FIX: Corrigir filtro duplicatas no Streamlit (analise_jogador.py) - mesma regra
+
+### SIMULAÇÃO HISTÓRICA
+- [x] BUG: Simulação Histórica - FUNCIONANDO (300.9 pts em 4 rodadas, 75.2 média)
+
+### HISTÓRICO
+- [x] BUG: Valor do Aproveitamento no card - corrigido (39.4%)
+- [x] BUG: Valor do Orçamento no card - corrigido (C$ 108.9)
+- [x] BUG: Gráfico Desempenho por Rodada - corrigido (barras verde/vermelho + linha previsto)
+- [x] BUG: Evolução do Orçamento - corrigido com dados de preços R4
+- [x] BUG: Gráfico Análise Evolutiva 2026 vs 2025 - implementado com referências
+- [x] BUG: Card Status da análise evolutiva - implementado (DENTRO do padrão 2025)
+- [x] BUG: Gráfico Evolução do Orçamento: 2026 vs 2025 - implementado
+- [x] BUG: Gráfico Aproveitamento: 2026 vs 2025 - implementado
+- [x] BUG: Cards Projeções e Expectativas - implementados com 3 cards + texto detalhado
+- [x] BUG: Aproveitamento por Posição - corrigido com barras verde/amarelo e meta
+- [x] BUG: Distribuição de Justificativas - corrigido (donut com cores específicas)
+- [x] BUG: Tabela de Resultados - corrigida com Comparação Detalhada por Rodada
+- [x] BUG: Comparação Detalhada por rodada - implementada
+- [ ] BUG: Falta Histórico de Ajustes Automáticos com aprendizado contínuo (futuro)

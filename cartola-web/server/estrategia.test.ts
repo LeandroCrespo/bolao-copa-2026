@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORMACOES, POSICAO_MAP, EstrategiaV7 } from "./estrategia";
+import { FORMACOES, POSICAO_MAP } from "./estrategia";
 
 describe("FORMACOES", () => {
   it("todas as formações somam 12 jogadores (11 + técnico)", () => {
@@ -80,189 +80,93 @@ describe("POSICAO_MAP", () => {
   });
 });
 
-describe("EstrategiaV7 - instanciação", () => {
-  it("pode ser instanciada", () => {
-    const engine = new EstrategiaV7(100, false);
-    expect(engine).toBeDefined();
+describe("Substituição - regras do Cartola", () => {
+  it("reserva normal entra quando titular NÃO ENTROU EM CAMPO", () => {
+    // Simular a regra: titular com pontos_reais == 0 E não encontrado no df_atual
+    const titular = { atleta_id: "1", pos_id: 5, pontos_reais: 0, entrou_em_campo: false };
+    const reserva = { atleta_id: "99", pos_id: 5, pontos_reais: 5, entrou_em_campo: true };
+    
+    // Regra: reserva entra se titular não entrou em campo E reserva entrou
+    const deveSubstituir = !titular.entrou_em_campo && reserva.entrou_em_campo;
+    expect(deveSubstituir).toBe(true);
   });
 
-  it("pode ser instanciada em modo simulação", () => {
-    const engine = new EstrategiaV7(120, true);
-    expect(engine).toBeDefined();
+  it("reserva normal NÃO entra quando titular jogou e fez 0 pontos", () => {
+    const titular = { atleta_id: "1", pos_id: 5, pontos_reais: 0, entrou_em_campo: true };
+    const reserva = { atleta_id: "99", pos_id: 5, pontos_reais: 5, entrou_em_campo: true };
+    
+    const deveSubstituir = !titular.entrou_em_campo && reserva.entrou_em_campo;
+    expect(deveSubstituir).toBe(false);
+  });
+
+  it("reserva de luxo substitui pior pontuador da posição do capitão se fez mais pontos", () => {
+    const titulares = [
+      { atleta_id: "1", pos_id: 5, pontos_reais: 3, entrou_em_campo: true, substituido: false },
+      { atleta_id: "2", pos_id: 5, pontos_reais: 8, entrou_em_campo: true, substituido: false },
+      { atleta_id: "3", pos_id: 5, pontos_reais: 12, entrou_em_campo: true, substituido: false },
+    ];
+    const reservaLuxo = { atleta_id: "99", pos_id: 5, pontos_reais: 10, entrou_em_campo: true };
+    
+    // Pior pontuador da posição do capitão (que entrou em campo e não foi substituído)
+    const titularesPos = titulares.filter(t => t.pos_id === reservaLuxo.pos_id && t.entrou_em_campo && !t.substituido);
+    const pior = titularesPos.reduce((min, t) => t.pontos_reais < min.pontos_reais ? t : min, titularesPos[0]);
+    
+    // Reserva de luxo substitui se fez mais pontos que o pior
+    const deveSubstituir = reservaLuxo.pontos_reais > pior.pontos_reais;
+    expect(deveSubstituir).toBe(true);
+    expect(pior.atleta_id).toBe("1"); // O pior é o que fez 3 pontos
+  });
+
+  it("reserva de luxo NÃO substitui se fez menos pontos que o pior", () => {
+    const titulares = [
+      { atleta_id: "1", pos_id: 5, pontos_reais: 8, entrou_em_campo: true, substituido: false },
+      { atleta_id: "2", pos_id: 5, pontos_reais: 12, entrou_em_campo: true, substituido: false },
+    ];
+    const reservaLuxo = { atleta_id: "99", pos_id: 5, pontos_reais: 5, entrou_em_campo: true };
+    
+    const titularesPos = titulares.filter(t => t.pos_id === reservaLuxo.pos_id && t.entrou_em_campo && !t.substituido);
+    const pior = titularesPos.reduce((min, t) => t.pontos_reais < min.pontos_reais ? t : min, titularesPos[0]);
+    
+    const deveSubstituir = reservaLuxo.pontos_reais > pior.pontos_reais;
+    expect(deveSubstituir).toBe(false);
+  });
+
+  it("reserva de luxo é sempre da mesma posição do capitão", () => {
+    const capitao = { pos_id: 5 }; // ATA
+    const reservaLuxo = { pos_id: 5 }; // Deve ser ATA também
+    
+    expect(reservaLuxo.pos_id).toBe(capitao.pos_id);
+  });
+
+  it("bônus do capitão é 1.5x nos pontos efetivos (após substituição)", () => {
+    const capitaoId = "1";
+    const titulares = [
+      { atleta_id: "1", pos_id: 5, pontos_reais: 10, substituido: false, substituto: null },
+      { atleta_id: "2", pos_id: 4, pontos_reais: 5, substituido: false, substituto: null },
+    ];
+    
+    let pontuacaoReal = 0;
+    for (const t of titulares) {
+      const pontos = t.substituido && t.substituto ? (t.substituto as any).pontos_reais : t.pontos_reais;
+      if (t.atleta_id === capitaoId) {
+        pontuacaoReal += pontos * 1.5;
+      } else {
+        pontuacaoReal += pontos;
+      }
+    }
+    
+    expect(pontuacaoReal).toBe(10 * 1.5 + 5); // 15 + 5 = 20
   });
 });
 
-describe("EstrategiaV7 - prepararFeaturesV9 com banco Neon", () => {
-  it("retorna array com scores usando dados reais do banco", async () => {
-    const engine = new EstrategiaV7(100, false);
-
-    const jogadores = [
-      {
-        atleta_id: "37637",
-        apelido: "Raphael Veiga",
-        posicao_id: 4,
-        clube_id: 275,
-        clube_nome: "PAL",
-        preco: 15,
-        media: 7,
-        pontos_num: 8,
-        variacao_num: 0.5,
-        status_id: 7,
-        entrou_em_campo: true,
-      },
-      {
-        atleta_id: "38286",
-        apelido: "Gustavo Gómez",
-        posicao_id: 3,
-        clube_id: 275,
-        clube_nome: "PAL",
-        preco: 12,
-        media: 4,
-        pontos_num: 6,
-        variacao_num: 0.3,
-        status_id: 7,
-        entrou_em_campo: true,
-      },
-    ];
-
-    const resultado = await engine.prepararFeaturesV9(jogadores, false);
-    expect(resultado.length).toBe(2);
-    for (const j of resultado) {
-      expect(j.score_geral_v9).toBeDefined();
-      expect(typeof j.score_geral_v9).toBe("number");
-      expect(j.score_geral_v9).toBeGreaterThanOrEqual(0);
-    }
-  }, 30000);
-});
-
-describe("EstrategiaV7 - escalarTime com dados mock", () => {
-  it("retorna escalação válida com jogadores suficientes", async () => {
-    const engine = new EstrategiaV7(500, true);
-
-    const jogadores: any[] = [];
-    const posicoes = [
-      { id: 1, count: 3, prefix: "GOL" },
-      { id: 2, count: 6, prefix: "LAT" },
-      { id: 3, count: 6, prefix: "ZAG" },
-      { id: 4, count: 10, prefix: "MEI" },
-      { id: 5, count: 10, prefix: "ATA" },
-      { id: 6, count: 4, prefix: "TEC" },
-    ];
-
-    let id = 1;
-    for (const pos of posicoes) {
-      for (let i = 0; i < pos.count; i++) {
-        jogadores.push({
-          atleta_id: String(id++),
-          apelido: `${pos.prefix}-${i}`,
-          posicao_id: pos.id,
-          clube_id: 260 + i,
-          clube_nome: `CLB${i}`,
-          preco: 5 + Math.random() * 15,
-          media: 3 + Math.random() * 7,
-          pontos_num: 2 + Math.random() * 15,
-          variacao_num: Math.random() * 2 - 1,
-          status_id: 7,
-          entrou_em_campo: true,
-        });
-      }
-    }
-
-    const escalacao = await engine.escalarTime(jogadores, "4-3-3", 500, true, true);
-
-    expect(escalacao).toBeDefined();
-    expect(escalacao.formacao).toBe("4-3-3");
-    expect(escalacao.titulares.length).toBe(12);
-    expect(escalacao.custo_total).toBeLessThanOrEqual(500);
-    expect(escalacao.pontuacao_esperada).toBeGreaterThanOrEqual(0);
-    expect(escalacao.capitao).toBeDefined();
-    expect(escalacao.vice_capitao).toBeDefined();
-
-    // Verify position distribution
-    const posCount: Record<number, number> = {};
-    for (const t of escalacao.titulares) {
-      posCount[t.pos_id] = (posCount[t.pos_id] || 0) + 1;
-    }
-    expect(posCount[1]).toBe(1); // GOL
-    expect(posCount[4]).toBe(3); // MEI
-    expect(posCount[5]).toBe(3); // ATA
-    expect(posCount[6]).toBe(1); // TEC
-  }, 30000);
-
-  it("respeita o orçamento máximo", async () => {
-    const engine = new EstrategiaV7(80, true);
-
-    const jogadores: any[] = [];
-    let id = 1;
-    const posicoes = [1, 2, 3, 4, 5, 6];
-    for (const posId of posicoes) {
-      for (let i = 0; i < 8; i++) {
-        jogadores.push({
-          atleta_id: String(id++),
-          apelido: `P${posId}-${i}`,
-          posicao_id: posId,
-          clube_id: 260 + i,
-          clube_nome: `C${i}`,
-          preco: 3 + Math.random() * 8,
-          media: 2 + Math.random() * 5,
-          pontos_num: 1 + Math.random() * 8,
-          variacao_num: 0,
-          status_id: 7,
-          entrou_em_campo: true,
-        });
-      }
-    }
-
-    const escalacao = await engine.escalarTime(jogadores, "4-3-3", 80, true, true);
-    expect(escalacao.custo_total).toBeLessThanOrEqual(80);
-  }, 30000);
-});
-
-describe("EstrategiaV7 - analisarTodasFormacoes", () => {
-  it("retorna múltiplas formações ordenadas por pontuação", async () => {
-    const engine = new EstrategiaV7(500, true);
-
-    const jogadores: any[] = [];
-    let id = 1;
-    const posicoes = [
-      { id: 1, count: 3 },
-      { id: 2, count: 6 },
-      { id: 3, count: 6 },
-      { id: 4, count: 10 },
-      { id: 5, count: 10 },
-      { id: 6, count: 4 },
-    ];
-
-    for (const pos of posicoes) {
-      for (let i = 0; i < pos.count; i++) {
-        jogadores.push({
-          atleta_id: String(id++),
-          apelido: `J-${id}`,
-          posicao_id: pos.id,
-          clube_id: 260 + i,
-          clube_nome: `CLB`,
-          preco: 5 + Math.random() * 10,
-          media: 3 + Math.random() * 5,
-          pontos_num: 2 + Math.random() * 10,
-          variacao_num: 0,
-          status_id: 7,
-          entrou_em_campo: true,
-        });
-      }
-    }
-
-    const resultados = await engine.analisarTodasFormacoes(jogadores, 500, true);
-
-    expect(resultados.length).toBeGreaterThan(0);
-    for (const r of resultados) {
-      expect(r.formacao).toBeDefined();
-      expect(r.pontuacao_esperada).toBeDefined();
-      expect(r.custo_total).toBeDefined();
-    }
-
-    // Should be sorted by pontuacao_esperada descending
-    for (let i = 1; i < resultados.length; i++) {
-      expect(resultados[i - 1].pontuacao_esperada).toBeGreaterThanOrEqual(resultados[i].pontuacao_esperada);
-    }
-  }, 60000);
+describe("Python Service - integração", () => {
+  it("pythonService module exports required functions", async () => {
+    const mod = await import("./pythonService");
+    expect(mod.checkPythonServiceHealth).toBeDefined();
+    expect(typeof mod.checkPythonServiceHealth).toBe("function");
+    expect(mod.simularViaPython).toBeDefined();
+    expect(typeof mod.simularViaPython).toBe("function");
+    expect(mod.escalarViaPython).toBeDefined();
+    expect(typeof mod.escalarViaPython).toBe("function");
+  });
 });

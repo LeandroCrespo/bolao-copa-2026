@@ -39,9 +39,9 @@ export default function Simulacao() {
   const [selectedAno, setSelectedAno] = useState<number | null>(null);
   const [selectedRodada, setSelectedRodada] = useState<number | null>(null);
   const [formacao, setFormacao] = useState("4-3-3");
-  const [orcamento, setOrcamento] = useState(100);
+  const [orcamento, setOrcamento] = useState(150);
   const [formacaoAutomatica, setFormacaoAutomatica] = useState(true);
-  const [orcDinamico, setOrcDinamico] = useState(true);
+  const [orcDinamico, setOrcDinamico] = useState(false);
   const [tab, setTab] = useState("todas");
   const [expandedRodada, setExpandedRodada] = useState<number | null>(null);
 

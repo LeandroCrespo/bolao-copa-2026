@@ -155,50 +155,73 @@ export async function getDbStats(): Promise<DbStats> {
 
 export async function getJogadorHistorico(atletaId: string, limite = 50): Promise<JogadorHistorico[]> {
   return neonQuery<JogadorHistorico>(`
-    SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome,
-           rodada, ano, pontos, media, preco, variacao, jogos,
-           entrou_em_campo, status_id, data_jogo, competicao
-    FROM jogadores_historico 
-    WHERE atleta_id = $1 AND competicao = 'Brasileirão'
-    ORDER BY ano DESC, rodada DESC 
-    LIMIT $2
+    SELECT * FROM (
+      SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome,
+             rodada, ano, pontos, media, preco, variacao, jogos,
+             entrou_em_campo, status_id, data_jogo, competicao
+      FROM jogadores_historico 
+      WHERE atleta_id = $1 AND competicao = 'Brasileirão'
+      ORDER BY ano DESC, rodada DESC 
+      LIMIT $2
+    ) sub
+    ORDER BY ano DESC, rodada DESC
   `, [atletaId, limite]);
 }
 
-/** Combined history: Brasileirão + competições paralelas in chronological order */
-export async function getJogadorHistoricoCompleto(atletaId: string, limite = 50) {
-  // Brasileirão history
-  const brasileiro = await neonQuery<any>(`
-    SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome,
-           rodada, ano, pontos, media, preco, variacao, jogos,
-           entrou_em_campo, status_id, data_jogo, 'Brasileirão' as competicao
-    FROM jogadores_historico 
-    WHERE atleta_id = $1 AND competicao = 'Brasileirão'
-    ORDER BY ano ASC, rodada ASC
-    LIMIT $2
+/** Combined history: Brasileirão + competições paralelas in chronological order.
+ *  Matches Python db_historico.carregar_historico_jogador() - queries jogadores_historico
+ *  which already has all competitions unified (Brasileirão + paralelas).
+ */
+export async function getJogadorHistoricoCompleto(atletaId: string, limite = 200) {
+  // Query the MOST RECENT N entries from jogadores_historico
+  // Use a subquery to get the last N rows, then order them chronologically
+  const rows = await neonQuery<any>(`
+    SELECT * FROM (
+      SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome,
+             rodada, ano, pontos, media, preco, variacao, jogos,
+             entrou_em_campo, status_id, data_jogo, competicao,
+             peso
+      FROM jogadores_historico 
+      WHERE atleta_id = $1
+      ORDER BY data_jogo DESC, ano DESC, rodada DESC
+      LIMIT $2
+    ) sub
+    ORDER BY data_jogo ASC, ano ASC, rodada ASC
   `, [atletaId, limite]);
 
-  // Parallel competitions
-  const paralelas = await neonQuery<any>(`
-    SELECT atleta_id, apelido, NULL as posicao_id, NULL as clube_id, clube_nome,
-           NULL as rodada, temporada as ano, pontuacao_simulada as pontos, 
-           NULL as media, NULL as preco, NULL as variacao, NULL as jogos,
-           true as entrou_em_campo, NULL as status_id, data_jogo, competicao
-    FROM competicoes_paralelas 
-    WHERE atleta_id = $1 
-    ORDER BY data_jogo ASC
-    LIMIT $2
-  `, [atletaId, limite]);
+  // Apply peso (weight) for parallel competitions like Python does
+  const PESOS_COMPETICAO: Record<string, number> = {
+    'Copa do Brasil': 0.85,
+    'Libertadores': 0.80,
+    'Sulamericana': 0.75,
+    'Paulista A1': 0.60,
+    'Carioca': 0.55,
+    'Mineiro': 0.55,
+    'Gaúcho': 0.55,
+    'Baiano': 0.50,
+    'Paranaense': 0.50,
+    'Cearense': 0.50,
+    'Goiano': 0.50,
+    'Pernambucano': 0.50,
+  };
 
-  // Combine and sort chronologically
-  const combined = [...brasileiro, ...paralelas];
-  combined.sort((a, b) => {
-    const dateA = a.data_jogo ? new Date(a.data_jogo).getTime() : (a.ano * 10000 + (a.rodada || 0) * 100);
-    const dateB = b.data_jogo ? new Date(b.data_jogo).getTime() : (b.ano * 10000 + (b.rodada || 0) * 100);
-    return dateA - dateB;
+  return rows.filter((r: any) => {
+    const comp = r.competicao || 'Brasileirão';
+    const isBrasileiro = comp === 'Brasileirão';
+    const pontos = Number(r.pontos) || 0;
+    const entrou = isBrasileiro ? (r.entrou_em_campo || pontos !== 0) : true;
+    return entrou || pontos !== 0;
+  }).map((r: any) => {
+    const comp = r.competicao || 'Brasileirão';
+    const isBrasileiro = comp === 'Brasileirão';
+    const pontosRaw = Number(r.pontos) || 0;
+    let pontosFinal = pontosRaw;
+    if (!isBrasileiro) {
+      const peso = Number(r.peso) || PESOS_COMPETICAO[comp] || 0.5;
+      pontosFinal = pontosRaw * peso;
+    }
+    return { ...r, pontos: pontosFinal, competicao: comp };
   });
-
-  return combined;
 }
 
 export async function getJogadoresRodada(rodada: number, ano: number): Promise<JogadorHistorico[]> {
@@ -323,4 +346,94 @@ export async function getTopJogadoresRodada(rodada: number, ano: number, limite 
     ORDER BY pontos DESC
     LIMIT $3
   `, [rodada, ano, limite]);
+}
+
+// ============================================
+// TIME IDEAL CALCULATION
+// ============================================
+
+const FORMACAO_MAP: Record<string, Record<string, number>> = {
+  '3-4-3': { '1': 1, '3': 3, '2': 0, '4': 4, '5': 3, '6': 1 },
+  '3-5-2': { '1': 1, '3': 3, '2': 0, '4': 5, '5': 2, '6': 1 },
+  '4-3-3': { '1': 1, '3': 2, '2': 2, '4': 3, '5': 3, '6': 1 },
+  '4-4-2': { '1': 1, '3': 2, '2': 2, '4': 4, '5': 2, '6': 1 },
+  '4-5-1': { '1': 1, '3': 2, '2': 2, '4': 5, '5': 1, '6': 1 },
+  '5-3-2': { '1': 1, '3': 3, '2': 2, '4': 3, '5': 2, '6': 1 },
+  '5-4-1': { '1': 1, '3': 3, '2': 2, '4': 4, '5': 1, '6': 1 },
+};
+
+/**
+ * Calculate the ideal team for a given round - top scorers per position within budget.
+ * Similar to Python's calcular_time_ideal function.
+ */
+export async function calcularTimeIdeal(
+  ano: number,
+  rodada: number,
+  orcamento: number,
+  formacao: string = '4-3-3'
+): Promise<{
+  titulares: any[];
+  capitao: any | null;
+  pontuacao_real: number;
+  custo_total: number;
+  formacao: string;
+} | null> {
+  // Get all players who played in this round
+  const jogadores = await neonQuery<any>(`
+    SELECT atleta_id, apelido, posicao_id, clube_id, clube_nome, pontos, media, preco
+    FROM jogadores_historico
+    WHERE rodada = $1 AND ano = $2 AND entrou_em_campo = true AND competicao = 'Brasileirão'
+    ORDER BY pontos DESC
+  `, [rodada, ano]);
+
+  if (!jogadores || jogadores.length === 0) return null;
+
+  const qtdPorPosicao = FORMACAO_MAP[formacao] || FORMACAO_MAP['4-3-3'];
+  const titulares: any[] = [];
+  const usados = new Set<string>();
+
+  // For each position, pick the top scorers
+  for (const [posId, qtd] of Object.entries(qtdPorPosicao)) {
+    if (qtd === 0) continue;
+    const posJogadores = jogadores
+      .filter((j: any) => String(j.posicao_id) === posId && !usados.has(String(j.atleta_id)))
+      .sort((a: any, b: any) => Number(b.pontos) - Number(a.pontos))
+      .slice(0, qtd);
+
+    for (const j of posJogadores) {
+      usados.add(String(j.atleta_id));
+      titulares.push({
+        atleta_id: j.atleta_id,
+        apelido: j.apelido,
+        pos_id: Number(j.posicao_id),
+        posicao: POSICOES[Number(j.posicao_id)] || 'N/A',
+        clube_id: j.clube_id,
+        clube: j.clube_nome,
+        pontos: Number(j.pontos),
+        preco: Number(j.preco || 0),
+        media: Number(j.media || 0),
+      });
+    }
+  }
+
+  // Find the best captain (highest scorer)
+  const capitao = titulares.length > 0
+    ? titulares.reduce((best, j) => (j.pontos > best.pontos ? j : best), titulares[0])
+    : null;
+
+  const pontuacao_real = titulares.reduce((sum, j) => {
+    const pts = j.pontos;
+    const bonus = capitao && String(j.atleta_id) === String(capitao.atleta_id) ? pts * 0.5 : 0;
+    return sum + pts + bonus;
+  }, 0);
+
+  const custo_total = titulares.reduce((sum, j) => sum + j.preco, 0);
+
+  return {
+    titulares,
+    capitao,
+    pontuacao_real,
+    custo_total,
+    formacao,
+  };
 }

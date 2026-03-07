@@ -1,9 +1,0 @@
-{
-  "query": "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'ml_predictions' ORDER BY ordinal_position;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user PLabmDVuZAsarM8.ff113172a1ef --database oTZR9ZkHbDCNQCXXcPwoHW --execute SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'ml_predictions' ORDER BY ordinal_position;",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 136
-}

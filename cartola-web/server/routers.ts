@@ -20,9 +20,11 @@ import {
   getMediaPosicao,
   getTopJogadoresRodada,
   getJogadorHistoricoCompleto,
+  calcularTimeIdeal,
 } from "./cartola";
 import { EstrategiaV7, FORMACOES, POSICAO_MAP, type Escalacao, type Jogador } from "./estrategia";
 import { neonQuery } from "./neonDb";
+import { simularViaPython, escalarViaPython, checkPythonServiceHealth, getMercadoRanqueado } from "./pythonService";
 
 // Calculate valorização considering substitutions (same logic as Python)
 function calcularValorizacaoComSubstituicoes(esc: any): number {
@@ -183,6 +185,11 @@ export const appRouter = router({
   cartola: router({
     mercadoStatus: protectedProcedure.query(() => getMercadoStatus()),
     atletasMercado: protectedProcedure.query(() => getAtletasMercado()),
+
+    mercadoRanqueado: protectedProcedure.query(async () => {
+      const data = await getMercadoRanqueado();
+      return data;
+    }),
     atletasPontuados: protectedProcedure
       .input(z.object({ rodada: z.number().optional() }).optional())
       .query(({ input }) => getAtletasPontuados(input?.rodada)),
@@ -218,6 +225,19 @@ export const appRouter = router({
     topJogadoresRodada: protectedProcedure
       .input(z.object({ rodada: z.number(), ano: z.number(), limite: z.number().default(10) }))
       .query(({ input }) => getTopJogadoresRodada(input.rodada, input.ano, input.limite)),
+    timeIdeal: protectedProcedure
+      .input(z.object({ ano: z.number(), rodada: z.number(), orcamento: z.number().default(100), formacao: z.string().default('4-3-3') }))
+      .query(({ input }) => calcularTimeIdeal(input.ano, input.rodada, input.orcamento, input.formacao)),
+    pontosIdeaisBatch: protectedProcedure
+      .input(z.object({ ano: z.number(), rodadas: z.array(z.number()) }))
+      .query(async ({ input }) => {
+        const results: Record<number, number> = {};
+        for (const rodada of input.rodadas) {
+          const ideal = await calcularTimeIdeal(input.ano, rodada, 999, '4-3-3');
+          results[rodada] = ideal?.pontuacao_real || 0;
+        }
+        return results;
+      }),
   }),
 
   // EstrategiaV7 - Motor de Escalação
@@ -229,17 +249,145 @@ export const appRouter = router({
         orcamento: z.number().default(100),
         rodada: z.number().optional(),
         ano: z.number().optional(),
+        excluirIds: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input }) => {
-        const engine = getEngine(input.orcamento, false);
+        // Try Python service first (identical results to Streamlit)
+        const pyHealthy = await checkPythonServiceHealth();
+        if (pyHealthy) {
+          try {
+            const pyResult = await escalarViaPython({
+              formacao: input.formacao,
+              orcamento: input.orcamento,
+              ano: input.ano,
+              rodada: input.rodada,
+              excluir_ids: input.excluirIds,
+            });
+            
+            const esc = pyResult.escalacao || {};
+            const POS_MAP_INV: Record<number, string> = { 1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA', 6: 'TEC' };
+            
+            // Map Python result to the expected frontend format
+            const titulares = (esc.titulares || []).map((t: any) => ({
+              atleta_id: String(t.atleta_id || ''),
+              apelido: t.apelido || '',
+              posicao_id: t.pos_id || 0,
+              pos_id: t.pos_id || 0,
+              posicao: t.posicao || POS_MAP_INV[t.pos_id] || 'N/A',
+              preco: t.preco || 0,
+              media: t.media || 0,
+              score: t.score || 0,
+              pontuacao_esperada: t.pontuacao_esperada || t.score || 0,
+              clube_nome: t.clube || '',
+              clube_id: t.clube_id || 0,
+              valorizacao_prevista: t.valorizacao_prevista || 0,
+              pontos_reais: t.pontos_reais || 0,
+              explicacao: t.explicacao || {},
+              explicacao_resumo: t.explicacao?.resumo || '',
+            }));
+            
+            const capitao = esc.capitao ? {
+              atleta_id: String(esc.capitao.atleta_id || ''),
+              apelido: esc.capitao.apelido || '',
+              posicao_id: esc.capitao.pos_id || 0,
+              pos_id: esc.capitao.pos_id || 0,
+              posicao: esc.capitao.posicao || POS_MAP_INV[esc.capitao.pos_id] || 'N/A',
+              preco: esc.capitao.preco || 0,
+              media: esc.capitao.media || 0,
+              score: esc.capitao.score || 0,
+              pontuacao_esperada: esc.capitao.pontuacao_esperada || esc.capitao.score || 0,
+              clube_nome: esc.capitao.clube || '',
+              clube: esc.capitao.clube || '',
+              clube_id: esc.capitao.clube_id || 0,
+              valorizacao_prevista: esc.capitao.valorizacao_prevista || 0,
+              explicacao: esc.capitao.explicacao || {},
+            } : null;
+            
+            const reservas: Record<string, any> = {};
+            if (esc.reservas && typeof esc.reservas === 'object') {
+              for (const [posId, r] of Object.entries(esc.reservas as Record<string, any>)) {
+                if (r) {
+                  reservas[posId] = {
+                    atleta_id: String(r.atleta_id || ''),
+                    apelido: r.apelido || '',
+                    posicao_id: r.pos_id || Number(posId),
+                    pos_id: r.pos_id || Number(posId),
+                    posicao: r.posicao || POS_MAP_INV[Number(posId)] || 'N/A',
+                    preco: r.preco || 0,
+                    media: r.media || 0,
+                    score: r.score || 0,
+                    clube_nome: r.clube || '',
+                  };
+                }
+              }
+            }
+            
+            const reservaLuxo = esc.reserva_luxo ? {
+              atleta_id: String(esc.reserva_luxo.atleta_id || ''),
+              apelido: esc.reserva_luxo.apelido || '',
+              posicao_id: esc.reserva_luxo.pos_id || 0,
+              pos_id: esc.reserva_luxo.pos_id || 0,
+              posicao: esc.reserva_luxo.posicao || POS_MAP_INV[esc.reserva_luxo.pos_id] || 'N/A',
+              preco: esc.reserva_luxo.preco || 0,
+              media: esc.reserva_luxo.media || 0,
+              score: esc.reserva_luxo.score || 0,
+              clube_nome: esc.reserva_luxo.clube || '',
+            } : null;
+            
+            // Build top 10 per position from df_ranqueado
+            const top10PorPosicao: Record<number, any[]> = {};
+            const dfRanqueado = esc.df_ranqueado;
+            if (dfRanqueado && typeof dfRanqueado === 'object' && dfRanqueado.apelido) {
+              const idsEscalados = new Set(titulares.map((t: any) => String(t.atleta_id)));
+              const indices = Object.keys(dfRanqueado.apelido || {});
+              const jogadoresArr: any[] = indices.map(idx => ({
+                atleta_id: String(dfRanqueado.atleta_id?.[idx] || dfRanqueado.id?.[idx] || ''),
+                apelido: dfRanqueado.apelido?.[idx] || '',
+                posicao_id: Number(dfRanqueado.posicao_id?.[idx] || 0),
+                score: Number(dfRanqueado.score?.[idx] || dfRanqueado.pred?.[idx] || 0),
+                preco: Number(dfRanqueado.preco?.[idx] || 0),
+                media: Number(dfRanqueado.media?.[idx] || 0),
+                clube_id: Number(dfRanqueado.clube_id?.[idx] || 0),
+                clube_nome: dfRanqueado.clube_nome?.[idx] || dfRanqueado.clube_abreviacao?.[idx] || '',
+                status_id: Number(dfRanqueado.status_id?.[idx] || 0),
+                escalado: idsEscalados.has(String(dfRanqueado.atleta_id?.[idx] || dfRanqueado.id?.[idx] || '')),
+              }));
+              for (const posId of [1, 2, 3, 4, 5, 6]) {
+                top10PorPosicao[posId] = jogadoresArr
+                  .filter(j => j.posicao_id === posId && j.preco > 0)
+                  .sort((a, b) => b.score - a.score)
+                  .slice(0, 10);
+              }
+            }
+
+            const escalacao = {
+              titulares,
+              capitao,
+              reservas,
+              reserva_luxo: reservaLuxo,
+              pontuacao_esperada: esc.pontuacao_esperada || 0,
+              custo_total: esc.custo_total || 0,
+              orcamento_restante: esc.orcamento_restante || 0,
+              formacao: esc.formacao || pyResult.formacao || input.formacao,
+              valorizacao_total: esc.valorizacao_total || 0,
+              estrategia_especial: esc.estrategia_especial || 'PADRÃO',
+              fonte: 'python' as const,
+              top10PorPosicao,
+            };
+            
+            escalacaoAtual = escalacao as any;
+            return escalacao;
+          } catch (pyError: any) {
+            console.error('[Escalação] Python service error, falling back to TypeScript:', pyError.message);
+          }
+        }
         
-        // Fetch raw market data
+        // TypeScript fallback
+        const engine = getEngine(input.orcamento, false);
         const mercadoData = await getRawMercado();
         if (!mercadoData || !mercadoData.atletas) {
           throw new Error('Não foi possível obter dados do mercado');
         }
-        
-        // Convert to Jogador[]
         const jogadores: Jogador[] = mercadoData.atletas.map((a: any) => ({
           atleta_id: String(a.atleta_id),
           apelido: a.apelido || a.apelido_abreviado || '',
@@ -255,11 +403,9 @@ export const appRouter = router({
           foto: a.foto ? a.foto.replace('FORMATO', '140x140') : undefined,
           scout: a.scout || {},
         }));
-        
         const escalacao = await engine.escalarTime(
           jogadores, input.formacao, input.orcamento, true, false, input.rodada, input.ano
         );
-        
         escalacaoAtual = escalacao;
         return escalacao;
       }),
@@ -303,7 +449,7 @@ export const appRouter = router({
         rodada: z.number(),
         ano: z.number(),
         formacao: z.string().default('4-3-3'),
-        orcamento: z.number().default(100),
+        orcamento: z.number().default(150),
         formacaoAutomatica: z.boolean().default(false),
       }))
       .mutation(async ({ input }) => {
@@ -354,21 +500,18 @@ export const appRouter = router({
           );
         }
         
-        // Calculate real points for comparison
+        // Calculate real points with captain 1.5x multiplier (matching Python logic)
         let pontosReais = 0;
+        const capIdSingle = escalacao.capitao?.atleta_id;
         for (const t of escalacao.titulares) {
           const jog = jogadoresRodada.find((j: any) => String(j.atleta_id) === t.atleta_id);
           if (jog) {
             t.pontos_reais = parseFloat(String(jog.pontos)) || 0;
-            pontosReais += t.pontos_reais;
-          }
-        }
-        
-        // Captain bonus
-        if (escalacao.capitao) {
-          const capJog = jogadoresRodada.find((j: any) => String(j.atleta_id) === escalacao.capitao!.atleta_id);
-          if (capJog) {
-            pontosReais += (parseFloat(String(capJog.pontos)) || 0) * 0.5;
+            let pts = t.pontos_reais;
+            if (capIdSingle && t.atleta_id === capIdSingle) {
+              pts *= 1.5;
+            }
+            pontosReais += pts;
           }
         }
         
@@ -384,11 +527,236 @@ export const appRouter = router({
       .input(z.object({
         ano: z.number(),
         formacao: z.string().default('4-3-3'),
-        orcamento: z.number().default(100),
+        orcamento: z.number().default(150),
         formacaoAutomatica: z.boolean().default(false),
         orcamentoDinamico: z.boolean().default(false),
+        usePython: z.boolean().default(true),
       }))
       .mutation(async ({ input }) => {
+        // Try Python service first (identical results to Streamlit)
+        if (input.usePython) {
+          const pyHealthy = await checkPythonServiceHealth();
+          if (pyHealthy) {
+            try {
+              const formacao = input.formacaoAutomatica ? 'auto' : input.formacao;
+              const pyResult = await simularViaPython({
+                ano: input.ano,
+                orcamento: input.orcamento,
+                formacao,
+                orcamento_dinamico: input.orcamentoDinamico,
+              });
+              
+              // Transform Python result to match the expected frontend format
+              const POS_MAP_INV: Record<number, string> = { 1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA', 6: 'TEC' };
+              let acumEscalado = 0;
+              let acumIdeal = 0;
+              const resultados = pyResult.rodadas.map((r: any) => {
+                const ptsEscalado = Number(r['Pts Escalado']) || 0;
+                const ptsIdeal = Number(r['Pts Ideal']) || 0;
+                const ptsPrevisto = Number(r['Pts Previsto']) || 0;
+                acumEscalado += ptsEscalado;
+                acumIdeal += ptsIdeal;
+                const aprovAcumulado = acumIdeal > 0 ? (acumEscalado / acumIdeal * 100) : 0;
+                const acertosStr = String(r['Acertos'] || '0/12');
+                const acertosNum = parseInt(acertosStr.split('/')[0]) || 0;
+                const custoStr = String(r['Custo'] || 'C$ 0');
+                const custoNum = parseFloat(custoStr.replace('C$', '').trim()) || 0;
+                const orcStr = r['Orçamento'] ? String(r['Orçamento']).replace('C$', '').trim() : String(input.orcamento);
+                const orcNum = parseFloat(orcStr) || input.orcamento;
+                const aprovStr = String(r['Aproveitamento'] || '0%');
+                const aprovNum = parseFloat(aprovStr.replace('%', '')) || 0;
+                
+                // Get detail data if available
+                // Python returns: { escalacao: { titulares, reservas, capitao, ... }, melhores, substituicoes, ... }
+                const detail = pyResult.detalhes?.[String(r['Rodada'])];
+                const esc = detail?.escalacao || {};
+                const titulares = (esc?.titulares || []).map((t: any) => ({
+                  atleta_id: String(t.atleta_id || ''),
+                  apelido: t.apelido || '',
+                  pos_id: t.pos_id || 0,
+                  posicao: POS_MAP_INV[t.pos_id] || 'N/A',
+                  preco: t.preco || 0,
+                  score: t.score || 0,
+                  pontos_reais: t.pontos_reais || 0,
+                  explicacao_resumo: t.explicacao?.resumo || '',
+                  explicacao: t.explicacao || {},
+                  media: t.media || 0,
+                  clube_id: t.clube_id || 0,
+                  clube_nome: t.clube || '',
+                  valorizacao_prevista: t.valorizacao_prevista || 0,
+                })) || [];
+                
+                // melhores is a dict: { formacao, titulares: [...] } from obter_melhores_reais
+                const melhoresList = Array.isArray(detail?.melhores) ? detail.melhores : (detail?.melhores?.titulares || []);
+                const melhores = melhoresList.map((m: any) => ({
+                  atleta_id: String(m.atleta_id || ''),
+                  apelido: m.apelido || '',
+                  pos_id: m.pos_id || 0,
+                  posicao: POS_MAP_INV[m.pos_id] || m.posicao || 'N/A',
+                  preco: m.preco || 0,
+                  pontos: m.pontos_reais || m.pontos || 0,
+                  clube_id: m.clube_id || 0,
+                  clube_nome: m.clube || '',
+                  score_previsto: m.score || 0,
+                })) || [];
+                
+                const substituicoes = (esc?.substituicoes || []).map((s: any) => ({
+                  tipo: s.tipo || 'reserva',
+                  saiu: (typeof s.saiu === 'object' ? s.saiu?.apelido : s.saiu) || '',
+                  entrou: (typeof s.entrou === 'object' ? s.entrou?.apelido : s.entrou) || '',
+                  pontos_saiu: (typeof s.saiu === 'object' ? s.saiu?.pontos_reais : 0) || 0,
+                  pontos_entrou: (typeof s.entrou === 'object' ? s.entrou?.pontos_reais : 0) || 0,
+                }));
+                
+                return {
+                  rodada: Number(r['Rodada']),
+                  pontuacao_esperada: ptsPrevisto,
+                  pontos_reais: ptsEscalado,
+                  pts_ideal: ptsIdeal,
+                  pts_previsto: ptsPrevisto,
+                  aproveitamento: aprovNum,
+                  aproveitamento_acumulado: Math.round(aprovAcumulado * 100) / 100,
+                  acertos: acertosNum,
+                  formacao: String(r['Formação'] || input.formacao),
+                  diferenca: Math.round((ptsEscalado - ptsPrevisto) * 100) / 100,
+                  orcamento_usado: orcNum,
+                  custo_total: custoNum,
+                  capitao: String(r['Capitão Escalado'] || '—'),
+                  capitao_ideal: String(r['Capitão Ideal'] || '—'),
+                  cap_ok: String(r['Cap OK']) === '✓',
+                  titulares,
+                  melhores,
+                  substituicoes,
+                  reserva_luxo: esc?.reserva_luxo ? {
+                    apelido: esc.reserva_luxo.apelido || '',
+                    posicao: esc.reserva_luxo.posicao || POS_MAP_INV[esc.reserva_luxo.pos_id] || '',
+                    pontos_reais: esc.reserva_luxo.pontos_reais || 0,
+                  } : null,
+                };
+              });
+              
+              const totalPtsReais = resultados.reduce((s: number, r: any) => s + r.pontos_reais, 0);
+              const totalPtsEsperada = resultados.reduce((s: number, r: any) => s + r.pontuacao_esperada, 0);
+              const totalPtsIdeal = resultados.reduce((s: number, r: any) => s + r.pts_ideal, 0);
+              const capsOk = resultados.filter((r: any) => r.cap_ok).length;
+              const aprovTotal = totalPtsIdeal > 0 ? (totalPtsReais / totalPtsIdeal * 100) : 0;
+              
+              // Position stats
+              const posStats: Record<string, { escalado: number; ideal: number }> = {};
+              for (const pos of ['GOL', 'LAT', 'ZAG', 'MEI', 'ATA', 'TEC']) posStats[pos] = { escalado: 0, ideal: 0 };
+              for (const r of resultados) {
+                for (const t of r.titulares) {
+                  if (posStats[t.posicao]) posStats[t.posicao].escalado += t.pontos_reais;
+                }
+                for (const m of r.melhores) {
+                  if (posStats[m.posicao]) posStats[m.posicao].ideal += m.pontos;
+                }
+              }
+              const aprovPosicao: Record<string, number> = {};
+              for (const [pos, s] of Object.entries(posStats)) {
+                aprovPosicao[pos] = s.ideal > 0 ? Math.round(s.escalado / s.ideal * 10000) / 100 : 0;
+              }
+              
+              // Justificativa distribution
+              const justificativas: Record<string, number> = {};
+              for (const r of resultados) {
+                for (const t of r.titulares) {
+                  const resumo = (t.explicacao_resumo || '').toLowerCase();
+                  let just = 'Consistente';
+                  if (resumo.includes('recuperação')) just = 'Recuperação';
+                  else if (resumo.includes('boa fase')) just = 'Boa Fase';
+                  else if (resumo.includes('queda')) just = 'Em Queda';
+                  else if (resumo.includes('premium')) just = 'Premium';
+                  else if (resumo.includes('custo')) just = 'Custo-Benefício';
+                  else if (resumo.includes('aposta')) just = 'Aposta';
+                  justificativas[just] = (justificativas[just] || 0) + 1;
+                }
+              }
+              
+              // Gauge data
+              const justGauges: Record<string, { acertos: number; total: number }> = {};
+              for (const r of resultados) {
+                for (const t of r.titulares) {
+                  const resumo = (t.explicacao_resumo || '').toLowerCase();
+                  let just = 'Consistente';
+                  if (resumo.includes('recuperação')) just = 'Recuperação';
+                  else if (resumo.includes('boa fase')) just = 'Boa Fase';
+                  else if (resumo.includes('queda')) just = 'Em Queda';
+                  else if (resumo.includes('premium')) just = 'Premium';
+                  else if (resumo.includes('custo')) just = 'Custo-Benefício';
+                  else if (resumo.includes('aposta')) just = 'Aposta';
+                  if (!justGauges[just]) justGauges[just] = { acertos: 0, total: 0 };
+                  justGauges[just].total++;
+                  if (t.pontos_reais >= t.media) justGauges[just].acertos++;
+                }
+              }
+              
+              // Formation distribution
+              const formacoes: Record<string, number> = {};
+              for (const r of resultados) {
+                formacoes[r.formacao] = (formacoes[r.formacao] || 0) + 1;
+              }
+              
+              // Top 5 most picked players
+              const jogStats: Record<string, { pontos: number; escalacoes: number }> = {};
+              for (const r of resultados) {
+                for (const t of r.titulares) {
+                  if (!jogStats[t.apelido]) jogStats[t.apelido] = { pontos: 0, escalacoes: 0 };
+                  jogStats[t.apelido].pontos += t.pontos_reais;
+                  jogStats[t.apelido].escalacoes++;
+                }
+              }
+              const top5 = Object.entries(jogStats)
+                .sort((a, b) => b[1].pontos - a[1].pontos)
+                .slice(0, 5)
+                .map(([nome, stats]) => ({ nome, pontos: Math.round(stats.pontos * 100) / 100, escalacoes: stats.escalacoes }));
+              
+              return {
+                ano: input.ano,
+                resultados: resultados.map((r: any) => ({
+                  rodada: r.rodada,
+                  pontos_reais: r.pontos_reais,
+                  pts_previsto: r.pts_previsto,
+                  pts_ideal: r.pts_ideal,
+                  aproveitamento: r.aproveitamento,
+                  aproveitamento_acumulado: r.aproveitamento_acumulado,
+                  acertos: r.acertos,
+                  formacao: r.formacao,
+                  capitao: r.capitao,
+                  capitao_ideal: r.capitao_ideal,
+                  cap_ok: r.cap_ok,
+                  custo_total: r.custo_total,
+                  orcamento_usado: r.orcamento_usado,
+                  pontuacao_esperada: r.pontuacao_esperada,
+                  diferenca: r.diferenca,
+                  titulares: r.titulares,
+                  melhores: r.melhores,
+                  substituicoes: r.substituicoes,
+                  reserva_luxo: r.reserva_luxo,
+                })),
+                media_pontos_reais: pyResult.resumo.media_rodada,
+                media_esperada: resultados.length > 0 ? Math.round(totalPtsEsperada / resultados.length * 100) / 100 : 0,
+                total_rodadas: pyResult.resumo.num_rodadas,
+                total_pontos_reais: pyResult.resumo.total_pontos,
+                total_pontos_esperada: Math.round(totalPtsEsperada * 100) / 100,
+                total_pontos_ideal: pyResult.resumo.total_ideal,
+                capitaes_ok: capsOk,
+                aproveitamento_total: pyResult.resumo.aproveitamento,
+                orcamento_final: input.orcamentoDinamico ? undefined : undefined,
+                aprovPosicao,
+                justificativas,
+                justGauges,
+                formacoes,
+                top5,
+                fonte: 'python' as const,
+              };
+            } catch (pyError: any) {
+              console.error('[Simulação] Python service error, falling back to TypeScript:', pyError.message);
+              // Fall through to TypeScript implementation
+            }
+          }
+        }
+        // TypeScript fallback implementation
         const rodadasProcessadas = await getRodadasProcessadas();
         const rodadasAno = rodadasProcessadas
           .filter((r: any) => Number(r.ano) === input.ano)
@@ -421,10 +789,9 @@ export const appRouter = router({
         const formacoesDisponiveis = Object.keys(FORMACOES);
         const POS_MAP_INV: Record<number, string> = { 1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA', 6: 'TEC' };
         
-        // Pre-load history ONCE to avoid repeated DB calls
+        // Create a shared engine that will reload history per-round with progressive data
+        // Like Python: for each round N, load previous year + current year up to round N-1
         const sharedEngine = new EstrategiaV7(input.orcamento, true);
-        const dummyJog: Jogador[] = [{ atleta_id: '0', apelido: 'x', posicao_id: 1, clube_id: 1, preco: 5, media: 0, pontos_num: 0, variacao_num: 0, status_id: 7, entrou_em_campo: true }];
-        try { await sharedEngine.prepararFeaturesV9(dummyJog, true); } catch {}
         
         // Pre-fetch all rodada data in parallel
         const allJogadoresData = await Promise.all(
@@ -494,10 +861,47 @@ export const appRouter = router({
             // Calculate real points for each titular
             let pontosReais = 0;
             const titularesDetalhes: typeof resultados[0]['titulares'] = [];
+            const substituicoesRodada: Array<{tipo: string; saiu: string; entrou: string; pontos_saiu: number; pontos_entrou: number}> = [];
+            
+            // Build reservas map: pos_id -> reserva player data
+            const reservasMap: Record<number, {atleta_id: string; apelido: string; pos_id: number; pontos_reais: number; preco: number; media: number; clube: string}> = {};
+            if (melhorEscalacao.reservas) {
+              for (const [posIdStr, reserva] of Object.entries(melhorEscalacao.reservas)) {
+                if (reserva) {
+                  const rJog = jogadoresRodada.find((j: any) => String(j.atleta_id) === (reserva as any).atleta_id);
+                  reservasMap[Number(posIdStr)] = {
+                    atleta_id: (reserva as any).atleta_id,
+                    apelido: (reserva as any).apelido || '',
+                    pos_id: Number(posIdStr),
+                    pontos_reais: rJog ? (parseFloat(String(rJog.pontos)) || 0) : 0,
+                    preco: (reserva as any).preco || 0,
+                    media: (reserva as any).media || 0,
+                    clube: (reserva as any).clube || '',
+                  };
+                }
+              }
+            }
+            
+            // Reserva de luxo data
+            let reservaLuxoData: {atleta_id: string; apelido: string; pos_id: number; pontos_reais: number; preco: number; media: number; clube: string; posicao: string} | null = null;
+            if (melhorEscalacao.reserva_luxo) {
+              const rl = melhorEscalacao.reserva_luxo;
+              const rlJog = jogadoresRodada.find((j: any) => String(j.atleta_id) === rl.atleta_id);
+              reservaLuxoData = {
+                atleta_id: rl.atleta_id,
+                apelido: rl.apelido || '',
+                pos_id: rl.pos_id,
+                pontos_reais: rlJog ? (parseFloat(String(rlJog.pontos)) || 0) : 0,
+                preco: rl.preco || 0,
+                media: rl.media || 0,
+                clube: rl.clube || '',
+                posicao: POS_MAP_INV[rl.pos_id] || 'N/A',
+              };
+            }
+            
             for (const t of melhorEscalacao.titulares) {
               const jog = jogadoresRodada.find((j: any) => String(j.atleta_id) === t.atleta_id);
               const ptsReal = jog ? (parseFloat(String(jog.pontos)) || 0) : 0;
-              pontosReais += ptsReal;
               titularesDetalhes.push({
                 atleta_id: t.atleta_id,
                 apelido: t.apelido,
@@ -514,10 +918,60 @@ export const appRouter = router({
                 valorizacao_prevista: t.valorizacao_prevista || 0,
               });
             }
-            // Captain bonus
-            if (melhorEscalacao.capitao) {
-              const capJog = jogadoresRodada.find((j: any) => String(j.atleta_id) === melhorEscalacao!.capitao!.atleta_id);
-              if (capJog) pontosReais += (parseFloat(String(capJog.pontos)) || 0) * 0.5;
+            
+            // SUBSTITUIÇÃO 1: Reservas substituem titulares que NÃO JOGARAM (pontos = 0)
+            const usedReservas = new Set<number>();
+            for (let i = 0; i < titularesDetalhes.length; i++) {
+              const td = titularesDetalhes[i];
+              if (td.pontos_reais === 0) {
+                const posId = td.pos_id;
+                const reserva = reservasMap[posId];
+                if (reserva && !usedReservas.has(posId) && reserva.pontos_reais > 0) {
+                  substituicoesRodada.push({
+                    tipo: 'reserva',
+                    saiu: td.apelido,
+                    entrou: reserva.apelido,
+                    pontos_saiu: 0,
+                    pontos_entrou: reserva.pontos_reais,
+                  });
+                  // Update the titular's points to the reserva's points
+                  titularesDetalhes[i] = { ...td, pontos_reais: reserva.pontos_reais, apelido: `${reserva.apelido} (sub)` };
+                  usedReservas.add(posId);
+                }
+              }
+            }
+            
+            // SUBSTITUIÇÃO 2: Reserva de luxo substitui o PIOR PONTUADOR da sua posição
+            if (reservaLuxoData && reservaLuxoData.pontos_reais > 0) {
+              const posId = reservaLuxoData.pos_id;
+              const titularesPos = titularesDetalhes.filter(t => t.pos_id === posId);
+              if (titularesPos.length > 0) {
+                const piorIdx = titularesDetalhes.findIndex(t => 
+                  t.pos_id === posId && t.pontos_reais === Math.min(...titularesPos.map(tp => tp.pontos_reais))
+                );
+                if (piorIdx >= 0 && reservaLuxoData.pontos_reais > titularesDetalhes[piorIdx].pontos_reais) {
+                  substituicoesRodada.push({
+                    tipo: 'luxo',
+                    saiu: titularesDetalhes[piorIdx].apelido,
+                    entrou: reservaLuxoData.apelido,
+                    pontos_saiu: titularesDetalhes[piorIdx].pontos_reais,
+                    pontos_entrou: reservaLuxoData.pontos_reais,
+                  });
+                  titularesDetalhes[piorIdx] = { ...titularesDetalhes[piorIdx], pontos_reais: reservaLuxoData.pontos_reais, apelido: `${reservaLuxoData.apelido} (luxo)` };
+                }
+              }
+            }
+            
+            // Sum real points AFTER substitutions, with captain 1.5x multiplier
+            // Match Python logic: for each titular, if captain, multiply effective points by 1.5
+            const capId = melhorEscalacao.capitao?.atleta_id;
+            pontosReais = 0;
+            for (const t of titularesDetalhes) {
+              let pts = t.pontos_reais;
+              if (capId && t.atleta_id === capId) {
+                pts *= 1.5;
+              }
+              pontosReais += pts;
             }
             
             // === Calculate IDEAL team (best possible) for this rodada ===
@@ -614,11 +1068,7 @@ export const appRouter = router({
               cap_ok: capOk,
               titulares: titularesDetalhes,
               melhores: melhoresDetalhes,
-              substituicoes: ((melhorEscalacao as any).substituicoes || []).map((s: any) => ({
-                tipo: s.tipo || 'reserva',
-                saiu: s.saiu?.apelido || s.saiu || '',
-                entrou: s.entrou?.apelido || s.entrou || '',
-              })),
+              substituicoes: substituicoesRodada,
               reserva_luxo: (melhorEscalacao as any).reserva_luxo ? {
                 apelido: (melhorEscalacao as any).reserva_luxo.apelido || '',
                 posicao: POS_MAP_INV[(melhorEscalacao as any).reserva_luxo.pos_id] || '',
@@ -794,17 +1244,65 @@ export const appRouter = router({
             ${whereClause}
             ORDER BY data_criacao DESC
           `);
-          // Calculate valorizacao_com_substituicoes for each row
-          return (rows || []).map((r: any) => {
+          // Calculate valorizacao_com_substituicoes and pts_ideal for each row
+          const POS_MAP_INV_LOCAL: Record<number, string> = { 1: 'GOL', 2: 'LAT', 3: 'ZAG', 4: 'MEI', 5: 'ATA', 6: 'TEC' };
+          const results: any[] = [];
+          for (const r of (rows || [])) {
             let valComSub = 0;
+            let ptsIdeal = 0;
+            let melhoresIdeal: Array<{atleta_id: string; apelido: string; posicao: string; pontos: number; preco: number}> = [];
+            let capIdeal = '';
             try {
               const esc = typeof r.escalacao_json_full === 'string' ? JSON.parse(r.escalacao_json_full) : r.escalacao_json_full;
               if (esc && esc.processado) {
                 valComSub = calcularValorizacaoComSubstituicoes(esc);
               }
+              // Calculate ideal team for this round
+              const rodada = Number(r.rodada);
+              const ano = Number(r.ano);
+              const formacao = String(r.formacao || esc?.formacao || '4-4-2');
+              const formConfig = FORMACOES[formacao] || FORMACOES['4-4-2'];
+              const jogadoresRodada = await neonQuery(
+                `SELECT atleta_id, apelido, posicao_id, pontos, preco, clube_nome FROM jogadores_historico WHERE rodada = $1 AND ano = $2 AND competicao = 'Brasileirão'`,
+                [rodada, ano]
+              );
+              if (jogadoresRodada && jogadoresRodada.length > 0) {
+                const byPos: Record<number, Array<{atleta_id: string; apelido: string; posicao_id: number; pontos: number; preco: number}>> = {};
+                for (const j of jogadoresRodada) {
+                  const posId = Number(j.posicao_id);
+                  const pts = parseFloat(String(j.pontos)) || 0;
+                  if (!byPos[posId]) byPos[posId] = [];
+                  byPos[posId].push({ atleta_id: String(j.atleta_id), apelido: String(j.apelido || ''), posicao_id: posId, pontos: pts, preco: parseFloat(String(j.preco)) || 0 });
+                }
+                for (const posId of Object.keys(byPos)) {
+                  byPos[Number(posId)].sort((a, b) => b.pontos - a.pontos);
+                }
+                let melhorCapPts = 0;
+                for (const [posIdStr, count] of Object.entries(formConfig)) {
+                  const posId = Number(posIdStr);
+                  const candidates = byPos[posId] || [];
+                  for (let i = 0; i < count && i < candidates.length; i++) {
+                    const c = candidates[i];
+                    ptsIdeal += c.pontos;
+                    melhoresIdeal.push({
+                      atleta_id: c.atleta_id,
+                      apelido: c.apelido,
+                      posicao: POS_MAP_INV_LOCAL[posId] || 'N/A',
+                      pontos: c.pontos,
+                      preco: c.preco,
+                    });
+                    if (c.pontos > melhorCapPts) {
+                      melhorCapPts = c.pontos;
+                      capIdeal = c.apelido;
+                    }
+                  }
+                }
+                ptsIdeal += melhorCapPts * 0.5; // Captain bonus
+              }
             } catch {}
-            return { ...r, valorizacao_com_sub: valComSub, escalacao_json_full: undefined };
-          });
+            results.push({ ...r, valorizacao_com_sub: valComSub, pts_ideal: Math.round(ptsIdeal * 100) / 100, melhores_ideal: melhoresIdeal, capitao_ideal: capIdeal, escalacao_json_full: undefined });
+          }
+          return results;
         } catch {
           return [];
         }

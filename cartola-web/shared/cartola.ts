@@ -99,6 +99,9 @@ export interface CompetParalela {
   cartao_vermelho: number;
   defesas: number;
   gols_sofridos: number;
+  finalizacoes_gol: number;
+  faltas_sofridas: number;
+  faltas_cometidas: number;
   minutos_jogados: number;
 }
 
