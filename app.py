@@ -2299,106 +2299,63 @@ def page_ranking():
             segundo = ranking[1]
             terceiro = ranking[2]
 
-            # CSS compartilhado dos cards do pódio
-            st.markdown("""
-            <style>
-                .pcard {
-                    border-radius: 14px;
-                    padding: 18px 12px;
-                    text-align: center;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    width: 100%;
-                    box-sizing: border-box;
-                }
-                .pcard-1 {
-                    background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
-                    border: 3px solid #FFD700;
-                    box-shadow: 0 6px 20px rgba(255,215,0,0.5);
-                    min-height: 200px;
-                }
-                .pcard-2 {
-                    background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
-                    border: 3px solid #d4d4d4;
-                    box-shadow: 0 4px 15px rgba(192,192,192,0.4);
-                    min-height: 165px;
-                    margin-top: 35px;
-                }
-                .pcard-3 {
-                    background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
-                    border: 3px solid #CD7F32;
-                    box-shadow: 0 4px 15px rgba(205,127,50,0.4);
-                    min-height: 135px;
-                    margin-top: 65px;
-                }
-                .pcard-label {
-                    background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
-                    color: white !important;
-                    padding: 3px 10px;
-                    border-radius: 8px;
-                    font-size: 0.65rem;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                    white-space: nowrap;
-                }
-                .pcard-emoji { font-size: 2.2rem; margin: 6px 0; }
-                .pcard-nome {
-                    font-size: 0.88rem;
-                    font-weight: 700;
-                    color: #1a1a2e !important;
-                    margin-bottom: 10px;
-                    word-wrap: break-word;
-                    line-height: 1.3;
-                }
-                .pcard-pts {
-                    font-size: 1rem;
-                    font-weight: 800;
-                    color: #1E3A5F !important;
-                    background: rgba(255,255,255,0.8) !important;
-                    padding: 4px 14px;
-                    border-radius: 6px;
-                }
-                /* Mobile: remover margin-top escalonado */
-                @media (max-width: 640px) {
-                    .pcard-2 { margin-top: 0 !important; }
-                    .pcard-3 { margin-top: 0 !important; }
-                    .pcard-1, .pcard-2, .pcard-3 { min-height: auto !important; }
-                }
-            </style>
+            # ---- BANNER DO CAMPEÃO ----
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 40%, #1E3A5F 100%);
+                border-radius: 18px;
+                padding: 28px 20px 22px 20px;
+                text-align: center;
+                margin: 10px 0 18px 0;
+                box-shadow: 0 8px 30px rgba(255,215,0,0.35);
+                border: 3px solid #FFD700;
+                position: relative;
+                overflow: hidden;
+            ">
+                <!-- estrelas decorativas -->
+                <div style="font-size:1.1rem; letter-spacing:6px; color:#FFD700; margin-bottom:6px;">&#9733; &#9733; &#9733;</div>
+                <div style="font-size:0.75rem; font-weight:700; letter-spacing:3px; color:#FFD700; text-transform:uppercase; margin-bottom:10px;">Campeão do Bolão</div>
+                <div style="font-size:3rem; margin: 4px 0;">&#127942;</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#FFD700; margin: 8px 0 6px 0; text-shadow: 0 2px 8px rgba(0,0,0,0.4);">{primeiro['nome']}</div>
+                <div style="display:inline-block; background: linear-gradient(135deg, #FFD700, #FFA500); color:#1E3A5F; font-size:1.2rem; font-weight:900; padding: 6px 24px; border-radius:30px; margin-top:6px;">{primeiro['total_pontos']} pts</div>
+                <div style="font-size:1.1rem; letter-spacing:6px; color:#FFD700; margin-top:10px;">&#9733; &#9733; &#9733;</div>
+            </div>
             """, unsafe_allow_html=True)
 
-            # Colunas nativas do Streamlit: 2º | 1º | 3º
-            col2, col1, col3 = st.columns([1, 1.15, 1])
+            # ---- 2º e 3º LUGAR ----
+            col_2, col_3 = st.columns(2)
 
-            with col2:
+            with col_2:
                 st.markdown(f"""
-                <div class="pcard pcard-2">
-                    <div class="pcard-label">2º LUGAR</div>
-                    <div class="pcard-emoji">🥈</div>
-                    <div class="pcard-nome">{segundo['nome']}</div>
-                    <div class="pcard-pts">{segundo['total_pontos']} pts</div>
+                <div style="
+                    background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
+                    border-radius: 14px;
+                    padding: 18px 14px;
+                    text-align: center;
+                    border: 2px solid #C0C0C0;
+                    box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                ">
+                    <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#555; text-transform:uppercase; margin-bottom:8px;">2º Lugar</div>
+                    <div style="font-size:2.2rem; margin: 4px 0;">&#129352;</div>
+                    <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{segundo['nome']}</div>
+                    <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{segundo['total_pontos']} pts</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            with col1:
+            with col_3:
                 st.markdown(f"""
-                <div class="pcard pcard-1">
-                    <div class="pcard-label">🏆 CAMPEÃO</div>
-                    <div class="pcard-emoji">🥇</div>
-                    <div class="pcard-nome">{primeiro['nome']}</div>
-                    <div class="pcard-pts">{primeiro['total_pontos']} pts</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col3:
-                st.markdown(f"""
-                <div class="pcard pcard-3">
-                    <div class="pcard-label">3º LUGAR</div>
-                    <div class="pcard-emoji">🥉</div>
-                    <div class="pcard-nome">{terceiro['nome']}</div>
-                    <div class="pcard-pts">{terceiro['total_pontos']} pts</div>
+                <div style="
+                    background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
+                    border-radius: 14px;
+                    padding: 18px 14px;
+                    text-align: center;
+                    border: 2px solid #CD7F32;
+                    box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                ">
+                    <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#7a4a00; text-transform:uppercase; margin-bottom:8px;">3º Lugar</div>
+                    <div style="font-size:2.2rem; margin: 4px 0;">&#129353;</div>
+                    <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{terceiro['nome']}</div>
+                    <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{terceiro['total_pontos']} pts</div>
                 </div>
                 """, unsafe_allow_html=True)
         
