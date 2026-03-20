@@ -7,6 +7,11 @@ import streamlit as st
 from datetime import datetime, timedelta
 import pytz
 import json
+import time
+from streamlit_cookies_controller import CookieController
+
+# Inicializa o gerenciador de cookies para persistência de sessão
+cookie_controller = CookieController()
 
 from db import (
     init_database, get_session, get_engine, get_config_value, set_config_value,
@@ -1073,13 +1078,30 @@ engine = init_app()
 # GERENCIAMENTO DE SESSÃO
 # =============================================================================
 def init_session_state():
-    """Inicializa variáveis de sessão"""
+    """Inicializa variáveis de sessão e restaura login via cookies"""
     if 'user' not in st.session_state:
         st.session_state.user = None
     if 'page' not in st.session_state:
         st.session_state.page = 'home'
     if 'show_register' not in st.session_state:
         st.session_state.show_register = False
+    
+    # Restaurar sessão a partir de cookies (persistência após refresh)
+    if st.session_state.user is None:
+        try:
+            cookie_user_id = cookie_controller.get("bolao_user_id")
+            if cookie_user_id:
+                cookie_user_name = cookie_controller.get("bolao_user_name") or ""
+                cookie_user_username = cookie_controller.get("bolao_user_username") or ""
+                cookie_user_role = cookie_controller.get("bolao_user_role") or "player"
+                st.session_state.user = {
+                    'id': int(cookie_user_id),
+                    'name': cookie_user_name,
+                    'username': cookie_user_username,
+                    'role': cookie_user_role
+                }
+        except Exception:
+            pass
 
 init_session_state()
 
@@ -1191,7 +1213,13 @@ def page_login():
                                 'username': user.username,
                                 'role': user.role
                             }
+                            # Salvar cookies para persistência de sessão
+                            cookie_controller.set("bolao_user_id", str(user.id))
+                            cookie_controller.set("bolao_user_name", user.name)
+                            cookie_controller.set("bolao_user_username", user.username)
+                            cookie_controller.set("bolao_user_role", user.role)
                             st.success(f"Bem-vindo(a), {user.name}!")
+                            time.sleep(0.5)
                             st.rerun()
                         else:
                             st.error("Usuário ou senha incorretos!")
@@ -5005,8 +5033,14 @@ def main():
             st.divider()
             
             if st.button("🚪 Sair", use_container_width=True):
+                # Limpar cookies de sessão
+                cookie_controller.set("bolao_user_id", "", max_age=0)
+                cookie_controller.set("bolao_user_name", "", max_age=0)
+                cookie_controller.set("bolao_user_username", "", max_age=0)
+                cookie_controller.set("bolao_user_role", "", max_age=0)
                 st.session_state.user = None
                 st.session_state.page = 'home'
+                time.sleep(0.5)
                 st.rerun()
         
         # Renderiza a página selecionada
