@@ -2302,23 +2302,22 @@ def page_ranking():
             # ---- BANNER DO CAMPEÃO ----
             st.markdown(f"""
             <div style="
-                background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 40%, #1E3A5F 100%);
+                background: linear-gradient(135deg, #FFE55C 0%, #FFD700 25%, #FFC200 50%, #FFA500 75%, #FF8C00 100%);
                 border-radius: 18px;
                 padding: 28px 20px 22px 20px;
                 text-align: center;
                 margin: 10px 0 18px 0;
-                box-shadow: 0 8px 30px rgba(255,215,0,0.35);
-                border: 3px solid #FFD700;
+                box-shadow: 0 8px 30px rgba(255,165,0,0.5), 0 0 0 1px rgba(255,215,0,0.8);
+                border: 3px solid #B8860B;
                 position: relative;
                 overflow: hidden;
             ">
-                <!-- estrelas decorativas -->
-                <div style="font-size:1.1rem; letter-spacing:6px; color:#FFD700; margin-bottom:6px;">&#9733; &#9733; &#9733;</div>
-                <div style="font-size:0.75rem; font-weight:700; letter-spacing:3px; color:#FFD700; text-transform:uppercase; margin-bottom:10px;">Campeão do Bolão</div>
-                <div style="font-size:3rem; margin: 4px 0;">&#127942;</div>
-                <div style="font-size:1.5rem; font-weight:800; color:#FFD700; margin: 8px 0 6px 0; text-shadow: 0 2px 8px rgba(0,0,0,0.4);">{primeiro['nome']}</div>
-                <div style="display:inline-block; background: linear-gradient(135deg, #FFD700, #FFA500); color:#1E3A5F; font-size:1.2rem; font-weight:900; padding: 6px 24px; border-radius:30px; margin-top:6px;">{primeiro['total_pontos']} pts</div>
-                <div style="font-size:1.1rem; letter-spacing:6px; color:#FFD700; margin-top:10px;">&#9733; &#9733; &#9733;</div>
+                <div style="font-size:0.8rem; font-weight:800; letter-spacing:4px; color:#7a4a00; text-transform:uppercase; margin-bottom:10px;">&#9733; Campeão do Bolão &#9733;</div>
+                <img src="https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/taca_copa.png"
+                     style="height:110px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.35)); margin: 4px 0 10px 0;"
+                     alt="Taça Copa do Mundo" />
+                <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}</div>
+                <div style="display:inline-block; background: linear-gradient(135deg, #1E3A5F, #2d5a87); color:#FFD700; font-size:1.2rem; font-weight:900; padding: 6px 28px; border-radius:30px; margin-top:4px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);">{primeiro['total_pontos']} pts</div>
             </div>
             """, unsafe_allow_html=True)
 
