@@ -2295,79 +2295,137 @@ def page_ranking():
         st.subheader("🥇 Pódio")
         
         if len(ranking) >= 3:
-            # Pódio visual usando inline-flex - funciona bem no mobile
-            # Mantém horizontal em todas as telas
-            
             primeiro = ranking[0]
             segundo = ranking[1]
             terceiro = ranking[2]
             
-            # Renderizar os 3 cards inline com st.markdown individual
-            # 2º lugar
+            # Pódio com container centralizado - funciona em desktop e mobile
             st.markdown(f'''
-            <div class="podio-card-light" style="
-                display: inline-flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                width: 30%;
-                max-width: 140px;
-                min-width: 85px;
-                background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
-                border-radius: 10px;
-                padding: 12px 6px;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(192,192,192,0.4);
-                border: 3px solid #d4d4d4;
-                margin-top: 25px;
-                vertical-align: bottom;
-            ">
-                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 3px 8px; border-radius: 8px; font-size: 0.6rem; font-weight: bold; margin-bottom: 6px;">2º LUGAR</div>
-                <div style="font-size: 1.8rem; margin: 4px 0;">🥈</div>
-                <div style="font-size: 0.75rem; font-weight: 700; color: #1a1a2e !important; margin-bottom: 8px; word-wrap: break-word; line-height: 1.2;">{segundo['nome']}</div>
-                <div style="font-size: 0.9rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 4px 10px; border-radius: 6px;">{segundo['total_pontos']} pts</div>
-            </div><div class="podio-card-light" style="
-                display: inline-flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                width: 34%;
-                max-width: 160px;
-                min-width: 95px;
-                background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
-                border-radius: 10px;
-                padding: 14px 8px;
-                text-align: center;
-                box-shadow: 0 6px 20px rgba(255,215,0,0.5);
-                border: 3px solid #FFD700;
-                margin: 0 2%;
-                vertical-align: bottom;
-            ">
-                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 4px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: bold; margin-bottom: 6px;">🏆 CAMPEÃO</div>
-                <div style="font-size: 2.2rem; margin: 5px 0;">🥇</div>
-                <div style="font-size: 0.85rem; font-weight: 700; color: #1a1a2e !important; margin-bottom: 10px; word-wrap: break-word; line-height: 1.2;">{primeiro['nome']}</div>
-                <div style="font-size: 1rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 5px 12px; border-radius: 6px;">{primeiro['total_pontos']} pts</div>
-            </div><div class="podio-card-light" style="
-                display: inline-flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                width: 30%;
-                max-width: 140px;
-                min-width: 85px;
-                background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
-                border-radius: 10px;
-                padding: 12px 6px;
-                text-align: center;
-                box-shadow: 0 4px 15px rgba(205,127,50,0.4);
-                border: 3px solid #CD7F32;
-                margin-top: 25px;
-                vertical-align: bottom;
-            ">
-                <div style="background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important; color: white !important; padding: 3px 8px; border-radius: 8px; font-size: 0.6rem; font-weight: bold; margin-bottom: 6px;">3º LUGAR</div>
-                <div style="font-size: 1.8rem; margin: 4px 0;">🥉</div>
-                <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff !important; margin-bottom: 8px; word-wrap: break-word; line-height: 1.2;">{terceiro['nome']}</div>
-                <div style="font-size: 0.9rem; font-weight: 800; color: #1E3A5F !important; background: rgba(255,255,255,0.7) !important; padding: 4px 10px; border-radius: 6px;">{terceiro['total_pontos']} pts</div>
+            <style>
+                .podio-wrapper {{
+                    display: flex;
+                    justify-content: center;
+                    align-items: flex-end;
+                    gap: 16px;
+                    width: 100%;
+                    padding: 10px 0 20px 0;
+                }}
+                .podio-card-1, .podio-card-2, .podio-card-3 {{
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-end;
+                    border-radius: 12px;
+                    padding: 14px 10px;
+                    text-align: center;
+                    box-sizing: border-box;
+                }}
+                /* Desktop */
+                @media (min-width: 600px) {{
+                    .podio-card-1 {{
+                        width: 180px;
+                        min-height: 200px;
+                        background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
+                        box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+                        border: 3px solid #FFD700;
+                        order: 2;
+                    }}
+                    .podio-card-2 {{
+                        width: 155px;
+                        min-height: 160px;
+                        background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
+                        box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                        border: 3px solid #d4d4d4;
+                        order: 1;
+                    }}
+                    .podio-card-3 {{
+                        width: 155px;
+                        min-height: 130px;
+                        background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
+                        box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                        border: 3px solid #CD7F32;
+                        order: 3;
+                    }}
+                }}
+                /* Mobile */
+                @media (max-width: 599px) {{
+                    .podio-wrapper {{
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 12px;
+                    }}
+                    .podio-card-1, .podio-card-2, .podio-card-3 {{
+                        width: 85%;
+                        max-width: 300px;
+                        min-height: auto;
+                        order: unset;
+                    }}
+                    .podio-card-1 {{
+                        background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
+                        box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+                        border: 3px solid #FFD700;
+                        order: 1;
+                    }}
+                    .podio-card-2 {{
+                        background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
+                        box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                        border: 3px solid #d4d4d4;
+                        order: 2;
+                    }}
+                    .podio-card-3 {{
+                        background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
+                        box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                        border: 3px solid #CD7F32;
+                        order: 3;
+                    }}
+                }}
+                .podio-label {{
+                    background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
+                    color: white !important;
+                    padding: 3px 10px;
+                    border-radius: 8px;
+                    font-size: 0.62rem;
+                    font-weight: bold;
+                    margin-bottom: 8px;
+                    white-space: nowrap;
+                }}
+                .podio-emoji {{ font-size: 2rem; margin: 6px 0; }}
+                .podio-nome {{
+                    font-size: 0.82rem;
+                    font-weight: 700;
+                    color: #1a1a2e !important;
+                    margin-bottom: 8px;
+                    word-wrap: break-word;
+                    line-height: 1.3;
+                }}
+                .podio-pts {{
+                    font-size: 0.95rem;
+                    font-weight: 800;
+                    color: #1E3A5F !important;
+                    background: rgba(255,255,255,0.75) !important;
+                    padding: 4px 12px;
+                    border-radius: 6px;
+                }}
+            </style>
+            <div class="podio-wrapper">
+                <div class="podio-card-2">
+                    <div class="podio-label">2º LUGAR</div>
+                    <div class="podio-emoji">🥈</div>
+                    <div class="podio-nome">{segundo['nome']}</div>
+                    <div class="podio-pts">{segundo['total_pontos']} pts</div>
+                </div>
+                <div class="podio-card-1">
+                    <div class="podio-label">🏆 CAMPEÃO</div>
+                    <div class="podio-emoji">🥇</div>
+                    <div class="podio-nome">{primeiro['nome']}</div>
+                    <div class="podio-pts">{primeiro['total_pontos']} pts</div>
+                </div>
+                <div class="podio-card-3">
+                    <div class="podio-label">3º LUGAR</div>
+                    <div class="podio-emoji">🥉</div>
+                    <div class="podio-nome">{terceiro['nome']}</div>
+                    <div class="podio-pts">{terceiro['total_pontos']} pts</div>
+                </div>
             </div>
             ''', unsafe_allow_html=True)
         
