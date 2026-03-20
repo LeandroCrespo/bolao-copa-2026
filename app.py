@@ -2298,128 +2298,109 @@ def page_ranking():
             primeiro = ranking[0]
             segundo = ranking[1]
             terceiro = ranking[2]
-            
-            # Pódio com container centralizado - funciona em desktop e mobile
-            st.markdown(f'''
+
+            # CSS compartilhado dos cards do pódio
+            st.markdown("""
             <style>
-                /* Wrapper externo para garantir centralização total */
-                .podio-outer {{
-                    width: 100%;
-                    display: flex;
-                    justify-content: center;
-                    padding: 10px 0 20px 0;
-                }}
-                /* Container interno com largura fixa */
-                .podio-wrapper {{
-                    display: flex;
-                    flex-direction: row;
-                    justify-content: center;
-                    align-items: flex-end;
-                    gap: 16px;
-                    width: 560px;
-                    max-width: 100%;
-                }}
-                .podio-card-1, .podio-card-2, .podio-card-3 {{
+                .pcard {
+                    border-radius: 14px;
+                    padding: 18px 12px;
+                    text-align: center;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
-                    justify-content: flex-end;
-                    border-radius: 12px;
-                    padding: 14px 10px;
-                    text-align: center;
+                    justify-content: center;
+                    width: 100%;
                     box-sizing: border-box;
-                }}
-                /* Desktop: efeito escalonado */
-                .podio-card-1 {{
-                    width: 180px;
-                    min-height: 200px;
+                }
+                .pcard-1 {
                     background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
-                    box-shadow: 0 6px 20px rgba(255,215,0,0.5);
                     border: 3px solid #FFD700;
-                }}
-                .podio-card-2 {{
-                    width: 165px;
-                    min-height: 160px;
+                    box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+                    min-height: 200px;
+                }
+                .pcard-2 {
                     background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
-                    box-shadow: 0 4px 15px rgba(192,192,192,0.4);
                     border: 3px solid #d4d4d4;
-                }}
-                .podio-card-3 {{
-                    width: 165px;
-                    min-height: 130px;
+                    box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                    min-height: 165px;
+                    margin-top: 35px;
+                }
+                .pcard-3 {
                     background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
-                    box-shadow: 0 4px 15px rgba(205,127,50,0.4);
                     border: 3px solid #CD7F32;
-                }}
-                /* Mobile: empilhado verticalmente */
-                @media (max-width: 599px) {{
-                    .podio-wrapper {{
-                        flex-direction: column;
-                        align-items: center;
-                        width: 100%;
-                        gap: 12px;
-                    }}
-                    .podio-card-1, .podio-card-2, .podio-card-3 {{
-                        width: 85%;
-                        max-width: 300px;
-                        min-height: auto;
-                    }}
-                    /* Ordem no mobile: 1º, 2º, 3º */
-                    .podio-card-1 {{ order: 1; }}
-                    .podio-card-2 {{ order: 2; }}
-                    .podio-card-3 {{ order: 3; }}
-                }}
-                .podio-label {{
+                    box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                    min-height: 135px;
+                    margin-top: 65px;
+                }
+                .pcard-label {
                     background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
                     color: white !important;
                     padding: 3px 10px;
                     border-radius: 8px;
-                    font-size: 0.62rem;
+                    font-size: 0.65rem;
                     font-weight: bold;
-                    margin-bottom: 8px;
+                    margin-bottom: 10px;
                     white-space: nowrap;
-                }}
-                .podio-emoji {{ font-size: 2rem; margin: 6px 0; }}
-                .podio-nome {{
-                    font-size: 0.82rem;
+                }
+                .pcard-emoji { font-size: 2.2rem; margin: 6px 0; }
+                .pcard-nome {
+                    font-size: 0.88rem;
                     font-weight: 700;
                     color: #1a1a2e !important;
-                    margin-bottom: 8px;
+                    margin-bottom: 10px;
                     word-wrap: break-word;
                     line-height: 1.3;
-                }}
-                .podio-pts {{
-                    font-size: 0.95rem;
+                }
+                .pcard-pts {
+                    font-size: 1rem;
                     font-weight: 800;
                     color: #1E3A5F !important;
-                    background: rgba(255,255,255,0.75) !important;
-                    padding: 4px 12px;
+                    background: rgba(255,255,255,0.8) !important;
+                    padding: 4px 14px;
                     border-radius: 6px;
-                }}
+                }
+                /* Mobile: remover margin-top escalonado */
+                @media (max-width: 640px) {
+                    .pcard-2 { margin-top: 0 !important; }
+                    .pcard-3 { margin-top: 0 !important; }
+                    .pcard-1, .pcard-2, .pcard-3 { min-height: auto !important; }
+                }
             </style>
-            <div class="podio-outer">
-              <div class="podio-wrapper">
-                <div class="podio-card-2">
-                    <div class="podio-label">2º LUGAR</div>
-                    <div class="podio-emoji">🥈</div>
-                    <div class="podio-nome">{segundo['nome']}</div>
-                    <div class="podio-pts">{segundo['total_pontos']} pts</div>
+            """, unsafe_allow_html=True)
+
+            # Colunas nativas do Streamlit: 2º | 1º | 3º
+            col2, col1, col3 = st.columns([1, 1.15, 1])
+
+            with col2:
+                st.markdown(f"""
+                <div class="pcard pcard-2">
+                    <div class="pcard-label">2º LUGAR</div>
+                    <div class="pcard-emoji">🥈</div>
+                    <div class="pcard-nome">{segundo['nome']}</div>
+                    <div class="pcard-pts">{segundo['total_pontos']} pts</div>
                 </div>
-                <div class="podio-card-1">
-                    <div class="podio-label">🏆 CAMPEÃO</div>
-                    <div class="podio-emoji">🥇</div>
-                    <div class="podio-nome">{primeiro['nome']}</div>
-                    <div class="podio-pts">{primeiro['total_pontos']} pts</div>
+                """, unsafe_allow_html=True)
+
+            with col1:
+                st.markdown(f"""
+                <div class="pcard pcard-1">
+                    <div class="pcard-label">🏆 CAMPEÃO</div>
+                    <div class="pcard-emoji">🥇</div>
+                    <div class="pcard-nome">{primeiro['nome']}</div>
+                    <div class="pcard-pts">{primeiro['total_pontos']} pts</div>
                 </div>
-                <div class="podio-card-3">
-                    <div class="podio-label">3º LUGAR</div>
-                    <div class="podio-emoji">🥉</div>
-                    <div class="podio-nome">{terceiro['nome']}</div>
-                    <div class="podio-pts">{terceiro['total_pontos']} pts</div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                st.markdown(f"""
+                <div class="pcard pcard-3">
+                    <div class="pcard-label">3º LUGAR</div>
+                    <div class="pcard-emoji">🥉</div>
+                    <div class="pcard-nome">{terceiro['nome']}</div>
+                    <div class="pcard-pts">{terceiro['total_pontos']} pts</div>
                 </div>
-              </div>
-            </div>
-            ''', unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
         
         elif len(ranking) > 0:
             # Menos de 3 participantes - mostra o que tem
