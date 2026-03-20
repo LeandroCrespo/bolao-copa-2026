@@ -2302,13 +2302,22 @@ def page_ranking():
             # Pódio com container centralizado - funciona em desktop e mobile
             st.markdown(f'''
             <style>
+                /* Wrapper externo para garantir centralização total */
+                .podio-outer {{
+                    width: 100%;
+                    display: flex;
+                    justify-content: center;
+                    padding: 10px 0 20px 0;
+                }}
+                /* Container interno com largura fixa */
                 .podio-wrapper {{
                     display: flex;
+                    flex-direction: row;
                     justify-content: center;
                     align-items: flex-end;
                     gap: 16px;
-                    width: 100%;
-                    padding: 10px 0 20px 0;
+                    width: 560px;
+                    max-width: 100%;
                 }}
                 .podio-card-1, .podio-card-2, .podio-card-3 {{
                     display: flex;
@@ -2320,64 +2329,45 @@ def page_ranking():
                     text-align: center;
                     box-sizing: border-box;
                 }}
-                /* Desktop */
-                @media (min-width: 600px) {{
-                    .podio-card-1 {{
-                        width: 180px;
-                        min-height: 200px;
-                        background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
-                        box-shadow: 0 6px 20px rgba(255,215,0,0.5);
-                        border: 3px solid #FFD700;
-                        order: 2;
-                    }}
-                    .podio-card-2 {{
-                        width: 155px;
-                        min-height: 160px;
-                        background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
-                        box-shadow: 0 4px 15px rgba(192,192,192,0.4);
-                        border: 3px solid #d4d4d4;
-                        order: 1;
-                    }}
-                    .podio-card-3 {{
-                        width: 155px;
-                        min-height: 130px;
-                        background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
-                        box-shadow: 0 4px 15px rgba(205,127,50,0.4);
-                        border: 3px solid #CD7F32;
-                        order: 3;
-                    }}
+                /* Desktop: efeito escalonado */
+                .podio-card-1 {{
+                    width: 180px;
+                    min-height: 200px;
+                    background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
+                    box-shadow: 0 6px 20px rgba(255,215,0,0.5);
+                    border: 3px solid #FFD700;
                 }}
-                /* Mobile */
+                .podio-card-2 {{
+                    width: 165px;
+                    min-height: 160px;
+                    background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
+                    box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+                    border: 3px solid #d4d4d4;
+                }}
+                .podio-card-3 {{
+                    width: 165px;
+                    min-height: 130px;
+                    background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
+                    box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+                    border: 3px solid #CD7F32;
+                }}
+                /* Mobile: empilhado verticalmente */
                 @media (max-width: 599px) {{
                     .podio-wrapper {{
                         flex-direction: column;
                         align-items: center;
+                        width: 100%;
                         gap: 12px;
                     }}
                     .podio-card-1, .podio-card-2, .podio-card-3 {{
                         width: 85%;
                         max-width: 300px;
                         min-height: auto;
-                        order: unset;
                     }}
-                    .podio-card-1 {{
-                        background: linear-gradient(135deg, #FFE55C 0%, #FFD700 30%, #FFA500 70%, #FF8C00 100%) !important;
-                        box-shadow: 0 6px 20px rgba(255,215,0,0.5);
-                        border: 3px solid #FFD700;
-                        order: 1;
-                    }}
-                    .podio-card-2 {{
-                        background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%) !important;
-                        box-shadow: 0 4px 15px rgba(192,192,192,0.4);
-                        border: 3px solid #d4d4d4;
-                        order: 2;
-                    }}
-                    .podio-card-3 {{
-                        background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%) !important;
-                        box-shadow: 0 4px 15px rgba(205,127,50,0.4);
-                        border: 3px solid #CD7F32;
-                        order: 3;
-                    }}
+                    /* Ordem no mobile: 1º, 2º, 3º */
+                    .podio-card-1 {{ order: 1; }}
+                    .podio-card-2 {{ order: 2; }}
+                    .podio-card-3 {{ order: 3; }}
                 }}
                 .podio-label {{
                     background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%) !important;
@@ -2407,7 +2397,8 @@ def page_ranking():
                     border-radius: 6px;
                 }}
             </style>
-            <div class="podio-wrapper">
+            <div class="podio-outer">
+              <div class="podio-wrapper">
                 <div class="podio-card-2">
                     <div class="podio-label">2º LUGAR</div>
                     <div class="podio-emoji">🥈</div>
@@ -2426,6 +2417,7 @@ def page_ranking():
                     <div class="podio-nome">{terceiro['nome']}</div>
                     <div class="podio-pts">{terceiro['total_pontos']} pts</div>
                 </div>
+              </div>
             </div>
             ''', unsafe_allow_html=True)
         
