@@ -2313,7 +2313,7 @@ def page_ranking():
                 overflow: hidden;
             ">
                 <div style="font-size:0.8rem; font-weight:800; letter-spacing:4px; color:#7a4a00; text-transform:uppercase; margin-bottom:10px;">&#9733; Campeão do Bolão &#9733;</div>
-                <img src="https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/taca_copa.png"
+                <img src="https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/taca_copa_v2.png"
                      style="height:110px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.35)); margin: 4px 0 10px 0;"
                      alt="Taça Copa do Mundo" />
                 <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}</div>
