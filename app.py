@@ -2317,11 +2317,12 @@ def page_ranking():
                      style="height:110px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.35)); margin: 4px 0 10px 0;"
                      alt="Taça Copa do Mundo" />
                 <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}</div>
-                <div style="display:inline-block; background: linear-gradient(135deg, #1E3A5F, #2d5a87); color:#FFD700; font-size:1.2rem; font-weight:900; padding: 6px 28px; border-radius:30px; margin-top:4px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);">{primeiro['total_pontos']} pts</div>
+                <div style="display:inline-block; background: linear-gradient(135deg, #1E3A5F, #2d5a87); color:#FFFFFF; font-size:1.2rem; font-weight:900; padding: 6px 28px; border-radius:30px; margin-top:4px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);">{primeiro['total_pontos']} pts</div>
             </div>
             """, unsafe_allow_html=True)
 
             # ---- 2º e 3º LUGAR ----
+            st.markdown('<div style="margin-top:12px;"></div>', unsafe_allow_html=True)
             col_2, col_3 = st.columns(2)
 
             with col_2:
@@ -2343,7 +2344,12 @@ def page_ranking():
 
             with col_3:
                 st.markdown(f"""
-                <div style="
+                <style>
+                    @media (max-width: 640px) {{
+                        .podio-3-lugar {{ margin-top: 14px !important; }}
+                    }}
+                </style>
+                <div class="podio-3-lugar" style="
                     background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
                     border-radius: 14px;
                     padding: 18px 14px;
