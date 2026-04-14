@@ -1075,6 +1075,14 @@ def init_app():
 engine = init_app()
 
 # =============================================================================
+# CACHE DO RANKING (TTL 60s para reduzir carga no banco)
+# =============================================================================
+@st.cache_data(ttl=60)
+def cached_ranking(_engine):
+    with session_scope(_engine) as session:
+        return get_ranking(session)
+
+# =============================================================================
 # GERENCIAMENTO DE SESSÃO
 # =============================================================================
 def init_session_state():
@@ -1284,7 +1292,7 @@ def page_home():
         render_next_match_countdown(session)
         
         user_stats = get_user_stats(session, st.session_state.user['id'])
-        ranking = get_ranking(session)
+        ranking = cached_ranking(engine)
         
         user_position = next(
             (r['posicao'] for r in ranking if r['user_id'] == st.session_state.user['id']),
@@ -1954,7 +1962,7 @@ def page_ranking():
     st.header("🏆 Ranking do Bolão")
     
     with session_scope(engine) as session:
-        ranking = get_ranking(session)
+        ranking = cached_ranking(engine)
         
         if not ranking:
             st.info("Nenhum participante no ranking ainda.")
