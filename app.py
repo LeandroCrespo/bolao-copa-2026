@@ -1212,20 +1212,24 @@ def page_login():
                     if username and password:
                         with session_scope(engine) as session:
                             user = authenticate_user(session, username, password)
+                            if user:
+                                user_data = {
+                                    'id': user.id,
+                                    'name': user.name,
+                                    'username': user.username,
+                                    'role': user.role
+                                }
+                            else:
+                                user_data = None
                         
-                        if user:
-                            st.session_state.user = {
-                                'id': user.id,
-                                'name': user.name,
-                                'username': user.username,
-                                'role': user.role
-                            }
+                        if user_data:
+                            st.session_state.user = user_data
                             # Salvar cookies para persistência de sessão
-                            cookie_controller.set("bolao_user_id", str(user.id))
-                            cookie_controller.set("bolao_user_name", user.name)
-                            cookie_controller.set("bolao_user_username", user.username)
-                            cookie_controller.set("bolao_user_role", user.role)
-                            st.success(f"Bem-vindo(a), {user.name}!")
+                            cookie_controller.set("bolao_user_id", str(user_data['id']))
+                            cookie_controller.set("bolao_user_name", user_data['name'])
+                            cookie_controller.set("bolao_user_username", user_data['username'])
+                            cookie_controller.set("bolao_user_role", user_data['role'])
+                            st.success(f"Bem-vindo(a), {user_data['name']}!")
                             time.sleep(0.5)
                             st.rerun()
                         else:
@@ -1262,8 +1266,9 @@ def page_login():
                     else:
                         with session_scope(engine) as session:
                             user = create_user(session, new_name, new_username, new_password, 'player')
+                            user_created = user is not None
                         
-                        if user:
+                        if user_created:
                             st.success(f"Conta criada com sucesso! Faça login com o usuário '{new_username}'.")
                             st.session_state.show_register = False
                             st.rerun()
