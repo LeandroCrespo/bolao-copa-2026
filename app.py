@@ -15,7 +15,7 @@ cookie_controller = CookieController()
 
 from db import (
     init_database, get_session, get_engine, get_config_value, set_config_value,
-    init_database_with_copa2026
+    init_database_with_copa2026, session_scope
 )
 from auth import authenticate_user, hash_password, change_password, create_user
 from models import (
@@ -1202,9 +1202,8 @@ def page_login():
                 
                 if submit:
                     if username and password:
-                        session = get_session(engine)
-                        user = authenticate_user(session, username, password)
-                        session.close()
+                        with session_scope(engine) as session:
+                            user = authenticate_user(session, username, password)
                         
                         if user:
                             st.session_state.user = {
@@ -1253,9 +1252,8 @@ def page_login():
                     elif len(new_username) < 3:
                         st.error("O usuário deve ter pelo menos 3 caracteres!")
                     else:
-                        session = get_session(engine)
-                        user = create_user(session, new_name, new_username, new_password, 'player')
-                        session.close()
+                        with session_scope(engine) as session:
+                            user = create_user(session, new_name, new_username, new_password, 'player')
                         
                         if user:
                             st.success(f"Conta criada com sucesso! Faça login com o usuário '{new_username}'.")
@@ -1281,9 +1279,7 @@ def page_home():
     # Timer regressivo para a Copa
     render_countdown_timer()
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         # Timer do próximo jogo
         render_next_match_countdown(session)
         
@@ -1357,9 +1353,6 @@ def page_home():
                     st.markdown(f"{medal} **{r['posicao']}º** {r['nome']} - **{r['total_pontos']}** pts")
             else:
                 st.info("Nenhum participante no ranking ainda.")
-    
-    finally:
-        session.close()
 
 # =============================================================================
 # PÁGINA DE PALPITES - JOGOS
@@ -1369,9 +1362,7 @@ def page_palpites_jogos():
     render_page_header()
     st.markdown("## 📝 Palpites dos Jogos")
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         # Filtros
         col1, col2 = st.columns(2)
         with col1:
@@ -1475,9 +1466,6 @@ def page_palpites_jogos():
                                     st.markdown(f"Pontos: **{pred.points_awarded}**")
                         else:
                             st.warning("⏰ Prazo encerrado - Você não fez palpite para este jogo")
-    
-    finally:
-        session.close()
 
 # =============================================================================
 # PÁGINA DE PALPITES - GRUPOS
@@ -1487,9 +1475,7 @@ def page_palpites_grupos():
     render_page_header()
     st.markdown("## 🏅 Palpites de Classificação dos Grupos")
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         # Verifica se ainda pode fazer palpites (usa mesma lógica do pódio)
         can_predict = can_predict_podium(session)
         
@@ -1591,9 +1577,6 @@ def page_palpites_grupos():
                             st.success("Palpite salvo!")
                         else:
                             st.error("Selecione dois times diferentes!")
-    
-    finally:
-        session.close()
 
 # =============================================================================
 # PÁGINA DE PALPITES - PÓDIO
@@ -1603,9 +1586,7 @@ def page_palpites_podio():
     render_page_header()
     st.markdown("## 🏆 Palpites do Pódio")
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         can_predict = can_predict_podium(session)
         
         if can_predict:
@@ -1688,9 +1669,6 @@ def page_palpites_podio():
                     st.rerun()
                 else:
                     st.error("Selecione três times diferentes!")
-    
-    finally:
-        session.close()
 
 
 
@@ -1975,7 +1953,7 @@ def page_ranking():
     render_page_header()
     st.header("🏆 Ranking do Bolão")
     
-    with get_session(engine) as session:
+    with session_scope(engine) as session:
         ranking = get_ranking(session)
         
         if not ranking:
@@ -2537,9 +2515,7 @@ def page_estatisticas():
     render_page_header()
     st.markdown("## 📈 Suas Estatísticas")
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         stats = get_user_stats(session, st.session_state.user['id'])
         
         col1, col2, col3 = st.columns(3)
@@ -2805,9 +2781,6 @@ def page_estatisticas():
         # ========================================
         st.divider()
         render_comparison(session)
-    
-    finally:
-        session.close()
 
 # =============================================================================
 # PÁGINA DE CONFIGURAÇÕES
@@ -2817,9 +2790,7 @@ def page_configuracoes():
     render_page_header()
     st.markdown("## ⚙️ Configurações")
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         st.subheader("🔐 Alterar Senha")
         
         with st.form("change_password"):
@@ -2840,9 +2811,6 @@ def page_configuracoes():
                         st.success("Senha alterada com sucesso!")
                     else:
                         st.error("Senha atual incorreta!")
-    
-    finally:
-        session.close()
 
 def admin_gerenciar_repescagem(session):
     """
@@ -2958,9 +2926,7 @@ def page_admin():
     render_page_header()
     st.markdown("## 🔧 Painel Administrativo")
     
-    session = get_session(engine)
-    
-    try:
+    with session_scope(engine) as session:
         tabs = st.tabs([
             "👥 Participantes",
             "🏳️ Seleções",
@@ -3007,9 +2973,6 @@ def page_admin():
         
         with tabs[10]:
             admin_backup_database(session)
-    
-    finally:
-        session.close()
 
 
 def admin_participantes(session):
@@ -4008,7 +3971,7 @@ def page_visualizacao_ao_vivo():
     st.header("📺 Visualização ao Vivo")
     st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
     
-    with get_session(engine) as session:
+    with session_scope(engine) as session:
         # Pega jogos que já começaram
         matches = get_ongoing_matches(session)
         
@@ -4568,7 +4531,7 @@ def page_resumo_diario():
     st.header("📄 Resumo Diário")
     st.markdown("Gere resumos automáticos dos jogos e compartilhe no WhatsApp!")
     
-    with get_session(engine) as session:
+    with session_scope(engine) as session:
         # Seletor de data
         st.subheader("📅 Selecione a Data")
         
@@ -4743,7 +4706,7 @@ def page_resultados_grupos():
     <div class="grupos-watermark"></div>
     """, unsafe_allow_html=True)
     
-    with get_session(engine) as session:
+    with session_scope(engine) as session:
         # Seletor de grupo
         grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
         
@@ -4959,11 +4922,8 @@ def get_notification_badges(session, user_id):
 def page_estatisticas_gerais():
     """Página de estatísticas gerais do bolão"""
     render_page_header()
-    session = get_session(engine)
-    try:
+    with session_scope(engine) as session:
         render_general_stats(session)
-    finally:
-        session.close()
 
 def page_regras_wrapper():
     """Página de regras e pontuação"""
@@ -4986,7 +4946,7 @@ def main():
             st.divider()
             
             # Busca badges de notificação
-            with get_session(engine) as session:
+            with session_scope(engine) as session:
                 badges = get_notification_badges(session, st.session_state.user['id'])
             
             # Menu de navegação - diferente para admin e participantes
