@@ -977,7 +977,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Header fixo com logo do bolão
-LOGO_URL = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png"
+LOGO_URL = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png"
 st.markdown(f'''
 <div class="fixed-header">
     <div class="fixed-header-content">
@@ -993,7 +993,7 @@ st.markdown(f'''
 # =============================================================================
 # CABEÇALHO PADRÃO DAS PÁGINAS
 # =============================================================================
-MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
+MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/mascotes_copa2026.jpg"
 
 def render_page_header():
     """Renderiza o cabeçalho padrão com banner, mascotes e título"""
@@ -1179,7 +1179,7 @@ def log_action(session, user_id, action, target_user_id=None, details=None):
 def page_login():
     """Página de login e cadastro"""
     # Imagem dos mascotes embutida em base64
-    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/mascotes.png"
+    MASCOTES_IMG = "https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/mascotes_copa2026.jpg"
     
     # Imagem dos mascotes
     st.markdown(f'''
@@ -1988,7 +1988,7 @@ def page_ranking():
                 transform: translate(-50%, -50%);
                 width: 400px;
                 height: 400px;
-                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
                 background-size: contain;
                 background-repeat: no-repeat;
                 background-position: center;
@@ -4018,7 +4018,7 @@ def page_visualizacao_ao_vivo():
                 transform: translate(-50%, -50%);
                 width: 350px;
                 height: 350px;
-                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
                 background-size: contain;
                 background-repeat: no-repeat;
                 background-position: center;
@@ -4694,7 +4694,7 @@ def page_resultados_grupos():
             transform: translate(-50%, -50%);
             width: 350px;
             height: 350px;
-            background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/logo_copa2026.png');
+            background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
