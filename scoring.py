@@ -353,19 +353,21 @@ def get_user_stats(session, user_id: int) -> dict:
         elif points_type == 'nenhum':
             stats['palpites_zerados'] += 1
     
-    # Pontos de grupos - só conta se o grupo tem resultado salvo
+    # Pontos de grupos - busca todos os resultados de grupo de uma vez
+    all_group_results = {gr.group_name: gr for gr in session.query(GroupResult).all()}
     group_preds = session.query(GroupPrediction).filter_by(user_id=user_id).all()
     for gp in group_preds:
-        # Verifica se o grupo tem resultado salvo
-        group_result = session.query(GroupResult).filter_by(group_name=gp.group_name).first()
+        # Verifica se o grupo tem resultado salvo (sem query individual)
+        group_result = all_group_results.get(gp.group_name)
         if group_result and group_result.first_place_team_id and group_result.second_place_team_id:
             stats['pontos_grupos'] += gp.points_awarded or 0
     
     # Pontos de pódio - só conta se o pódio foi definido
     podium_pred = session.query(PodiumPrediction).filter_by(user_id=user_id).first()
     if podium_pred:
-        # Verifica se o pódio foi definido
-        campeao = session.query(TournamentResult).filter_by(result_type='champion').first()
+        # Verifica se o pódio foi definido (1 query em vez de N)
+        all_tournament_results = {tr.result_type: tr for tr in session.query(TournamentResult).all()}
+        campeao = all_tournament_results.get('champion')
         if campeao and campeao.team_id:
             stats['pontos_podio'] = podium_pred.points_awarded or 0
     
@@ -421,11 +423,47 @@ def get_ranking(session) -> list:
     
     config = get_scoring_config(session)
     
+    # =====================================================================
+    # QUERIES EM BATCH (antes do loop) para eliminar problema N+1
+    # =====================================================================
+    from collections import defaultdict
+    
+    # Todos os palpites de jogos com placar
+    all_predictions = session.query(Prediction).filter(
+        Prediction.match_id.in_(matches_with_score_ids)
+    ).all() if matches_with_score_ids else []
+    
+    # Agrupar por user_id
+    preds_by_user = defaultdict(list)
+    for pred in all_predictions:
+        preds_by_user[pred.user_id].append(pred)
+    
+    # Todos os palpites de grupo
+    all_group_preds = session.query(GroupPrediction).all()
+    group_preds_by_user = defaultdict(list)
+    for gp in all_group_preds:
+        group_preds_by_user[gp.user_id].append(gp)
+    
+    # Todos os resultados de grupo (de uma vez)
+    all_group_results = {gr.group_name: gr for gr in session.query(GroupResult).all()}
+    
+    # Todos os palpites de pódio
+    all_podium_preds = {pp.user_id: pp for pp in session.query(PodiumPrediction).all()}
+    
+    # Resultados do torneio (de uma vez)
+    all_tournament_results = {tr.result_type: tr for tr in session.query(TournamentResult).all()}
+    
+    # Contagem total de palpites por usuário (incluindo jogos sem placar)
+    all_user_predictions = session.query(Prediction).all()
+    total_preds_by_user = defaultdict(int)
+    for pred in all_user_predictions:
+        total_preds_by_user[pred.user_id] += 1
+    
+    # =====================================================================
+    # LOOP DE USUÁRIOS (sem queries individuais)
+    # =====================================================================
     for user in users:
-        predictions = session.query(Prediction).filter_by(user_id=user.id).all()
-        
-        # FILTRA: Só considera palpites de jogos que TÊM PLACAR REGISTRADO
-        scored_predictions = [p for p in predictions if p.match_id in matches_with_score_ids]
+        scored_predictions = preds_by_user.get(user.id, [])
         
         # Calcula pontos
         placares_exatos = 0
@@ -462,12 +500,12 @@ def get_ranking(session) -> list:
                 zeros += 1
         
         # Pontos de grupos - só conta se o grupo tem resultado salvo
-        group_preds = session.query(GroupPrediction).filter_by(user_id=user.id).all()
+        group_preds = group_preds_by_user.get(user.id, [])
         pontos_grupos = 0
         grupos_corretos = 0  # Conta quantos classificados acertou
         for gp in group_preds:
             # Verifica se o grupo tem resultado salvo
-            group_result = session.query(GroupResult).filter_by(group_name=gp.group_name).first()
+            group_result = all_group_results.get(gp.group_name)
             if group_result and group_result.first_place_team_id and group_result.second_place_team_id:
                 pontos_grupos += gp.points_awarded or 0
                 # Conta acertos de classificados
@@ -477,14 +515,14 @@ def get_ranking(session) -> list:
                     grupos_corretos += 1
         
         # Pontos de pódio - só conta se o pódio foi definido
-        podium_pred = session.query(PodiumPrediction).filter_by(user_id=user.id).first()
+        podium_pred = all_podium_preds.get(user.id)
         pontos_podio = 0
         podio_corretos = 0  # Conta quantos acertos de pódio
         if podium_pred:
             # Verifica se o pódio foi definido
-            campeao = session.query(TournamentResult).filter_by(result_type='champion').first()
-            vice = session.query(TournamentResult).filter_by(result_type='runner_up').first()
-            terceiro = session.query(TournamentResult).filter_by(result_type='third_place').first()
+            campeao = all_tournament_results.get('champion')
+            vice = all_tournament_results.get('runner_up')
+            terceiro = all_tournament_results.get('third_place')
             
             if campeao and campeao.team_id:
                 pontos_podio = podium_pred.points_awarded or 0
