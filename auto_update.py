@@ -29,7 +29,7 @@ logging.basicConfig(
 # Configurações
 GITHUB_CSV_URL = 'https://raw.githubusercontent.com/martj42/international_results/master/results.csv'
 NEON_PROJECT_ID = 'restless-glitter-71170845'
-NEON_CONNECTION_STRING = 'postgresql://neondb_owner:npg_J7SDEIpQ2rXB@ep-delicate-dust-ai3etwhj-pooler.c-4.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require'
+NEON_CONNECTION_STRING = os.environ.get('NEON_CONNECTION_STRING', '')
 
 
 def get_last_update_date(conn):

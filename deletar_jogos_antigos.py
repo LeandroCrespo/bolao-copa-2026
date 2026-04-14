@@ -3,10 +3,11 @@ Script para deletar jogos e palpites antigos do banco Neon PostgreSQL
 Isso vai forçar o app a reinicializar com os dados corretos do copa2026_data.py
 """
 
+import os
 import psycopg2
 
 # String de conexão Neon PostgreSQL
-CONN_STRING = "postgresql://neondb_owner:npg_lZN9ASqLC6mP@ep-wispy-flower-aekt5ngv-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
+CONN_STRING = os.environ.get('NEON_CONNECTION_STRING', '')
 
 def main():
     print("=" * 100)
