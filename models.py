@@ -60,7 +60,7 @@ class Match(Base):
     city = Column(String(100))
     
     # Fase e grupo
-    phase = Column(String(50), nullable=False)  # Grupos, Oitavas32, Oitavas16, Quartas, Semifinal, Terceiro, Final
+    phase = Column(String(50), nullable=False)  # Grupos, R32, R16, QF, SF, 3RD, FINAL
     group = Column(String(5))  # Apenas para fase de grupos
     
     # Resultado

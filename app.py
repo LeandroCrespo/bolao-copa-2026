@@ -1029,13 +1029,33 @@ def render_page_header():
 GRUPOS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
 FASES = {
     "Grupos": "Fase de Grupos",
-    "Oitavas32": "Oitavas de Final (32)",
-    "Oitavas16": "Oitavas de Final (16)",
-    "Quartas": "Quartas de Final",
-    "Semifinal": "Semifinal",
-    "Terceiro": "Disputa 3º Lugar",
-    "Final": "Final"
+    "R32": "Oitavas de Final (32)",
+    "R16": "Oitavas de Final (16)",
+    "QF": "Quartas de Final",
+    "SF": "Semifinal",
+    "3RD": "Disputa 3º Lugar",
+    "FINAL": "Final"
 }
+
+# Mapeamento de cores e ícones para badges visuais de cada fase
+FASES_BADGE = {
+    "Grupos": {"cor": "#1976D2", "icone": "🏟️", "label": "Fase de Grupos"},
+    "R32": {"cor": "#7B1FA2", "icone": "⚔️", "label": "Oitavas (32)"},
+    "R16": {"cor": "#E64A19", "icone": "🔥", "label": "Oitavas (16)"},
+    "QF": {"cor": "#F57F17", "icone": "🏆", "label": "Quartas de Final"},
+    "SF": {"cor": "#00838F", "icone": "⭐", "label": "Semifinal"},
+    "3RD": {"cor": "#4E342E", "icone": "🥉", "label": "Disputa 3º Lugar"},
+    "FINAL": {"cor": "#FFD600", "icone": "👑", "label": "FINAL"},
+}
+
+def fase_badge_html(phase):
+    """Retorna HTML de um badge colorido para a fase do jogo"""
+    info = FASES_BADGE.get(phase, {"cor": "#666", "icone": "⚽", "label": phase})
+    cor = info["cor"]
+    icone = info["icone"]
+    label = info["label"]
+    text_color = "#000" if phase == "FINAL" else "#fff"
+    return f'<span style="background-color:{cor};color:{text_color};padding:2px 10px;border-radius:12px;font-size:0.85em;font-weight:600;">{icone} {label}</span>'
 
 # Mapeamento de códigos do mata-mata para nomes amigáveis
 MATA_MATA_CODES = {
@@ -1379,8 +1399,9 @@ def page_palpites_jogos():
         # Filtros
         col1, col2 = st.columns(2)
         with col1:
-            fases_opcoes = ["Todas as Fases"] + list(FASES.keys())
-            fase_selecionada = st.selectbox("Fase", fases_opcoes)
+            fases_display = {"Todas as Fases": "Todas as Fases"}
+            fases_display.update({k: v for k, v in FASES.items()})
+            fase_selecionada = st.selectbox("Fase", list(fases_display.keys()), format_func=lambda x: fases_display[x])
         with col2:
             grupos_opcoes = ["Todos os Grupos"] + GRUPOS
             grupo_selecionado = st.selectbox("Grupo", grupos_opcoes)
@@ -1405,19 +1426,37 @@ def page_palpites_jogos():
             jogos_por_data[data].append(jogo)
         
         # Exibe jogos agrupados
+        fase_anterior = None
         for data, jogos_data in jogos_por_data.items():
             st.markdown(f"### 📅 {data}")
             
             for match in jogos_data:
+                # Separador visual quando muda a fase (no modo "Todas as Fases")
+                if fase_selecionada == "Todas as Fases" and match.phase != fase_anterior:
+                    fase_anterior = match.phase
+                    badge_info = FASES_BADGE.get(match.phase, {"cor": "#666", "icone": "⚽", "label": match.phase})
+                    st.markdown(
+                        f'<div style="background:linear-gradient(90deg, {badge_info["cor"]}22, transparent);'
+                        f'border-left:4px solid {badge_info["cor"]};padding:6px 14px;margin:10px 0 6px 0;'
+                        f'border-radius:0 8px 8px 0;">'
+                        f'<strong style="font-size:1.05em;">{badge_info["icone"]} {badge_info["label"]}</strong></div>',
+                        unsafe_allow_html=True
+                    )
+                
                 team1_display = get_team_display(match.team1, match.team1_code)
                 team2_display = get_team_display(match.team2, match.team2_code)
                 
                 can_predict = can_predict_match(match)
                 status_icon = "🟢" if can_predict else "🔴"
                 
-                with st.expander(f"{status_icon} {format_time(match.datetime)} - {team1_display} vs {team2_display}"):
+                # Adiciona indicador de fase no título do expander
+                fase_short = FASES_BADGE.get(match.phase, {"icone": "", "label": ""}).get("label", "")
+                fase_prefix = f"[{fase_short}] " if fase_selecionada == "Todas as Fases" else ""
+                
+                with st.expander(f"{status_icon} {fase_prefix}{format_time(match.datetime)} - {team1_display} vs {team2_display}"):
                     st.markdown(f"**{team1_display}** VS **{team2_display}**")
-                    st.markdown(f"📍 {match.city} | {FASES.get(match.phase, match.phase)} - Grupo {match.group or 'N/A'}")
+                    grupo_info = f" - Grupo {match.group}" if match.group else ""
+                    st.markdown(f"{fase_badge_html(match.phase)} &nbsp; 📍 {match.city}{grupo_info}", unsafe_allow_html=True)
 
                     
                     # Busca palpite existente
@@ -3111,9 +3150,12 @@ def admin_jogos(session):
     # Filtros
     col1, col2 = st.columns(2)
     with col1:
+        fases_admin_filter = {"Todas": "Todas"}
+        fases_admin_filter.update({k: v for k, v in FASES.items()})
         fase_filter = st.selectbox(
             "Filtrar por Fase",
-            options=["Todas"] + list(FASES.keys()),
+            options=list(fases_admin_filter.keys()),
+            format_func=lambda x: fases_admin_filter.get(x, x),
             key="admin_fase_filter"
         )
     with col2:
@@ -3228,9 +3270,11 @@ def admin_resultados(session):
     # Filtros
     col1, col2 = st.columns(2)
     with col1:
-        fase_filter = st.selectbox("Fase", ["Todas as Fases", "Grupos", "Oitavas32", "Oitavas16", "Quartas", "Semifinal", "Terceiro", "Final"])
+        fases_admin = {"Todas as Fases": "Todas as Fases"}
+        fases_admin.update({k: v for k, v in FASES.items()})
+        fase_filter = st.selectbox("Fase", list(fases_admin.keys()), format_func=lambda x: fases_admin.get(x, x))
     with col2:
-        grupo_filter = st.selectbox("Grupo", ["Todos os Grupos", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"])
+        grupo_filter = st.selectbox("Grupo", ["Todos os Grupos"] + GRUPOS)
     
     # Todos os jogos pendentes de resultado
     query = session.query(Match).filter(Match.status == 'scheduled')
@@ -3276,7 +3320,7 @@ def admin_resultados(session):
                             session.commit()
                             
                             # Atualiza automaticamente a classificação do grupo
-                            if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                            if match.phase == 'Grupos' and match.team1 and match.team1.group:
                                 _auto_update_group_result(session, match.team1.group)
                             
                             st.success(f"🔴 Placar atualizado: {gols1} x {gols2} (jogo em andamento)")
@@ -3294,7 +3338,7 @@ def admin_resultados(session):
                             process_match_predictions(session, match.id)
                             
                             # Atualiza automaticamente a classificação do grupo
-                            if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                            if match.phase == 'Grupos' and match.team1 and match.team1.group:
                                 _auto_update_group_result(session, match.team1.group)
                             
                             st.success(f"✅ Resultado final confirmado: {gols1} x {gols2}")
@@ -3342,7 +3386,7 @@ def admin_resultados(session):
                         process_match_predictions(session, match.id)
                         
                         # Atualiza automaticamente a classificação do grupo
-                        if match.phase == 'Fase de Grupos' and match.team1 and match.team1.group:
+                        if match.phase == 'Grupos' and match.team1 and match.team1.group:
                             _auto_update_group_result(session, match.team1.group)
                         
                         st.success(f"Resultado atualizado: {gols1_edit} x {gols2_edit}")
@@ -3363,7 +3407,7 @@ def admin_resultados(session):
                         process_match_predictions(session, match.id)
                         
                         # Atualiza automaticamente a classificação do grupo
-                        if match.phase == 'Fase de Grupos' and grupo_do_jogo:
+                        if match.phase == 'Grupos' and grupo_do_jogo:
                             _auto_update_group_result(session, grupo_do_jogo)
                         
                         st.success(f"Resultado apagado! Jogo voltou para status 'Agendado'.")
@@ -3779,8 +3823,9 @@ def admin_palpites(session):
             # Filtros de Fase e Grupo
             col_fase, col_grupo = st.columns(2)
             with col_fase:
-                fases_opcoes = ["Todas as Fases", "Grupos", "Oitavas32", "Oitavas16", "Quartas", "Semifinal", "Terceiro", "Final"]
-                fase_filter = st.selectbox("Fase", fases_opcoes, key="admin_palpite_fase")
+                fases_admin_palp = {"Todas as Fases": "Todas as Fases"}
+                fases_admin_palp.update({k: v for k, v in FASES.items()})
+                fase_filter = st.selectbox("Fase", list(fases_admin_palp.keys()), format_func=lambda x: fases_admin_palp.get(x, x), key="admin_palpite_fase")
             with col_grupo:
                 grupos_opcoes = ["Todos os Grupos"] + list(GRUPOS)
                 grupo_filter = st.selectbox("Grupo", grupos_opcoes, key="admin_palpite_grupo")
@@ -4751,15 +4796,8 @@ def page_resultados_grupos():
                 # Busca jogos do grupo
                 jogos_grupo = session.query(Match).filter(
                     Match.group == grupo,
-                    Match.phase == 'Fase de Grupos'
+                    Match.phase == 'Grupos'
                 ).order_by(Match.datetime).all()
-                
-                if not jogos_grupo:
-                    # Tenta com 'Grupos' ao invés de 'Fase de Grupos'
-                    jogos_grupo = session.query(Match).filter(
-                        Match.group == grupo,
-                        Match.phase == 'Grupos'
-                    ).order_by(Match.datetime).all()
                 
                 col1, col2 = st.columns([1, 1])
                 
