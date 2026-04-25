@@ -234,6 +234,148 @@ def update_match_live(conn, match_id, team1_score, team2_score):
 
 
 # ============================================================
+# PROPAGAÇÃO DE CONFRONTOS DO MATA-MATA
+# ============================================================
+
+def propagate_knockout_winners(conn):
+    """
+    Propaga vencedores de jogos finalizados do mata-mata para a próxima fase.
+    Resolve placeholders W73, W74, L101, etc.
+    Retorna o número de jogos atualizados.
+    """
+    cursor = conn.cursor()
+    updated = 0
+    
+    # Busca jogos finalizados do mata-mata com ambos os times e placar
+    cursor.execute("""
+        SELECT m.match_number, m.team1_id, m.team2_id, m.team1_score, m.team2_score,
+               m.team1_code, m.team2_code,
+               t1.code as t1_code, t1.name as t1_name,
+               t2.code as t2_code, t2.name as t2_name
+        FROM matches m
+        JOIN teams t1 ON m.team1_id = t1.id
+        JOIN teams t2 ON m.team2_id = t2.id
+        WHERE m.phase != 'Grupos'
+          AND m.status = 'finished'
+          AND m.team1_score IS NOT NULL
+          AND m.team2_score IS NOT NULL
+    """)
+    
+    finished_matches = cursor.fetchall()
+    
+    for row in finished_matches:
+        match_num, t1_id, t2_id, t1_score, t2_score, t1_code, t2_code, t1_cd, t1_nm, t2_cd, t2_nm = row
+        
+        # Determina vencedor e perdedor
+        if t1_score > t2_score:
+            winner_id, winner_code = t1_id, t1_cd
+            loser_id, loser_code = t2_id, t2_cd
+        elif t2_score > t1_score:
+            winner_id, winner_code = t2_id, t2_cd
+            loser_id, loser_code = t1_id, t1_cd
+        else:
+            # Empate no mata-mata - não deveria acontecer
+            logger.warning(f"Jogo #{match_num} empatado no mata-mata, não propaga")
+            continue
+        
+        w_code = f"W{match_num}"
+        l_code = f"L{match_num}"
+        
+        # Atualiza jogos que têm W{match_num} como team1
+        cursor.execute("""
+            UPDATE matches SET team1_id = %s, team1_code = %s
+            WHERE team1_code = %s AND team1_id IS NULL
+        """, (winner_id, winner_code, w_code))
+        updated += cursor.rowcount
+        
+        # Atualiza jogos que têm W{match_num} como team2
+        cursor.execute("""
+            UPDATE matches SET team2_id = %s, team2_code = %s
+            WHERE team2_code = %s AND team2_id IS NULL
+        """, (winner_id, winner_code, w_code))
+        updated += cursor.rowcount
+        
+        # Atualiza jogos que têm L{match_num} como team1 (disputa de 3º)
+        cursor.execute("""
+            UPDATE matches SET team1_id = %s, team1_code = %s
+            WHERE team1_code = %s AND team1_id IS NULL
+        """, (loser_id, loser_code, l_code))
+        updated += cursor.rowcount
+        
+        # Atualiza jogos que têm L{match_num} como team2 (disputa de 3º)
+        cursor.execute("""
+            UPDATE matches SET team2_id = %s, team2_code = %s
+            WHERE team2_code = %s AND team2_id IS NULL
+        """, (loser_id, loser_code, l_code))
+        updated += cursor.rowcount
+    
+    if updated > 0:
+        conn.commit()
+        logger.info(f"🔄 Propagados {updated} confronto(s) do mata-mata")
+    
+    cursor.close()
+    return updated
+
+
+def propagate_group_results(conn):
+    """
+    Propaga classificados dos grupos (1º e 2º) para jogos R32.
+    Resolve placeholders 1A, 2B, etc.
+    Retorna o número de jogos atualizados.
+    """
+    cursor = conn.cursor()
+    updated = 0
+    
+    # Busca resultados de grupo definidos
+    cursor.execute("""
+        SELECT gr.group_name, gr.first_place_team_id, gr.second_place_team_id,
+               t1.code as first_code, t2.code as second_code
+        FROM group_results gr
+        JOIN teams t1 ON gr.first_place_team_id = t1.id
+        JOIN teams t2 ON gr.second_place_team_id = t2.id
+    """)
+    
+    for row in cursor.fetchall():
+        group_name, first_id, second_id, first_code, second_code = row
+        
+        first_placeholder = f"1{group_name}"  # Ex: "1A"
+        second_placeholder = f"2{group_name}"  # Ex: "2A"
+        
+        # Atualiza jogos com placeholder do 1º lugar
+        cursor.execute("""
+            UPDATE matches SET team1_id = %s, team1_code = %s
+            WHERE team1_code = %s AND team1_id IS NULL
+        """, (first_id, first_code, first_placeholder))
+        updated += cursor.rowcount
+        
+        cursor.execute("""
+            UPDATE matches SET team2_id = %s, team2_code = %s
+            WHERE team2_code = %s AND team2_id IS NULL
+        """, (first_id, first_code, first_placeholder))
+        updated += cursor.rowcount
+        
+        # Atualiza jogos com placeholder do 2º lugar
+        cursor.execute("""
+            UPDATE matches SET team1_id = %s, team1_code = %s
+            WHERE team1_code = %s AND team1_id IS NULL
+        """, (second_id, second_code, second_placeholder))
+        updated += cursor.rowcount
+        
+        cursor.execute("""
+            UPDATE matches SET team2_id = %s, team2_code = %s
+            WHERE team2_code = %s AND team2_id IS NULL
+        """, (second_id, second_code, second_placeholder))
+        updated += cursor.rowcount
+    
+    if updated > 0:
+        conn.commit()
+        logger.info(f"🔄 Propagados {updated} classificado(s) de grupo para R32")
+    
+    cursor.close()
+    return updated
+
+
+# ============================================================
 # LÓGICA DE MATCHING E ATUALIZAÇÃO
 # ============================================================
 
@@ -381,6 +523,13 @@ def run_post():
                 updated += 1
 
         logger.info(f"Total de jogos atualizados: {updated}")
+        
+        # Propaga confrontos do mata-mata
+        if updated > 0:
+            prop_groups = propagate_group_results(conn)
+            prop_knockout = propagate_knockout_winners(conn)
+            if prop_groups + prop_knockout > 0:
+                logger.info(f"Propagados: {prop_groups} de grupo + {prop_knockout} de mata-mata")
     finally:
         conn.close()
 
@@ -413,6 +562,12 @@ def run_nightly():
                 updated += 1
 
         logger.info(f"Total de jogos atualizados na varredura: {updated}")
+        
+        # Propaga confrontos do mata-mata (sempre na varredura noturna)
+        prop_groups = propagate_group_results(conn)
+        prop_knockout = propagate_knockout_winners(conn)
+        if prop_groups + prop_knockout > 0:
+            logger.info(f"Propagados: {prop_groups} de grupo + {prop_knockout} de mata-mata")
 
         # Verificar jogos que deveriam ter resultado mas não foram atualizados
         remaining = get_pending_matches(conn)

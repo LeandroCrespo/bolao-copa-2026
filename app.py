@@ -33,6 +33,9 @@ from novas_funcionalidades import (
     page_regras, render_general_stats,
     export_ranking_pdf, admin_backup_database
 )
+from bracket_propagation import (
+    propagate_all, propagate_after_group_result, propagate_after_match_result
+)
 
 SELECOES_REPESCAGEM = {
     # Repescagem Europa (4 vagas)
@@ -3340,6 +3343,15 @@ def admin_resultados(session):
                             # Atualiza automaticamente a classificação do grupo
                             if match.phase == 'Grupos' and match.team1 and match.team1.group:
                                 _auto_update_group_result(session, match.team1.group)
+                                # Propaga classificados para jogos R32
+                                propagated = propagate_after_group_result(session, match.team1.group)
+                                if propagated > 0:
+                                    st.info(f"🔄 {propagated} confronto(s) do mata-mata atualizado(s) com classificados do Grupo {match.team1.group}")
+                            else:
+                                # Jogo do mata-mata: propaga vencedor para próxima fase
+                                propagated = propagate_after_match_result(session, match.id)
+                                if propagated > 0:
+                                    st.info(f"🔄 {propagated} confronto(s) da próxima fase atualizado(s) com o vencedor")
                             
                             st.success(f"✅ Resultado final confirmado: {gols1} x {gols2}")
                             log_action(session, st.session_state.user['id'], 'resultado_lancado', details=f"Jogo #{match.match_number}: {gols1}x{gols2}")
@@ -3388,6 +3400,9 @@ def admin_resultados(session):
                         # Atualiza automaticamente a classificação do grupo
                         if match.phase == 'Grupos' and match.team1 and match.team1.group:
                             _auto_update_group_result(session, match.team1.group)
+                            propagate_after_group_result(session, match.team1.group)
+                        elif match.phase != 'Grupos':
+                            propagate_after_match_result(session, match.id)
                         
                         st.success(f"Resultado atualizado: {gols1_edit} x {gols2_edit}")
                         log_action(session, st.session_state.user['id'], 'resultado_editado', details=f"Jogo #{match.match_number}: {gols1_edit}x{gols2_edit}")
@@ -3449,7 +3464,11 @@ def admin_grupos(session):
                     grupos_preenchidos += 1
             
             if grupos_preenchidos > 0:
+                # Propaga todos os classificados para jogos R32
+                propagated = propagate_all(session)
                 st.success(f"✅ {grupos_preenchidos} grupos preenchidos automaticamente!")
+                if propagated > 0:
+                    st.info(f"🔄 {propagated} confronto(s) do mata-mata atualizado(s)")
                 log_action(session, st.session_state.user['id'], 'grupos_auto', details=f"{grupos_preenchidos} grupos")
                 st.rerun()
             else:
@@ -3548,6 +3567,11 @@ def admin_grupos(session):
                         
                         # Processa pontuação dos palpites de grupo
                         process_group_predictions(session, grupo)
+                        
+                        # Propaga classificados para jogos R32
+                        propagated = propagate_after_group_result(session, grupo)
+                        if propagated > 0:
+                            st.info(f"🔄 {propagated} confronto(s) do mata-mata atualizado(s) com classificados do Grupo {grupo}")
                         
                         st.success(f"Classificados do Grupo {grupo} salvos!")
                         log_action(session, st.session_state.user['id'], 'grupo_definido', details=f"Grupo {grupo}")
