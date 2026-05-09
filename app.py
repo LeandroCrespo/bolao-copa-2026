@@ -4032,6 +4032,133 @@ def admin_palpites(session):
 
 
 # =============================================================================
+# PÁGINA DE PALPITES DOS PARTICIPANTES (TRANSPARÊNCIA)
+# =============================================================================
+def page_palpites_participantes():
+    """
+    Página que exibe os palpites de grupos e pódio de todos os participantes.
+    Só fica visível após o início da Copa (quando os palpites estão travados).
+    """
+    render_page_header()
+    st.markdown("## 👥 Palpites dos Participantes")
+    
+    with session_scope(engine) as session:
+        # Verifica se a Copa já começou
+        copa_started = not can_predict_podium(session)
+        
+        if not copa_started:
+            st.warning("⏰ Os palpites de grupos e pódio serão revelados após o início da Copa.")
+            st.info("Enquanto os palpites não estão travados, eles permanecem privados para garantir a justiça do bolão.")
+            return
+        
+        st.success("✅ A Copa já começou! Os palpites de grupos e pódio estão travados e visíveis para todos.")
+        
+        # Busca todos os participantes
+        users = session.query(User).filter(User.role == 'player', User.is_active == True).order_by(User.name).all()
+        
+        if not users:
+            st.info("Nenhum participante cadastrado.")
+            return
+        
+        # Seletor de participante
+        user_options = {u.id: f"{u.name}" for u in users}
+        user_ids = list(user_options.keys())
+        
+        selected_user_id = st.selectbox(
+            "👤 Selecione o participante:",
+            options=user_ids,
+            format_func=lambda x: user_options[x],
+            key="select_participante_palpites"
+        )
+        
+        st.divider()
+        
+        # === SEÇÃO DE PALPITES DE PÓDIO ===
+        st.subheader("🏆 Palpite de Pódio")
+        
+        podium_pred = session.query(PodiumPrediction).filter_by(user_id=selected_user_id).first()
+        
+        if podium_pred and podium_pred.champion_team_id:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if podium_pred.champion_team:
+                    st.markdown(f"### 🥇 Campeão")
+                    st.markdown(f"**{podium_pred.champion_team.flag} {podium_pred.champion_team.name}**")
+                else:
+                    st.markdown("🥇 Campeão: *Não definido*")
+            with col2:
+                if podium_pred.runner_up_team:
+                    st.markdown(f"### 🥈 Vice")
+                    st.markdown(f"**{podium_pred.runner_up_team.flag} {podium_pred.runner_up_team.name}**")
+                else:
+                    st.markdown("🥈 Vice: *Não definido*")
+            with col3:
+                if podium_pred.third_place_team:
+                    st.markdown(f"### 🥉 3º Lugar")
+                    st.markdown(f"**{podium_pred.third_place_team.flag} {podium_pred.third_place_team.name}**")
+                else:
+                    st.markdown("🥉 3º Lugar: *Não definido*")
+        else:
+            st.info("Este participante não registrou palpite de pódio.")
+        
+        st.divider()
+        
+        # === SEÇÃO DE PALPITES DE GRUPOS ===
+        st.subheader("🏅 Palpites de Classificação dos Grupos")
+        
+        group_preds = session.query(GroupPrediction).filter_by(user_id=selected_user_id).all()
+        group_preds_dict = {gp.group_name: gp for gp in group_preds}
+        
+        if not group_preds:
+            st.info("Este participante não registrou palpites de grupos.")
+        else:
+            # Exibe em grade de 3 colunas
+            cols = st.columns(3)
+            for idx, grupo in enumerate(GRUPOS):
+                with cols[idx % 3]:
+                    pred = group_preds_dict.get(grupo)
+                    st.markdown(f"**Grupo {grupo}**")
+                    if pred and pred.first_place_team_id:
+                        first_name = f"{pred.first_place_team.flag} {pred.first_place_team.name}" if pred.first_place_team else "Não definido"
+                        second_name = f"{pred.second_place_team.flag} {pred.second_place_team.name}" if pred.second_place_team else "Não definido"
+                        st.markdown(f"1º: {first_name}")
+                        st.markdown(f"2º: {second_name}")
+                    else:
+                        st.markdown("*Sem palpite*")
+                    st.markdown("---")
+        
+        st.divider()
+        
+        # === VISÃO COMPARATIVA DO PÓDIO ===
+        st.subheader("📊 Visão Geral - Pódio de Todos")
+        
+        all_podium = session.query(PodiumPrediction).join(User).filter(
+            User.role == 'player', User.is_active == True
+        ).all()
+        
+        if all_podium:
+            podium_data = []
+            for pp in all_podium:
+                user = session.query(User).get(pp.user_id)
+                champion = f"{pp.champion_team.flag} {pp.champion_team.name}" if pp.champion_team else "-"
+                vice = f"{pp.runner_up_team.flag} {pp.runner_up_team.name}" if pp.runner_up_team else "-"
+                third = f"{pp.third_place_team.flag} {pp.third_place_team.name}" if pp.third_place_team else "-"
+                podium_data.append({
+                    "Participante": user.name,
+                    "🥇 Campeão": champion,
+                    "🥈 Vice": vice,
+                    "🥉 3º Lugar": third
+                })
+            
+            import pandas as pd
+            df_podium = pd.DataFrame(podium_data)
+            df_podium = df_podium.sort_values("Participante")
+            st.dataframe(df_podium, use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum palpite de pódio registrado ainda.")
+
+
+# =============================================================================
 # PÁGINA DE VISUALIZAÇÃO AO VIVO
 # =============================================================================
 def page_visualizacao_ao_vivo():
@@ -5029,6 +5156,7 @@ def main():
                 # Admin só vê opções administrativas
                 menu_options = {
                     "🏠 Início": "home",
+                    "👥 Palpites dos Participantes": "palpites_participantes",
                     "📺 Visualização ao Vivo": "visualizacao_ao_vivo",
                     "🏆 Resultados por Grupo": "resultados_grupos",
                     "📊 Ranking": "ranking",
@@ -5050,6 +5178,7 @@ def main():
                     f"📝 Palpites - Jogos{palpites_badge}": "palpites_jogos",
                     "🏅 Palpites - Grupos": "palpites_grupos",
                     "🏆 Palpites - Pódio": "palpites_podio",
+                    "👥 Palpites dos Participantes": "palpites_participantes",
                     f"📺 Visualização ao Vivo{ao_vivo_badge}": "visualizacao_ao_vivo",
                     "🏆 Resultados por Grupo": "resultados_grupos",
                     "📊 Ranking": "ranking",
@@ -5084,6 +5213,7 @@ def main():
             "palpites_jogos": page_palpites_jogos,
             "palpites_grupos": page_palpites_grupos,
             "palpites_podio": page_palpites_podio,
+            "palpites_participantes": page_palpites_participantes,
             "visualizacao_ao_vivo": page_visualizacao_ao_vivo,
             "resultados_grupos": page_resultados_grupos,
             "ranking": page_ranking,
