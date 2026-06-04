@@ -149,4 +149,12 @@ def generate_user_backup_pdf(user_name, match_predictions, group_predictions, po
         pdf.set_font('Helvetica', '', 9)
         pdf.cell(0, 7, "  Nenhum palpite de jogo registrado.", 0, 1)
 
-    return pdf.output(dest='S')
+    # Compatibilidade entre fpdf 1.7.2 (retorna str) e fpdf2 mais novo (retorna bytearray)
+    output = pdf.output(dest='S')
+    if isinstance(output, str):
+        return output.encode('latin-1')
+    elif isinstance(output, bytearray):
+        return bytes(output)
+    elif isinstance(output, bytes):
+        return output
+    return output.encode('latin-1') if hasattr(output, 'encode') else bytes(output)
