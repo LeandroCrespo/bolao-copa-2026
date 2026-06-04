@@ -1,10 +1,10 @@
-
 import os
 from fpdf import FPDF
 from datetime import datetime
 import pytz
 
 def get_brazil_time_str(dt):
+    """Converte datetime para string no fuso de Brasília"""
     if not dt:
         return "N/A"
     # Assume que o dt do banco está em UTC
@@ -12,99 +12,141 @@ def get_brazil_time_str(dt):
         dt = pytz.utc.localize(dt)
     br_tz = pytz.timezone('America/Sao_Paulo')
     dt_br = dt.astimezone(br_tz)
-    return dt_br.strftime("%d/%m/%Y %H:%M:%S")
+    return dt_br.strftime("%d/%m/%Y %H:%M")
+
+
+def remove_emojis(text):
+    """Remove emojis e caracteres Unicode não suportados pela fonte padrão"""
+    if not text:
+        return ""
+    # Mantém apenas caracteres ASCII e Latin-1 estendido
+    return ''.join(c for c in str(text) if ord(c) < 0x10000 and c.isprintable())
+
 
 class PredictionPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        # Usa fonte padrão Helvetica que suporta Latin-1
+        self.set_auto_page_break(auto=True, margin=15)
+
     def header(self):
-        # Logo (se existir)
-        # self.image('assets/logo_copa2026.png', 10, 8, 33)
-        self.set_font('Arial', 'B', 15)
-        self.cell(80)
-        self.cell(30, 10, 'Comprovante de Palpites - Bolão Copa 2026', 0, 0, 'C')
-        self.ln(20)
+        self.set_font('Helvetica', 'B', 14)
+        self.cell(0, 10, 'COMPROVANTE DE PALPITES', 0, 0, 'C')
+        self.ln(6)
+        self.set_font('Helvetica', '', 10)
+        self.cell(0, 10, 'Bolao Copa do Mundo 2026', 0, 0, 'C')
+        self.ln(15)
 
     def footer(self):
         self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Página {self.page_no()} | Gerado em {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}', 0, 0, 'C')
+        self.set_font('Helvetica', 'I', 8)
+        now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.cell(0, 10, f'Pagina {self.page_no()} | Gerado em {now_str}', 0, 0, 'C')
+
 
 def generate_user_backup_pdf(user_name, match_predictions, group_predictions, podium_prediction):
+    """
+    Gera o PDF de backup com todos os palpites do usuário.
+    Retorna os bytes do PDF.
+    """
     pdf = PredictionPDF()
     pdf.add_page()
-    
+
     # Informações do Usuário
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, f'Participante: {user_name}', 0, 1)
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.cell(0, 10, f'Participante: {remove_emojis(user_name)}', 0, 1)
+    pdf.set_font('Helvetica', '', 9)
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    pdf.cell(0, 6, f'Documento gerado em: {now_str}', 0, 1)
     pdf.ln(5)
-    
-    # --- SEÇÃO PÓDIO ---
+
+    # =========================================================================
+    # SEÇÃO PÓDIO
+    # =========================================================================
     pdf.set_fill_color(200, 220, 255)
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, '🏆 PALPITE DE PÓDIO', 1, 1, 'L', 1)
-    pdf.set_font('Arial', '', 10)
-    
+    pdf.set_font('Helvetica', 'B', 11)
+    pdf.cell(0, 9, '  PALPITE DE PODIO', 1, 1, 'L', True)
+    pdf.set_font('Helvetica', '', 10)
+
     if podium_prediction:
-        pdf.cell(0, 8, f"Campeão: {podium_prediction['champion']}", 0, 1)
-        pdf.cell(0, 8, f"Vice-Campeão: {podium_prediction['runner_up']}", 0, 1)
-        pdf.cell(0, 8, f"3º Lugar: {podium_prediction['third_place']}", 0, 1)
-        pdf.set_font('Arial', 'I', 8)
-        pdf.cell(0, 8, f"Salvo em: {podium_prediction['updated_at']}", 0, 1)
+        pdf.cell(0, 7, f"  Campeao: {remove_emojis(podium_prediction['champion'])}", 0, 1)
+        pdf.cell(0, 7, f"  Vice-Campeao: {remove_emojis(podium_prediction['runner_up'])}", 0, 1)
+        pdf.cell(0, 7, f"  3o Lugar: {remove_emojis(podium_prediction['third_place'])}", 0, 1)
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.cell(0, 7, f"  Salvo em: {podium_prediction['updated_at']}", 0, 1)
     else:
-        pdf.cell(0, 8, "Nenhum palpite de pódio registrado.", 0, 1)
+        pdf.cell(0, 7, "  Nenhum palpite de podio registrado.", 0, 1)
     pdf.ln(5)
-    
-    # --- SEÇÃO GRUPOS ---
+
+    # =========================================================================
+    # SEÇÃO GRUPOS
+    # =========================================================================
     pdf.set_fill_color(200, 255, 220)
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, '🏅 PALPITES DE GRUPOS (1º e 2º Colocados)', 1, 1, 'L', 1)
-    pdf.set_font('Arial', '', 9)
-    
-    # Tabela de Grupos
-    pdf.cell(30, 8, 'Grupo', 1, 0, 'C')
-    pdf.cell(60, 8, '1º Colocado', 1, 0, 'C')
-    pdf.cell(60, 8, '2º Colocado', 1, 0, 'C')
-    pdf.cell(40, 8, 'Salvo em', 1, 1, 'C')
-    
-    for gp in group_predictions:
-        pdf.cell(30, 7, f"Grupo {gp['group']}", 1, 0, 'C')
-        pdf.cell(60, 7, gp['first'], 1, 0, 'L')
-        pdf.cell(60, 7, gp['second'], 1, 0, 'L')
-        pdf.cell(40, 7, gp['updated_at'], 1, 1, 'C')
-    pdf.ln(5)
-    
-    # --- SEÇÃO JOGOS ---
-    pdf.set_fill_color(255, 230, 200)
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, '🏟️ PALPITES DE JOGOS', 1, 1, 'L', 1)
+    pdf.set_font('Helvetica', 'B', 11)
+    pdf.cell(0, 9, '  PALPITES DE CLASSIFICACAO DOS GRUPOS', 1, 1, 'L', True)
     pdf.ln(2)
-    
-    # Cabeçalho da tabela de jogos
-    pdf.set_font('Arial', 'B', 8)
-    pdf.cell(15, 7, 'Jogo', 1, 0, 'C')
-    pdf.cell(35, 7, 'Data/Hora Jogo', 1, 0, 'C')
-    pdf.cell(70, 7, 'Confronto e Palpite', 1, 0, 'C')
-    pdf.cell(30, 7, 'Fase', 1, 0, 'C')
-    pdf.cell(40, 7, 'Salvo em', 1, 1, 'C')
-    
-    pdf.set_font('Arial', '', 8)
-    for mp in match_predictions:
-        # Verifica se precisa de nova página
-        if pdf.get_y() > 260:
-            pdf.add_page()
-            # Repete cabeçalho da tabela
-            pdf.set_font('Arial', 'B', 8)
-            pdf.cell(15, 7, 'Jogo', 1, 0, 'C')
-            pdf.cell(35, 7, 'Data/Hora Jogo', 1, 0, 'C')
-            pdf.cell(70, 7, 'Confronto e Palpite', 1, 0, 'C')
-            pdf.cell(30, 7, 'Fase', 1, 0, 'C')
-            pdf.cell(40, 7, 'Salvo em', 1, 1, 'C')
-            pdf.set_font('Arial', '', 8)
-            
-        confronto = f"{mp['team1']} {mp['pred1']} x {mp['pred2']} {mp['team2']}"
-        pdf.cell(15, 6, str(mp['number']), 1, 0, 'C')
-        pdf.cell(35, 6, mp['match_time'], 1, 0, 'C')
-        pdf.cell(70, 6, confronto, 1, 0, 'L')
-        pdf.cell(30, 6, mp['phase'], 1, 0, 'C')
-        pdf.cell(40, 6, mp['updated_at'], 1, 1, 'C')
-        
+
+    if group_predictions:
+        # Cabeçalho da tabela
+        pdf.set_font('Helvetica', 'B', 8)
+        pdf.cell(20, 7, 'Grupo', 1, 0, 'C')
+        pdf.cell(60, 7, '1o Colocado', 1, 0, 'C')
+        pdf.cell(60, 7, '2o Colocado', 1, 0, 'C')
+        pdf.cell(45, 7, 'Salvo em', 1, 1, 'C')
+
+        pdf.set_font('Helvetica', '', 8)
+        for gp in group_predictions:
+            pdf.cell(20, 6, f"Grupo {gp['group']}", 1, 0, 'C')
+            pdf.cell(60, 6, remove_emojis(gp['first']), 1, 0, 'L')
+            pdf.cell(60, 6, remove_emojis(gp['second']), 1, 0, 'L')
+            pdf.cell(45, 6, gp['updated_at'], 1, 1, 'C')
+    else:
+        pdf.set_font('Helvetica', '', 9)
+        pdf.cell(0, 7, "  Nenhum palpite de grupo registrado.", 0, 1)
+    pdf.ln(5)
+
+    # =========================================================================
+    # SEÇÃO JOGOS
+    # =========================================================================
+    pdf.set_fill_color(255, 230, 200)
+    pdf.set_font('Helvetica', 'B', 11)
+    pdf.cell(0, 9, '  PALPITES DE JOGOS', 1, 1, 'L', True)
+    pdf.ln(2)
+
+    if match_predictions:
+        # Cabeçalho da tabela de jogos
+        pdf.set_font('Helvetica', 'B', 7)
+        pdf.cell(12, 7, 'Jogo', 1, 0, 'C')
+        pdf.cell(30, 7, 'Data/Hora', 1, 0, 'C')
+        pdf.cell(75, 7, 'Confronto e Palpite', 1, 0, 'C')
+        pdf.cell(25, 7, 'Fase', 1, 0, 'C')
+        pdf.cell(45, 7, 'Salvo em', 1, 1, 'C')
+
+        pdf.set_font('Helvetica', '', 7)
+        for mp in match_predictions:
+            # Verifica se precisa de nova página
+            if pdf.get_y() > 265:
+                pdf.add_page()
+                # Repete cabeçalho da tabela
+                pdf.set_font('Helvetica', 'B', 7)
+                pdf.cell(12, 7, 'Jogo', 1, 0, 'C')
+                pdf.cell(30, 7, 'Data/Hora', 1, 0, 'C')
+                pdf.cell(75, 7, 'Confronto e Palpite', 1, 0, 'C')
+                pdf.cell(25, 7, 'Fase', 1, 0, 'C')
+                pdf.cell(45, 7, 'Salvo em', 1, 1, 'C')
+                pdf.set_font('Helvetica', '', 7)
+
+            t1 = remove_emojis(mp['team1'])
+            t2 = remove_emojis(mp['team2'])
+            confronto = f"{t1} {mp['pred1']} x {mp['pred2']} {t2}"
+
+            pdf.cell(12, 6, str(mp['number']), 1, 0, 'C')
+            pdf.cell(30, 6, str(mp['match_time']), 1, 0, 'C')
+            pdf.cell(75, 6, confronto, 1, 0, 'L')
+            pdf.cell(25, 6, str(mp['phase']), 1, 0, 'C')
+            pdf.cell(45, 6, str(mp['updated_at']), 1, 1, 'C')
+    else:
+        pdf.set_font('Helvetica', '', 9)
+        pdf.cell(0, 7, "  Nenhum palpite de jogo registrado.", 0, 1)
+
     return pdf.output(dest='S')
