@@ -4749,15 +4749,19 @@ def page_meus_comprovantes():
                 
                 match_list = []
                 for pred, match in match_preds:
+                    # Garante que temos os nomes dos times, mesmo se forem placeholders
+                    t1_name = match.team1.name if (hasattr(match, 'team1') and match.team1) else getattr(match, 'team1_placeholder', "TBD")
+                    t2_name = match.team2.name if (hasattr(match, 'team2') and match.team2) else getattr(match, 'team2_placeholder', "TBD")
+                    
                     match_list.append({
-                        'number': match.match_number,
-                        'match_time': get_brazil_time_str(match.date),
-                        'team1': match.team1.name if match.team1 else match.team1_placeholder,
-                        'team2': match.team2.name if match.team2 else match.team2_placeholder,
-                        'pred1': pred.team1_score,
-                        'pred2': pred.team2_score,
-                        'phase': match.phase,
-                        'updated_at': get_brazil_time_str(pred.updated_at)
+                        'number': getattr(match, 'match_number', 0),
+                        'match_time': get_brazil_time_str(getattr(match, 'date', None)),
+                        'team1': t1_name,
+                        'team2': t2_name,
+                        'pred1': getattr(pred, 'team1_score', 0),
+                        'pred2': getattr(pred, 'team2_score', 0),
+                        'phase': getattr(match, 'phase', ""),
+                        'updated_at': get_brazil_time_str(getattr(pred, 'updated_at', None))
                     })
                 
                 # 2. Coleta Palpites de Grupos
