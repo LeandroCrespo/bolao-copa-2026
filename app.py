@@ -36,6 +36,7 @@ from novas_funcionalidades import (
 from bracket_propagation import (
     propagate_all, propagate_after_group_result, propagate_after_match_result
 )
+from pdf_generator import generate_user_backup_pdf, get_brazil_time_str
 
 SELECOES_REPESCAGEM = {
     # Repescagem Europa (4 vagas)
@@ -4723,6 +4724,87 @@ def page_visualizacao_ao_vivo():
 
 
 # =============================================================================
+# PÁGINA DE MEUS COMPROVANTES (BACKUP PDF)
+# =============================================================================
+def page_meus_comprovantes():
+    """
+    Página para o usuário gerar e baixar o PDF com todos os seus palpites.
+    """
+    render_page_header()
+    st.markdown("## 📄 Meus Comprovantes")
+    st.markdown("Gere um documento PDF com todos os seus palpites salvos no sistema para sua segurança e conferência.")
+    
+    with session_scope(engine) as session:
+        user_id = st.session_state.user['id']
+        user_name = st.session_state.user['name']
+        
+        st.info(f"Participante: **{user_name}**")
+        
+        if st.button("🚀 Gerar Comprovante Completo (PDF)", use_container_width=True):
+            with st.spinner("Coletando seus palpites e gerando o documento..."):
+                # 1. Coleta Palpites de Jogos
+                match_preds = session.query(Prediction, Match).join(Match).filter(
+                    Prediction.user_id == user_id
+                ).order_by(Match.match_number).all()
+                
+                match_list = []
+                for pred, match in match_preds:
+                    match_list.append({
+                        'number': match.match_number,
+                        'match_time': get_brazil_time_str(match.date),
+                        'team1': match.team1.name if match.team1 else match.team1_placeholder,
+                        'team2': match.team2.name if match.team2 else match.team2_placeholder,
+                        'pred1': pred.team1_score,
+                        'pred2': pred.team2_score,
+                        'phase': match.phase,
+                        'updated_at': get_brazil_time_str(pred.updated_at)
+                    })
+                
+                # 2. Coleta Palpites de Grupos
+                group_preds = session.query(GroupPrediction).filter_by(user_id=user_id).order_by(GroupPrediction.group_name).all()
+                group_list = []
+                for gp in group_preds:
+                    group_list.append({
+                        'group': gp.group_name,
+                        'first': gp.first_place_team.name if gp.first_place_team else "Não definido",
+                        'second': gp.second_place_team.name if gp.second_place_team else "Não definido",
+                        'updated_at': get_brazil_time_str(gp.updated_at)
+                    })
+                
+                # 3. Coleta Palpite de Pódio
+                podium = session.query(PodiumPrediction).filter_by(user_id=user_id).first()
+                podium_data = None
+                if podium:
+                    podium_data = {
+                        'champion': podium.champion_team.name if podium.champion_team else "Não definido",
+                        'runner_up': podium.runner_up_team.name if podium.runner_up_team else "Não definido",
+                        'third_place': podium.third_place_team.name if podium.third_place_team else "Não definido",
+                        'updated_at': get_brazil_time_str(podium.updated_at)
+                    }
+                
+                # Gera o PDF
+                pdf_bytes = generate_user_backup_pdf(user_name, match_list, group_list, podium_data)
+                
+                st.success("✅ Comprovante gerado com sucesso!")
+                
+                st.download_button(
+                    label="⬇️ Baixar Comprovante (PDF)",
+                    data=pdf_bytes,
+                    file_name=f"comprovante_palpites_{user_name.replace(' ', '_').lower()}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+    
+    st.divider()
+    st.markdown("""
+    ### 💡 Dicas de Segurança:
+    - O comprovante contém a **data e hora exata** em que cada palpite foi salvo no nosso banco de dados.
+    - Se você alterar qualquer palpite, lembre-se de gerar um **novo comprovante**.
+    - Guarde este arquivo em seu celular ou computador para conferência futura.
+    """)
+
+
+# =============================================================================
 # PÁGINA DE RESUMO DIÁRIO
 # =============================================================================
 def page_resumo_diario():
@@ -5178,6 +5260,7 @@ def main():
                     f"📝 Palpites - Jogos{palpites_badge}": "palpites_jogos",
                     "🏅 Palpites - Grupos": "palpites_grupos",
                     "🏆 Palpites - Pódio": "palpites_podio",
+                    "📄 Meus Comprovantes": "meus_comprovantes",
                     "👥 Palpites dos Participantes": "palpites_participantes",
                     f"📺 Visualização ao Vivo{ao_vivo_badge}": "visualizacao_ao_vivo",
                     "🏆 Resultados por Grupo": "resultados_grupos",
@@ -5213,6 +5296,7 @@ def main():
             "palpites_jogos": page_palpites_jogos,
             "palpites_grupos": page_palpites_grupos,
             "palpites_podio": page_palpites_podio,
+            "meus_comprovantes": page_meus_comprovantes,
             "palpites_participantes": page_palpites_participantes,
             "visualizacao_ao_vivo": page_visualizacao_ao_vivo,
             "resultados_grupos": page_resultados_grupos,
