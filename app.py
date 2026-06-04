@@ -4753,37 +4753,42 @@ def page_meus_comprovantes():
                     t1_name = match.team1.name if (hasattr(match, 'team1') and match.team1) else getattr(match, 'team1_placeholder', "TBD")
                     t2_name = match.team2.name if (hasattr(match, 'team2') and match.team2) else getattr(match, 'team2_placeholder', "TBD")
                     
+                    # Data/hora de salvamento: usa updated_at se existir, senão created_at
+                    save_time = pred.updated_at if pred.updated_at else pred.created_at
+                    
                     match_list.append({
                         'number': getattr(match, 'match_number', 0),
-                        'match_time': get_brazil_time_str(getattr(match, 'date', None)),
+                        'match_time': get_brazil_time_str(getattr(match, 'datetime', None)),
                         'team1': t1_name,
                         'team2': t2_name,
-                        'pred1': getattr(pred, 'team1_score', 0),
-                        'pred2': getattr(pred, 'team2_score', 0),
+                        'pred1': getattr(pred, 'pred_team1_score', 0),
+                        'pred2': getattr(pred, 'pred_team2_score', 0),
                         'phase': getattr(match, 'phase', ""),
-                        'updated_at': get_brazil_time_str(getattr(pred, 'updated_at', None))
+                        'updated_at': get_brazil_time_str(save_time)
                     })
                 
                 # 2. Coleta Palpites de Grupos
                 group_preds = session.query(GroupPrediction).filter_by(user_id=user_id).order_by(GroupPrediction.group_name).all()
                 group_list = []
                 for gp in group_preds:
+                    gp_save_time = gp.updated_at if gp.updated_at else gp.created_at
                     group_list.append({
                         'group': gp.group_name,
                         'first': gp.first_place_team.name if gp.first_place_team else "Não definido",
                         'second': gp.second_place_team.name if gp.second_place_team else "Não definido",
-                        'updated_at': get_brazil_time_str(gp.updated_at)
+                        'updated_at': get_brazil_time_str(gp_save_time)
                     })
                 
                 # 3. Coleta Palpite de Pódio
                 podium = session.query(PodiumPrediction).filter_by(user_id=user_id).first()
                 podium_data = None
                 if podium:
+                    podium_save_time = podium.updated_at if podium.updated_at else podium.created_at
                     podium_data = {
                         'champion': podium.champion_team.name if podium.champion_team else "Não definido",
                         'runner_up': podium.runner_up_team.name if podium.runner_up_team else "Não definido",
                         'third_place': podium.third_place_team.name if podium.third_place_team else "Não definido",
-                        'updated_at': get_brazil_time_str(podium.updated_at)
+                        'updated_at': get_brazil_time_str(podium_save_time)
                     }
                 
                 # Gera o PDF
