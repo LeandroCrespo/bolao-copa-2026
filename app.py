@@ -1994,6 +1994,118 @@ def page_dicas():
         - 🇧🇷 Vinicius Jr. (Brasil): Se confirmar no topo da forma, pode ser decisivo
         """)
     
+    # Análise por Grupo
+    st.markdown("---")
+    st.subheader("📋 Análise por Grupo")
+    st.markdown("Clique em cada grupo para ver os pontos de atenção:")
+
+    with st.expander("🏟️ Grupo A — México 🇲🇽, Coreia do Sul 🇰🇷, Tchéquia 🇨🇿, África do Sul 🇿🇦"):
+        st.markdown("""
+        - 🇲🇽 México joga em casa (Guadalajara/Cidade do México) e é o grande favorito — fator casa é decisivo
+        - A disputa pela segunda vaga é aberta: Coreia do Sul tem tradição, mas Tchéquia é técnica e organizada
+        - ⚠️ Cuidado: México costuma ser favorito na fase de grupos, mas tropeçar no mata-mata
+        - 🔑 **Jogo-chave:** México vs Coreia do Sul — define quem lidera o grupo
+        """)
+
+    with st.expander("🏟️ Grupo B — Canadá 🇨🇦, Suíça 🇨🇭, Bósnia e Herzegovina 🇧🇦, Qatar 🇶🇦"):
+        st.markdown("""
+        - 🇨🇦 Canadá em casa com Davies (Bayern) e Osorio — a geração mais talentosa da história canadense
+        - 🇨🇭 Suíça é consistente mas nunca surpreende — sólida, segura, previsível
+        - 🇧🇦 Bósnia retorna ao Mundial com Džeko — experiente e perigosa em jogos físicos
+        - ⚠️ Qatar foi eliminado em 2022 como anfitrião na fase de grupos — espere o mesmo aqui
+        - 🔑 **Jogo-chave:** Canadá vs Suíça — potencial duelo pelo 1º lugar
+        """)
+
+    with st.expander("🏟️ Grupo C — Brasil 🇧🇷, Marrocos 🇲🇦, Escócia 🏴󠁧󠁢󠁳󠁣󠁴󠁿, Haiti 🇭🇹"):
+        st.markdown("""
+        - 🔥 Único grupo com dois times do Tier 2 (Brasil #6 e Marrocos #8) — um deles sai em 2º lugar
+        - 🇲🇦 Marrocos tem uma das melhores defesas do torneio — Brasil não vai ter vida fácil
+        - 🏴󠁧󠁢󠁳󠁣󠁴󠁿 Escócia pode complicar se Brasil ou Marrocos tropeçarem — não subestime
+        - ⚠️ Brasil vs Marrocos pode ser o jogo mais equilibrado desta fase de grupos inteira
+        - 🔑 **Jogo-chave:** Brasil vs Marrocos (rodada 1 — abre o grupo)
+        """)
+
+    with st.expander("🏟️ Grupo D — Estados Unidos 🇺🇸, Turquia 🇹🇷, Paraguai 🇵🇾, Austrália 🇦🇺"):
+        st.markdown("""
+        - 🇺🇸 EUA em casa (Los Angeles/SoFi Stadium) com pressão de toda uma nação — enorme impacto no palpite
+        - 🇹🇷 Turquia traz Arda Güler (Real Madrid, 20 anos) — uma das maiores promessas do futebol mundial
+        - 🇦🇺 Austrália foi até as quartas em 2022 — não é zebra, é competitiva
+        - ⚠️ Turquia vs EUA pode ser o jogo mais imprevisível do grupo
+        - 🔑 **Jogo-chave:** EUA vs Turquia — quem vence provavelmente lidera o grupo
+        """)
+
+    with st.expander("🏟️ Grupo E — Alemanha 🇩🇪, Equador 🇪🇨, Costa do Marfim 🇨🇮, Curaçao 🇨🇼"):
+        st.markdown("""
+        - 🇩🇪 Alemanha quer apagar a vergonha de 2018 e 2022 — motivação altíssima
+        - 🇪🇨 Equador surpreende em toda Copa — organizado, combativo, não entrega facilmente
+        - 🇨🇮 Costa do Marfim tem Haller (Borussia Dortmund) — perigosa em jogos físicos
+        - ⚠️ Curaçao é a maior estreante do torneio — mas não espere surpresas aqui
+        - 🔑 **Jogo-chave:** Alemanha vs Equador — quem vence leva a liderança
+        """)
+
+    with st.expander("🏟️ Grupo F — Holanda 🇳🇱, Japão 🇯🇵, Suécia 🇸🇪, Tunísia 🇹🇳"):
+        st.markdown("""
+        - 🇳🇱 Holanda (#7) é a favorita, mas não é invencível — o Japão já derrubou gigantes europeus
+        - 🇯🇵 Japão eliminou Alemanha e Espanha em 2022 — não subestime por nada
+        - 🇸🇪 Suécia com Gyökeres (Arsenal) + Isak (Liverpool) — pode ser a maior surpresa do grupo
+        - ⚠️ Holanda já foi eliminada na fase de grupos antes — grupo com armadilhas
+        - 🔑 **Jogo-chave:** Holanda vs Japão — pode ser a maior zebra da fase de grupos
+        """)
+
+    with st.expander("🏟️ Grupo G — Bélgica 🇧🇪, Egito 🇪🇬, Irã 🇮🇷, Nova Zelândia 🇳🇿"):
+        st.markdown("""
+        - 🇧🇪 Bélgica (#9) ainda tem Lukaku e De Bruyne, mas essa geração dourada está no ocaso
+        - 🇮🇷 Irã é compacto e difícil de bater — Bélgica pode sofrer mais do que parece
+        - 🇪🇬 Egito tem Mo Salah (Liverpool) no auge — pode surpreender em jogos específicos
+        - ⚠️ Se Salah estiver em dia, Egito vs qualquer adversário pode ser imprevisível
+        - 🔑 **Jogo-chave:** Bélgica vs Irã — teste real para a "golden generation" belga
+        """)
+
+    with st.expander("🏟️ Grupo H — Espanha 🇪🇸, Uruguai 🇺🇾, Arábia Saudita 🇸🇦, Cabo Verde 🇨🇻"):
+        st.markdown("""
+        - 🇪🇸 Espanha campeã da Euro 2024 — o melhor futebol coletivo do mundo atualmente
+        - 🇺🇾 Uruguai é durão e experiente — Núñez e Valverde formam dupla de alto nível
+        - 🇸🇦 Arábia Saudita chegou com instabilidade técnica — não espere a zebra de 2022 contra Argentina
+        - ⚠️ Espanha domina, mas Uruguai pode ser o time mais difícil do grupo
+        - 🔑 **Jogo-chave:** Espanha vs Uruguai — decide a liderança do grupo H
+        """)
+
+    with st.expander("🏟️ Grupo I — França 🇫🇷, Noruega 🇳🇴, Senegal 🇸🇳, Iraque 🇮🇶"):
+        st.markdown("""
+        - 🇫🇷 França (#1) com Mbappé no auge — favorita não só do grupo, mas da Copa toda
+        - 🇳🇴 Noruega tem Haaland (Man City) — pode ser a surpresa que ninguém esperava
+        - 🇸🇳 Senegal é o campeão africano em exercício — sempre competitivo, nunca fácil de bater
+        - ⚠️ França vs Noruega pode ser o jogo mais emocionante desta fase de grupos
+        - 🔑 **Jogo-chave:** França vs Noruega — duelo pelo 1º lugar
+        """)
+
+    with st.expander("🏟️ Grupo J — Argentina 🇦🇷, Áustria 🇦🇹, Argélia 🇩🇿, Jordânia 🇯🇴"):
+        st.markdown("""
+        - 🇦🇷 Argentina (#3) com Messi na sua 6ª e última Copa — motivação histórica inigualável
+        - 🇦🇹 Áustria com Rangnick e gegenpressing intenso — organização tática de alto nível
+        - 🇩🇿 Argélia tem Belaïli e companhia — qualidade técnica, mas irregular
+        - ⚠️ Áustria pode ser a maior ameaça à Argentina na fase de grupos — não descarte
+        - 🔑 **Jogo-chave:** Argentina vs Áustria — disputa real pelo 1º lugar
+        """)
+
+    with st.expander("🏟️ Grupo K — Portugal 🇵🇹, Colômbia 🇨🇴, RD Congo 🇨🇩, Uzbequistão 🇺🇿"):
+        st.markdown("""
+        - 🇵🇹 Portugal (#5, Tier 1) com Bernardo Silva e Bruno Fernandes como motores — Ronaldo ainda convocado
+        - 🇨🇴 Colômbia com Luis Díaz (Bayern Munich) — saiu invicta do grupo em 2022, só caiu nos pênaltis
+        - 🇨🇩 RD Congo e Uzbequistão são estreantes no Mundial — curiosidade histórica
+        - ⚠️ Portugal vs Colômbia é um duelo de alto nível — não trate como jogo fácil
+        - 🔑 **Jogo-chave:** Portugal vs Colômbia — decide quem lidera o grupo K
+        """)
+
+    with st.expander("🏟️ Grupo L — Inglaterra 🏴󠁧󠁢󠁥󠁮󠁧󠁿, Croácia 🇭🇷, Gana 🇬🇭, Panamá 🇵🇦"):
+        st.markdown("""
+        - 🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra (#4) é favorita, mas carrega a pressão de décadas sem título
+        - 🇭🇷 Croácia (#11) caiu no ranking mas ainda tem Modric — experiência de Copa não se ignora
+        - 🇬🇭 Gana tem a dupla Kudus e Partey — pequena mas competitiva
+        - ⚠️ Croácia vs Inglaterra é a revanche da semifinal de 2018 — emocional e imprevisível
+        - 🔑 **Jogo-chave:** Inglaterra vs Croácia — o maior duelo do grupo L
+        """)
+
     # Rodapé
     st.markdown("---")
     st.caption("📅 Ranking FIFA atualizado em Junho/2026 | Repescagem confirmada | Fonte: FIFA.com")
