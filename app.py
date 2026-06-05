@@ -1744,10 +1744,9 @@ def page_dicas():
     atualizado periodicamente pela FIFA. Ele considera os resultados das partidas internacionais, 
     a importância dos jogos e a força dos adversários enfrentados.
     
-    **Última atualização do ranking:** 19 de janeiro de 2026 | **Próxima atualização:** 01 de abril de 2026
-    
-    **Destaque:** Marrocos subiu para o **8º lugar** (melhor posição de sua história) após ser vice da Copa Africana. 
-    Senegal, campeão da AFCON 2025, saltou para o **12º lugar** (subiu 7 posições).
+    **Última atualização do ranking:** 01 de abril de 2026 | **Próxima atualização:** 11 de junho de 2026 (início da Copa)
+
+    **Destaque:** Marrocos está no **8º lugar** — defesa de elite e grande ameaça. Brasil é o **6º colocado**, Portugal sobe para o **5º lugar** (Tier 1).
     
     """)
     
@@ -1848,11 +1847,11 @@ def page_dicas():
     st.markdown("### ⭐ FAVORITAS")
     st.markdown(render_header(), unsafe_allow_html=True)
     tier1_data = [
-        (1, "🇪🇸", "Espanha", "#1", 1877, "H"),
-        (2, "🇦🇷", "Argentina", "#2", 1873, "J"),
-        (3, "🇫🇷", "França", "#3", 1870, "I"),
-        (4, "🏴‍", "Inglaterra", "#4", 1834, "L"),
-        (5, "🇧🇷", "Brasil", "#5", 1760, "C"),
+        (1, "🇫🇷", "França",      "#1", 1877, "I"),
+        (2, "🇪🇸", "Espanha",     "#2", 1876, "H"),
+        (3, "🇦🇷", "Argentina",   "#3", 1875, "J"),
+        (4, "🏴‍", "Inglaterra", "#4", 1826, "L"),
+        (5, "🇵🇹", "Portugal",    "#5", 1764, "K"),
     ]
     for item in tier1_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
@@ -1862,11 +1861,11 @@ def page_dicas():
     st.markdown("### 🥇 FORTES CANDIDATAS")
     st.markdown(render_header(), unsafe_allow_html=True)
     tier2_data = [
-        (6, "🇵🇹", "Portugal", "#6", 1760, "K"),
-        (7, "🇳🇱", "Holanda", "#7", 1756, "F"),
-        (8, "🇲🇦", "Marrocos", "#8", 1737, "C"),
-        (9, "🇧🇪", "Bélgica", "#9", 1731, "G"),
-        (10, "🇩🇪", "Alemanha", "#10", 1724, "E"),
+        (6,  "🇧🇷", "Brasil",   "#6",  1761, "C"),
+        (7,  "🇳🇱", "Holanda",  "#7",  1758, "F"),
+        (8,  "🇲🇦", "Marrocos", "#8",  1756, "C"),
+        (9,  "🇧🇪", "Bélgica",  "#9",  1735, "G"),
+        (10, "🇩🇪", "Alemanha", "#10", 1730, "E"),
     ]
     for item in tier2_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
@@ -1876,16 +1875,16 @@ def page_dicas():
     st.markdown("### 🥈 COMPETITIVAS")
     st.markdown(render_header(), unsafe_allow_html=True)
     tier3_data = [
-        (11, "🇭🇷", "Croácia", "#11", 1717, "L"),
-        (12, "🇸🇳", "Senegal", "#12", 1707, "I"),
-        (13, "🇨🇴", "Colômbia", "#14", 1701, "K"),
-        (14, "🇺🇸", "Estados Unidos", "#15", 1682, "D"),
-        (15, "🇲🇽", "México", "#16", 1676, "A"),
-        (16, "🇺🇾", "Uruguai", "#17", 1673, "H"),
-        (17, "🇨🇭", "Suíça", "#18", 1655, "B"),
-        (18, "🇯🇵", "Japão", "#19", 1650, "F"),
-        (19, "🇮🇷", "Irã", "#20", 1617, "G"),
-        (20, "🇰🇷", "Coreia do Sul", "#22", 1601, "A"),
+        (11, "🇭🇷", "Croácia",        "#11", 1717, "L"),
+        (12, "🇨🇴", "Colômbia",       "#13", 1693, "K"),
+        (13, "🇸🇳", "Senegal",        "#14", 1689, "I"),
+        (14, "🇲🇽", "México",         "#15", 1681, "A"),
+        (15, "🇺🇸", "Estados Unidos", "#16", 1673, "D"),
+        (16, "🇺🇾", "Uruguai",        "#17", 1673, "H"),
+        (17, "🇯🇵", "Japão",          "#18", 1660, "F"),
+        (18, "🇨🇭", "Suíça",          "#19", 1649, "B"),
+        (19, "🇮🇷", "Irã",            "#20", 1617, "G"),
+        (20, "🇰🇷", "Coreia do Sul",  "#22", 1599, "A"),
     ]
     for item in tier3_data:
         st.markdown(render_selecao_card(*item), unsafe_allow_html=True)
@@ -1932,24 +1931,24 @@ def page_dicas():
     st.markdown("---")
     
     # Seleções da Repescagem
-    st.subheader("🎯 Seleções da Repescagem (A Definir)")
-    
+    st.subheader("🎯 Seleções da Repescagem (Confirmadas)")
+
     st.markdown("""
-    Estas seleções ainda disputarão a repescagem para definir as últimas vagas:
-    
-    **🇪🇺 Repescagem Europa:**
-    | Chave | Seleções |
-    |-------|----------|
-    | Europa A | 🇮🇹 Itália, 🇮🇪 Irlanda do Norte, 🏴󠁧󠁢󠁷󠁬󠁳󠁿 País de Gales, 🇧🇦 Bósnia |
-    | Europa B | 🇺🇦 Ucrânia, 🇸🇪 Suécia, 🇵🇱 Polônia, 🇦🇱 Albânia |
-    | Europa C | 🇹🇷 Turquia, 🇷🇴 Romênia, 🇸🇰 Eslováquia, 🇽🇰 Kosovo |
-    | Europa D | 🇨🇿 Rep. Tcheca, 🇮🇪 Irlanda, 🇩🇰 Dinamarca, 🇲🇰 Macedônia do Norte |
-    
-    **🌍 Repescagem Intercontinental:**
-    | Chave | Seleções |
-    |-------|----------|
-    | Intercon. 1 | 🇨🇩 Congo DR, 🇯🇲 Jamaica, 🇳🇨 Nova Caledônia |
-    | Intercon. 2 | 🇧🇴 Bolívia, 🇸🇷 Suriname, 🇮🇶 Iraque |
+    Todas as vagas da repescagem já foram definidas:
+
+    **🇪🇺 Repescagem Europa (Confirmadas):**
+    | Vaga | Seleção |
+    |------|---------|
+    | Europa A | 🇧🇦 Bósnia e Herzegovina |
+    | Europa B | 🇸🇪 Suécia |
+    | Europa C | 🇹🇷 Turquia |
+    | Europa D | 🇨🇿 Tchéquia |
+
+    **🌍 Repescagem Intercontinental (Confirmadas):**
+    | Vaga | Seleção |
+    |------|---------|
+    | Intercon. 1 | 🇨🇩 RD Congo |
+    | Intercon. 2 | 🇮🇶 Iraque |
     """)
     
     # Dicas extras
@@ -1967,29 +1966,37 @@ def page_dicas():
         
         st.markdown("""
         **📈 Seleções em Alta:**
-        - 🇲🇦 Marrocos: Semifinalista em 2022
-        - 🇯🇵 Japão: Eliminando potências europeias
-        - 🇦🇺 Austrália: Crescimento consistente
+        - 🇲🇦 Marrocos: Agora FIFA #8 e Tier 2 — defesa de elite, semifinalista em 2022
+        - 🇸🇪 Suécia: Gyökeres (Arsenal) + Isak (Liverpool) — dupla de ataque de classe mundial
+        - 🇨🇴 Colômbia: Luis Díaz em grande fase no Bayern Munich
         """)
     
     with col2:
         st.markdown("""
         **⚠️ Atenção aos Grupos:**
-        - **Grupo C** (Brasil, Marrocos, Escócia, Haiti): Grupo da morte!
-        - **Grupo L** (Inglaterra, Croácia, Gana, Panamá): Muito equilibrado
-        - **Grupo J** (Argentina, Argélia, Áustria, Jordânia): Argentina favorita
+        - **Grupo C** (Brasil #6 vs Marrocos #8): dois Tier 2 no mesmo grupo — ninguém sai ileso
+        - **Grupo K** (Portugal #5 Tier 1): favorito claro, mas Colômbia (#13) é adversário perigoso
+        - **Grupo L** (Inglaterra #4 vs Croácia #11): Croácia caiu no ranking mas ainda é competitiva
         """)
-        
+
         st.markdown("""
         **🎲 Zebras Históricas:**
         - Coreia do Sul 2002 (4º lugar)
         - Croácia 2018 (Vice-campeã)
         - Marrocos 2022 (4º lugar)
         """)
+
+        st.markdown("""
+        **🌟 Jogadores para Acompanhar:**
+        - 🇫🇷 Mbappé (França): 27 anos, no auge — grande favorito a artilheiro
+        - 🇦🇷 Messi (Argentina): 6ª Copa, última chance de erguer o troféu novamente
+        - 🇸🇪 Gyökeres (Suécia): Artilheiro da Champions — pode ser a grande zebra
+        - 🇧🇷 Vinicius Jr. (Brasil): Se confirmar no topo da forma, pode ser decisivo
+        """)
     
     # Rodapé
     st.markdown("---")
-    st.caption("📅 Ranking FIFA atualizado em Dezembro/2025 | Fonte: FIFA.com")
+    st.caption("📅 Ranking FIFA atualizado em Junho/2026 | Repescagem confirmada | Fonte: FIFA.com")
 
 
 # =============================================================================
