@@ -273,19 +273,18 @@ def check_pre_copa_missing_predictions(cur) -> list[str]:
 
     cur.execute("SELECT value FROM config WHERE key = 'data_inicio_copa'")
     row = cur.fetchone()
-    if not row:
-        return alerts
 
-    raw = row[0].strip()
+    raw = row[0].strip() if row else ""
     copa_start = None
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d"):
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d"):
         try:
             copa_start = datetime.strptime(raw, fmt)
             break
         except ValueError:
             continue
     if not copa_start:
-        return alerts
+        # Default: 11/06/2026 13:00 (início da Copa 2026)
+        copa_start = datetime(2026, 6, 11, 13, 0)
 
     dias_ate_copa = (copa_start - now).days
     if dias_ate_copa > 8 or dias_ate_copa < 0:
