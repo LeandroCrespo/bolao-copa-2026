@@ -506,7 +506,20 @@ st.markdown("""
         transform: translateY(-3px);
         box-shadow: 0 8px 25px rgba(0,0,0,0.15);
     }
-    
+
+    /* Card de jogo ao vivo */
+    .live-match-card {
+        background: linear-gradient(135deg, #3d0000, #7a0000);
+        border: 2px solid #ff4444;
+        border-radius: 10px;
+        padding: 12px 20px;
+        margin: 8px 0;
+        text-align: center;
+        color: white;
+    }
+    .live-badge { font-size: 0.8rem; color: #ff9999; }
+    .live-score { font-size: 2rem; font-weight: bold; margin: 0 16px; color: #ffdd00; }
+
     /* Cards de estatísticas/métricas */
     [data-testid="stMetric"] {
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
@@ -1340,9 +1353,32 @@ def page_home():
             st.metric("✅ Palpites Feitos", user_stats.get('total_palpites', 0))
         
         st.divider()
-        
+
+        # Seção de jogos ao vivo (só aparece quando há jogo em andamento)
+        from live_scoring import get_ongoing_matches as _get_ongoing
+        _now_br = get_brazil_time().replace(tzinfo=None)
+        _jogos_live = [m for m in _get_ongoing(session) if m['is_live']]
+        if _jogos_live:
+            st.markdown("### 🔴 Jogos ao Vivo")
+            for _m in _jogos_live:
+                _elapsed = max(0, int((_now_br - _m['datetime']).total_seconds() / 60))
+                _s1 = _m['team1_score'] if _m['team1_score'] is not None else '-'
+                _s2 = _m['team2_score'] if _m['team2_score'] is not None else '-'
+                st.markdown(f"""
+                <div class="live-match-card">
+                    <span class="live-badge">🔴 AO VIVO &nbsp;{_elapsed}'</span><br>
+                    <strong>{_m['team1']}</strong>
+                    <span class="live-score">{_s1} – {_s2}</span>
+                    <strong>{_m['team2']}</strong>
+                </div>
+                """, unsafe_allow_html=True)
+            if st.button("📺 Ver detalhes ao vivo", key="btn_live_home"):
+                st.session_state.page = 'visualizacao_ao_vivo'
+                st.rerun()
+            st.divider()
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.subheader("📅 Próximos Jogos")
             
@@ -1516,7 +1552,9 @@ def page_palpites_jogos():
                     else:
                         if pred:
                             st.info(f"Seu palpite: **{pred.pred_team1_score}** x **{pred.pred_team2_score}**")
-                            if match.status == 'finished':
+                            if match.status == 'live' and match.team1_score is not None:
+                                st.markdown(f"🔴 **Ao vivo:** {match.team1_score} x {match.team2_score}")
+                            elif match.status == 'finished':
                                 st.markdown(f"Resultado: **{match.team1_score}** x **{match.team2_score}**")
                                 if pred.points_awarded is not None:
                                     st.markdown(f"Pontos: **{pred.points_awarded}**")
@@ -5298,7 +5336,7 @@ def get_notification_badges(session, user_id):
         
         # Jogos em andamento (ao vivo)
         jogos_ao_vivo = session.query(Match).filter(
-            Match.status == 'in_progress'
+            Match.status == 'live'
         ).count()
         
         # Jogos que começaram nas últimas 24h (novos resultados)
