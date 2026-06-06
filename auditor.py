@@ -48,7 +48,7 @@ def get_connection():
     conn_str = os.environ.get("NEON_CONNECTION_STRING") or os.environ.get("DATABASE_URL")
     if not conn_str:
         raise RuntimeError("NEON_CONNECTION_STRING não configurada")
-    return psycopg2.connect(conn_str)
+    return psycopg2.connect(conn_str.strip())
 
 
 def now_brazil():
