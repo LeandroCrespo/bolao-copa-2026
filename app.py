@@ -1542,97 +1542,99 @@ def page_palpites_grupos():
         
         teams = session.query(Team).order_by(Team.name).all()
         
-        # Organiza em colunas de 3
-        cols = st.columns(3)
-        
-        for idx, grupo in enumerate(GRUPOS):
-            with cols[idx % 3]:
-                st.markdown(f"### Grupo {grupo}")
-                
-                grupo_teams = [t for t in teams if t.group == grupo]
-                
-                if not grupo_teams:
-                    st.warning(f"Nenhuma seleção no grupo {grupo}")
-                    continue
-                
-                team_options = {t.id: f"{t.flag} {t.name}" for t in grupo_teams}
-                team_ids = [None] + list(team_options.keys())
-                
-                # Busca palpite existente
-                pred = session.query(GroupPrediction).filter_by(
-                    user_id=st.session_state.user['id'],
-                    group_name=grupo
-                ).first()
-                
-                # Calcula classificação sugerida baseada nos palpites dos jogos
-                from group_standings import get_predicted_group_standings
-                standings = get_predicted_group_standings(session, st.session_state.user['id'], grupo)
-                
-                if standings and len(standings) >= 2:
-                    st.markdown("**📊 Classificação baseada nos seus palpites:**")
-                    for i, team_stat in enumerate(standings[:4], 1):
-                        st.caption(f"{i}º {team_stat['team'].flag} {team_stat['team'].name} - {team_stat['points']} pts ({team_stat['wins']}V {team_stat['draws']}E {team_stat['losses']}D) | Saldo: {team_stat['goal_difference']:+d}")
-                    st.caption("⚠️ Sugestão: Você pode usar essa classificação ou escolher manualmente")
-                    st.divider()
-                
-                with st.form(f"grupo_{grupo}"):
-                    # Define valores padrão baseados na classificação sugerida ou palpite existente
-                    default_first = None
-                    default_second = None
-                    
-                    if pred:
-                        default_first = pred.first_place_team_id
-                        default_second = pred.second_place_team_id
-                    elif standings and len(standings) >= 2:
-                        default_first = standings[0]['team'].id
-                        default_second = standings[1]['team'].id
-                    
-                    primeiro = st.selectbox(
-                        "1º Lugar",
-                        options=team_ids,
-                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
-                        index=team_ids.index(default_first) if default_first and default_first in team_ids else 0,
-                        key=f"g{grupo}_1"
-                    )
-                    
-                    segundo = st.selectbox(
-                        "2º Lugar",
-                        options=team_ids,
-                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
-                        index=team_ids.index(default_second) if default_second and default_second in team_ids else 0,
-                        key=f"g{grupo}_2"
-                    )
-                    
-                    # Mostra indicação de palpite salvo
-                    if pred:
-                        data_salvo = pred.updated_at or pred.created_at
-                        if data_salvo:
-                            import pytz
-                            tz_brazil = pytz.timezone('America/Sao_Paulo')
-                            if data_salvo.tzinfo is None:
-                                data_salvo = pytz.utc.localize(data_salvo)
-                            data_brazil = data_salvo.astimezone(tz_brazil)
-                            st.success(f"✅ Salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
-                    
-                    if st.form_submit_button("💾 Salvar", disabled=not can_predict):
-                        if not can_predict:
-                            st.error("⏰ O prazo para palpites já encerrou!")
-                        elif primeiro and segundo and primeiro != segundo:
-                            if pred:
-                                pred.first_place_team_id = primeiro
-                                pred.second_place_team_id = segundo
+        # Organiza em linhas de 3 grupos (cada linha tem seu próprio st.columns para mobile)
+        for row_start in range(0, len(GRUPOS), 3):
+            grupo_row = GRUPOS[row_start:row_start + 3]
+            cols = st.columns(len(grupo_row))
+
+            for col_idx, grupo in enumerate(grupo_row):
+                with cols[col_idx]:
+                    st.markdown(f"### Grupo {grupo}")
+
+                    grupo_teams = [t for t in teams if t.group == grupo]
+
+                    if not grupo_teams:
+                        st.warning(f"Nenhuma seleção no grupo {grupo}")
+                        continue
+
+                    team_options = {t.id: f"{t.flag} {t.name}" for t in grupo_teams}
+                    team_ids = [None] + list(team_options.keys())
+
+                    # Busca palpite existente
+                    pred = session.query(GroupPrediction).filter_by(
+                        user_id=st.session_state.user['id'],
+                        group_name=grupo
+                    ).first()
+
+                    # Calcula classificação sugerida baseada nos palpites dos jogos
+                    from group_standings import get_predicted_group_standings
+                    standings = get_predicted_group_standings(session, st.session_state.user['id'], grupo)
+
+                    if standings and len(standings) >= 2:
+                        st.markdown("**📊 Classificação baseada nos seus palpites:**")
+                        for i, team_stat in enumerate(standings[:4], 1):
+                            st.caption(f"{i}º {team_stat['team'].flag} {team_stat['team'].name} - {team_stat['points']} pts ({team_stat['wins']}V {team_stat['draws']}E {team_stat['losses']}D) | Saldo: {team_stat['goal_difference']:+d}")
+                        st.caption("⚠️ Sugestão: Você pode usar essa classificação ou escolher manualmente")
+                        st.divider()
+
+                    with st.form(f"grupo_{grupo}"):
+                        # Define valores padrão baseados na classificação sugerida ou palpite existente
+                        default_first = None
+                        default_second = None
+
+                        if pred:
+                            default_first = pred.first_place_team_id
+                            default_second = pred.second_place_team_id
+                        elif standings and len(standings) >= 2:
+                            default_first = standings[0]['team'].id
+                            default_second = standings[1]['team'].id
+
+                        primeiro = st.selectbox(
+                            "1º Lugar",
+                            options=team_ids,
+                            format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                            index=team_ids.index(default_first) if default_first and default_first in team_ids else 0,
+                            key=f"g{grupo}_1"
+                        )
+
+                        segundo = st.selectbox(
+                            "2º Lugar",
+                            options=team_ids,
+                            format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                            index=team_ids.index(default_second) if default_second and default_second in team_ids else 0,
+                            key=f"g{grupo}_2"
+                        )
+
+                        # Mostra indicação de palpite salvo
+                        if pred:
+                            data_salvo = pred.updated_at or pred.created_at
+                            if data_salvo:
+                                import pytz
+                                tz_brazil = pytz.timezone('America/Sao_Paulo')
+                                if data_salvo.tzinfo is None:
+                                    data_salvo = pytz.utc.localize(data_salvo)
+                                data_brazil = data_salvo.astimezone(tz_brazil)
+                                st.success(f"✅ Salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+
+                        if st.form_submit_button("💾 Salvar", disabled=not can_predict):
+                            if not can_predict:
+                                st.error("⏰ O prazo para palpites já encerrou!")
+                            elif primeiro and segundo and primeiro != segundo:
+                                if pred:
+                                    pred.first_place_team_id = primeiro
+                                    pred.second_place_team_id = segundo
+                                else:
+                                    pred = GroupPrediction(
+                                        user_id=st.session_state.user['id'],
+                                        group_name=grupo,
+                                        first_place_team_id=primeiro,
+                                        second_place_team_id=segundo
+                                    )
+                                    session.add(pred)
+                                session.commit()
+                                st.success("Palpite salvo!")
                             else:
-                                pred = GroupPrediction(
-                                    user_id=st.session_state.user['id'],
-                                    group_name=grupo,
-                                    first_place_team_id=primeiro,
-                                    second_place_team_id=segundo
-                                )
-                                session.add(pred)
-                            session.commit()
-                            st.success("Palpite salvo!")
-                        else:
-                            st.error("Selecione dois times diferentes!")
+                                st.error("Selecione dois times diferentes!")
 
 # =============================================================================
 # PÁGINA DE PALPITES - PÓDIO
@@ -4232,20 +4234,22 @@ def page_palpites_participantes():
         if not group_preds:
             st.info("Este participante não registrou palpites de grupos.")
         else:
-            # Exibe em grade de 3 colunas
-            cols = st.columns(3)
-            for idx, grupo in enumerate(GRUPOS):
-                with cols[idx % 3]:
-                    pred = group_preds_dict.get(grupo)
-                    st.markdown(f"**Grupo {grupo}**")
-                    if pred and pred.first_place_team_id:
-                        first_name = f"{pred.first_place_team.flag} {pred.first_place_team.name}" if pred.first_place_team else "Não definido"
-                        second_name = f"{pred.second_place_team.flag} {pred.second_place_team.name}" if pred.second_place_team else "Não definido"
-                        st.markdown(f"1º: {first_name}")
-                        st.markdown(f"2º: {second_name}")
-                    else:
-                        st.markdown("*Sem palpite*")
-                    st.markdown("---")
+            # Exibe em grade de 3 colunas (linhas independentes para mobile)
+            for row_start in range(0, len(GRUPOS), 3):
+                grupo_row = GRUPOS[row_start:row_start + 3]
+                cols = st.columns(len(grupo_row))
+                for col_idx, grupo in enumerate(grupo_row):
+                    with cols[col_idx]:
+                        pred = group_preds_dict.get(grupo)
+                        st.markdown(f"**Grupo {grupo}**")
+                        if pred and pred.first_place_team_id:
+                            first_name = f"{pred.first_place_team.flag} {pred.first_place_team.name}" if pred.first_place_team else "Não definido"
+                            second_name = f"{pred.second_place_team.flag} {pred.second_place_team.name}" if pred.second_place_team else "Não definido"
+                            st.markdown(f"1º: {first_name}")
+                            st.markdown(f"2º: {second_name}")
+                        else:
+                            st.markdown("*Sem palpite*")
+                        st.markdown("---")
         
         st.divider()
         
