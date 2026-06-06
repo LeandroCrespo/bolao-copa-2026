@@ -319,22 +319,35 @@ def check_pre_copa_missing_predictions(cur) -> list[str]:
         if feitos < 12:
             grupos_incompletos.append((name, feitos))
 
+    if sem_podio or grupos_incompletos:
+        prazo_str = copa_start.strftime('%d/%m/%Y às %H:%M')
+        alerts.append(
+            f"⏰ <b>Copa começa em {dias_ate_copa} dia(s) — {prazo_str}!</b>\n"
+            f"Após esse horário, os palpites de Grupos e Pódio serão bloqueados automaticamente."
+        )
+
     if sem_podio:
-        nomes = ", ".join(sem_podio)
+        nomes = "\n   • ".join(sem_podio)
         alerts.append(
-            f"🏆 <b>Palpite de Pódio não salvo</b> ({len(sem_podio)}/{len(users)}):\n"
-            f"   {nomes}"
+            f"🏆 <b>Palpite de Pódio pendente ({len(sem_podio)}/{len(users)} participantes):</b>\n"
+            f"   • {nomes}"
         )
+
     if grupos_incompletos:
-        detalhe = ", ".join(f"{n} ({f}/12)" for n, f in grupos_incompletos)
+        detalhe = "\n   • ".join(f"{n} — {f} de 12 grupos" for n, f in grupos_incompletos)
         alerts.append(
-            f"📋 <b>Palpites de Grupos incompletos</b>:\n"
-            f"   {detalhe}"
+            f"📋 <b>Palpites de Classificação dos Grupos pendentes:</b>\n"
+            f"   • {detalhe}"
         )
+
     if sem_podio or grupos_incompletos:
         alerts.append(
-            f"⏰ Prazo: {copa_start.strftime('%d/%m/%Y às %H:%M')} — "
-            f"faltam {dias_ate_copa} dia(s)!"
+            "ℹ️ <b>Como salvar:</b>\n"
+            "   1. Acesse o sistema do Bolão\n"
+            "   2. No menu lateral, clique em <b>Palpites Grupos</b> e/ou <b>Palpites Pódio</b>\n"
+            "   3. Escolha suas seleções e clique em 💾 Salvar\n\n"
+            "Se você está aguardando para palpitar mais próximo do início da Copa, tudo bem! "
+            "Este é apenas um lembrete. Mas se esqueceu, acesse agora para não perder o prazo. 😊"
         )
     return alerts
 
