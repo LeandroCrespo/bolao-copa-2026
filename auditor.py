@@ -310,14 +310,15 @@ def check_pre_copa_missing_predictions(cur) -> list[str]:
             sem_podio.append(name)
 
         cur.execute("""
-            SELECT COUNT(DISTINCT group_name) FROM group_predictions
+            SELECT DISTINCT group_name FROM group_predictions
             WHERE user_id = %s
               AND first_place_team_id IS NOT NULL
               AND second_place_team_id IS NOT NULL
         """, (user_id,))
-        feitos = cur.fetchone()[0]
-        if feitos < 12:
-            grupos_incompletos.append((name, feitos))
+        feitos = {r[0] for r in cur.fetchall()}
+        faltando = sorted(set("ABCDEFGHIJKL") - feitos)
+        if faltando:
+            grupos_incompletos.append((name, len(feitos), faltando))
 
     if sem_podio or grupos_incompletos:
         prazo_str = copa_start.strftime('%d/%m/%Y às %H:%M')
@@ -334,7 +335,13 @@ def check_pre_copa_missing_predictions(cur) -> list[str]:
         )
 
     if grupos_incompletos:
-        detalhe = "\n   • ".join(f"{n} — {f} de 12 grupos" for n, f in grupos_incompletos)
+        linhas_grupos = []
+        for n, feitos, faltando in grupos_incompletos:
+            if feitos == 0:
+                linhas_grupos.append(f"{n} — nenhum salvo (A–L)")
+            else:
+                linhas_grupos.append(f"{n} — falta(m): {', '.join(faltando)}")
+        detalhe = "\n   • ".join(linhas_grupos)
         alerts.append(
             f"📋 <b>Palpites de Classificação dos Grupos pendentes:</b>\n"
             f"   • {detalhe}"
