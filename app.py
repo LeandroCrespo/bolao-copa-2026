@@ -1615,64 +1615,103 @@ def page_palpites_grupos():
                         st.caption("⚠️ Sugestão: Você pode usar essa classificação ou escolher manualmente")
                         st.divider()
 
-                    with st.form(f"grupo_{grupo}"):
-                        # Define valores padrão baseados na classificação sugerida ou palpite existente
-                        default_first = None
-                        default_second = None
+                    # Define valores padrão baseados na classificação sugerida ou palpite existente
+                    default_first = None
+                    default_second = None
 
-                        if pred:
-                            default_first = pred.first_place_team_id
-                            default_second = pred.second_place_team_id
-                        elif standings and len(standings) >= 2:
-                            default_first = standings[0]['team'].id
-                            default_second = standings[1]['team'].id
+                    if pred:
+                        default_first = pred.first_place_team_id
+                        default_second = pred.second_place_team_id
+                    elif standings and len(standings) >= 2:
+                        default_first = standings[0]['team'].id
+                        default_second = standings[1]['team'].id
 
-                        primeiro = st.selectbox(
-                            "1º Lugar",
-                            options=team_ids,
-                            format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
-                            index=team_ids.index(default_first) if default_first and default_first in team_ids else 0,
-                            key=f"g{grupo}_1"
-                        )
+                    primeiro = st.selectbox(
+                        "1º Lugar",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(default_first) if default_first and default_first in team_ids else 0,
+                        key=f"g{grupo}_1",
+                        disabled=not can_predict
+                    )
 
-                        segundo = st.selectbox(
-                            "2º Lugar",
-                            options=team_ids,
-                            format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
-                            index=team_ids.index(default_second) if default_second and default_second in team_ids else 0,
-                            key=f"g{grupo}_2"
-                        )
+                    segundo = st.selectbox(
+                        "2º Lugar",
+                        options=team_ids,
+                        format_func=lambda x: team_options.get(x, "Selecione") if x else "Selecione",
+                        index=team_ids.index(default_second) if default_second and default_second in team_ids else 0,
+                        key=f"g{grupo}_2",
+                        disabled=not can_predict
+                    )
 
-                        # Mostra indicação de palpite salvo
-                        if pred:
-                            data_salvo = pred.updated_at or pred.created_at
-                            if data_salvo:
-                                import pytz
-                                tz_brazil = pytz.timezone('America/Sao_Paulo')
-                                if data_salvo.tzinfo is None:
-                                    data_salvo = pytz.utc.localize(data_salvo)
-                                data_brazil = data_salvo.astimezone(tz_brazil)
-                                st.success(f"✅ Salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
+                    # Mostra indicação de palpite salvo
+                    if pred:
+                        data_salvo = pred.updated_at or pred.created_at
+                        if data_salvo:
+                            import pytz
+                            tz_brazil = pytz.timezone('America/Sao_Paulo')
+                            if data_salvo.tzinfo is None:
+                                data_salvo = pytz.utc.localize(data_salvo)
+                            data_brazil = data_salvo.astimezone(tz_brazil)
+                            st.success(f"✅ Salvo em {data_brazil.strftime('%d/%m/%Y às %H:%M')}")
 
-                        if st.form_submit_button("💾 Salvar", disabled=not can_predict):
-                            if not can_predict:
-                                st.error("⏰ O prazo para palpites já encerrou!")
-                            elif primeiro and segundo and primeiro != segundo:
-                                if pred:
-                                    pred.first_place_team_id = primeiro
-                                    pred.second_place_team_id = segundo
-                                else:
-                                    pred = GroupPrediction(
-                                        user_id=st.session_state.user['id'],
-                                        group_name=grupo,
-                                        first_place_team_id=primeiro,
-                                        second_place_team_id=segundo
-                                    )
-                                    session.add(pred)
-                                session.commit()
-                                st.success("Palpite salvo!")
+                    if can_predict and st.button("💾 Salvar", key=f"save_g{grupo}"):
+                        if primeiro and segundo and primeiro != segundo:
+                            if pred:
+                                pred.first_place_team_id = primeiro
+                                pred.second_place_team_id = segundo
                             else:
-                                st.error("Selecione dois times diferentes!")
+                                pred = GroupPrediction(
+                                    user_id=st.session_state.user['id'],
+                                    group_name=grupo,
+                                    first_place_team_id=primeiro,
+                                    second_place_team_id=segundo
+                                )
+                                session.add(pred)
+                            session.commit()
+                            st.success("Palpite salvo!")
+                            st.rerun()
+                        else:
+                            st.error("Selecione dois times diferentes!")
+
+        if can_predict:
+            st.divider()
+            st.markdown("### 💾 Salvar Todos os Grupos de Uma Vez")
+            st.caption("Após escolher o 1º e 2º lugar de cada grupo acima, clique aqui para salvar tudo de uma vez")
+            if st.button("✅ Salvar Todos os Grupos", use_container_width=True, type="primary", key="save_all_grupos"):
+                salvos = 0
+                erros = []
+                for _g in GRUPOS:
+                    _p1 = st.session_state.get(f"g{_g}_1")
+                    _p2 = st.session_state.get(f"g{_g}_2")
+                    if _p1 and _p2 and _p1 != _p2:
+                        _pred_g = session.query(GroupPrediction).filter_by(
+                            user_id=st.session_state.user['id'],
+                            group_name=_g
+                        ).first()
+                        if _pred_g:
+                            _pred_g.first_place_team_id = _p1
+                            _pred_g.second_place_team_id = _p2
+                        else:
+                            _pred_g = GroupPrediction(
+                                user_id=st.session_state.user['id'],
+                                group_name=_g,
+                                first_place_team_id=_p1,
+                                second_place_team_id=_p2
+                            )
+                            session.add(_pred_g)
+                        salvos += 1
+                    elif _p1 and _p2 and _p1 == _p2:
+                        erros.append(_g)
+                session.commit()
+                _now_str = get_brazil_time().strftime('%d/%m/%Y às %H:%M')
+                if salvos > 0:
+                    st.success(f"✅ {salvos}/12 grupo(s) salvos em {_now_str}!")
+                if erros:
+                    st.warning(f"⚠️ Times iguais nos grupos: {', '.join(erros)} — corrija e salve novamente")
+                if salvos == 0 and not erros:
+                    st.info("Selecione 1º e 2º lugar diferentes em cada grupo antes de salvar.")
+                st.rerun()
 
 # =============================================================================
 # PÁGINA DE PALPITES - PÓDIO
