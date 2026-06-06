@@ -233,6 +233,73 @@ def update_match_live(conn, match_id, team1_score, team2_score):
     return updated > 0
 
 
+def score_finished_match(conn, match_id, team1_score, team2_score):
+    """Calcula e salva pontos para todos os palpites de um jogo finalizado."""
+    cursor = conn.cursor()
+
+    # Busca config de pontuação do banco (com defaults caso não esteja configurado)
+    cursor.execute("""
+        SELECT key, value FROM config
+        WHERE key IN ('pontos_placar_exato','pontos_resultado_gols',
+                      'pontos_resultado','pontos_gols','pontos_nenhum')
+    """)
+    config = {row[0]: int(row[1]) for row in cursor.fetchall()}
+    pts_exato    = config.get('pontos_placar_exato', 20)
+    pts_res_gols = config.get('pontos_resultado_gols', 15)
+    pts_res      = config.get('pontos_resultado', 10)
+    pts_gols     = config.get('pontos_gols', 5)
+    pts_nenhum   = config.get('pontos_nenhum', 0)
+
+    # Busca todos os palpites deste jogo
+    cursor.execute("""
+        SELECT id, pred_team1_score, pred_team2_score
+        FROM predictions
+        WHERE match_id = %s
+          AND pred_team1_score IS NOT NULL
+          AND pred_team2_score IS NOT NULL
+    """, (match_id,))
+    preds = cursor.fetchall()
+
+    if not preds:
+        cursor.close()
+        return 0
+
+    real_result = 'team1' if team1_score > team2_score else ('team2' if team1_score < team2_score else 'draw')
+
+    updated = 0
+    for pred_id, p1, p2 in preds:
+        pred_result = 'team1' if p1 > p2 else ('team2' if p1 < p2 else 'draw')
+        acertou_resultado = pred_result == real_result
+        acertou_p1 = p1 == team1_score
+        acertou_p2 = p2 == team2_score
+
+        if acertou_p1 and acertou_p2:
+            pts, tipo, desc = pts_exato, 'placar_exato', 'Placar exato!'
+        elif acertou_resultado and (acertou_p1 or acertou_p2):
+            pts, tipo, desc = pts_res_gols, 'resultado_gols', 'Resultado + gols de um time'
+        elif acertou_resultado:
+            pts, tipo, desc = pts_res, 'resultado', 'Resultado correto'
+        elif acertou_p1 or acertou_p2:
+            pts, tipo, desc = pts_gols, 'gols', 'Gols de um time'
+        else:
+            pts, tipo, desc = pts_nenhum, 'nenhum', 'Nao pontuou'
+
+        cursor.execute("""
+            UPDATE predictions
+            SET points_awarded = %s,
+                points_type = %s,
+                breakdown = %s
+            WHERE id = %s
+        """, (pts, tipo, desc, pred_id))
+        updated += 1
+
+    conn.commit()
+    cursor.close()
+    if updated > 0:
+        logger.info(f"  Pontuacao calculada para {updated} palpites do jogo #{match_id}")
+    return updated
+
+
 # ============================================================
 # PROPAGAÇÃO DE CONFRONTOS DO MATA-MATA
 # ============================================================
@@ -450,6 +517,7 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
         success = update_match_result(conn, match_id, team1_score, team2_score, 'finished')
         if success:
             logger.info(f"✅ Jogo #{match_num} FINALIZADO: {db_match['team1_code']} {team1_score} x {team2_score} {db_match['team2_code']}")
+            score_finished_match(conn, match_id, team1_score, team2_score)
         return success
 
     # Jogo ao vivo (só atualiza no modo live)
@@ -568,6 +636,25 @@ def run_nightly():
         prop_knockout = propagate_knockout_winners(conn)
         if prop_groups + prop_knockout > 0:
             logger.info(f"Propagados: {prop_groups} de grupo + {prop_knockout} de mata-mata")
+
+        # Garante pontuação de todos os jogos finalizados sem pontuação
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, team1_score, team2_score FROM matches
+            WHERE status = 'finished'
+              AND team1_score IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM predictions p
+                WHERE p.match_id = matches.id
+                  AND p.points_awarded IS NULL
+              )
+        """)
+        unscored = cursor.fetchall()
+        cursor.close()
+        if unscored:
+            logger.info(f"Pontuando {len(unscored)} jogos finalizados sem pontuação")
+            for match_id, s1, s2 in unscored:
+                score_finished_match(conn, match_id, s1, s2)
 
         # Verificar jogos que deveriam ter resultado mas não foram atualizados
         remaining = get_pending_matches(conn)
