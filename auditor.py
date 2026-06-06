@@ -345,7 +345,9 @@ def check_pre_copa_missing_predictions(cur) -> list[str]:
             "ℹ️ <b>Como salvar:</b>\n"
             "   1. Acesse o sistema do Bolão\n"
             "   2. No menu lateral, clique em <b>Palpites Grupos</b> e/ou <b>Palpites Pódio</b>\n"
-            "   3. Escolha suas seleções e clique em 💾 Salvar\n\n"
+            "   3. Escolha suas seleções\n"
+            "   4. Em <b>Palpites Grupos</b>: selecione o 1º e 2º de cada grupo e clique no botão verde ✅ <b>Salvar Todos os Grupos</b> no final da página — salva os 12 grupos de uma vez!\n"
+            "   5. Em <b>Palpites Pódio</b>: escolha Campeão, Vice e 3º Lugar e clique em 💾 <b>Salvar Palpite de Pódio</b>\n\n"
             "Se você está aguardando para palpitar mais próximo do início da Copa, tudo bem! "
             "Este é apenas um lembrete. Mas se esqueceu, acesse agora para não perder o prazo. 😊"
         )
