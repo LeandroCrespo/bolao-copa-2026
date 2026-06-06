@@ -266,6 +266,80 @@ def check_prediction_count_drop(cur) -> list[str]:
     return alerts
 
 
+def check_pre_copa_missing_predictions(cur) -> list[str]:
+    """Quando a Copa começa em até 8 dias, lista quem não salvou pódio/grupos."""
+    alerts = []
+    now = now_brazil()
+
+    cur.execute("SELECT value FROM config WHERE key = 'data_inicio_copa'")
+    row = cur.fetchone()
+    if not row:
+        return alerts
+
+    raw = row[0].strip()
+    copa_start = None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d"):
+        try:
+            copa_start = datetime.strptime(raw, fmt)
+            break
+        except ValueError:
+            continue
+    if not copa_start:
+        return alerts
+
+    dias_ate_copa = (copa_start - now).days
+    if dias_ate_copa > 8 or dias_ate_copa < 0:
+        return alerts
+
+    cur.execute(
+        "SELECT id, name FROM users WHERE active = true AND role != 'admin' ORDER BY name"
+    )
+    users = cur.fetchall()
+
+    sem_podio = []
+    grupos_incompletos = []
+
+    for user_id, name in users:
+        cur.execute("""
+            SELECT id FROM podium_predictions
+            WHERE user_id = %s
+              AND champion_team_id IS NOT NULL
+              AND runner_up_team_id IS NOT NULL
+              AND third_place_team_id IS NOT NULL
+        """, (user_id,))
+        if not cur.fetchone():
+            sem_podio.append(name)
+
+        cur.execute("""
+            SELECT COUNT(DISTINCT group_name) FROM group_predictions
+            WHERE user_id = %s
+              AND first_place_team_id IS NOT NULL
+              AND second_place_team_id IS NOT NULL
+        """, (user_id,))
+        feitos = cur.fetchone()[0]
+        if feitos < 12:
+            grupos_incompletos.append((name, feitos))
+
+    if sem_podio:
+        nomes = ", ".join(sem_podio)
+        alerts.append(
+            f"🏆 <b>Palpite de Pódio não salvo</b> ({len(sem_podio)}/{len(users)}):\n"
+            f"   {nomes}"
+        )
+    if grupos_incompletos:
+        detalhe = ", ".join(f"{n} ({f}/12)" for n, f in grupos_incompletos)
+        alerts.append(
+            f"📋 <b>Palpites de Grupos incompletos</b>:\n"
+            f"   {detalhe}"
+        )
+    if sem_podio or grupos_incompletos:
+        alerts.append(
+            f"⏰ Prazo: {copa_start.strftime('%d/%m/%Y às %H:%M')} — "
+            f"faltam {dias_ate_copa} dia(s)!"
+        )
+    return alerts
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -289,6 +363,7 @@ def main():
     health_alerts, pred_count, group_count, podium_count, user_count = check_db_health(cur)
 
     # --- Todas as verificações ---
+    pre_copa_alerts   = check_pre_copa_missing_predictions(cur)
     upcoming_alerts   = check_upcoming_no_prediction(cur)
     invalid_preds     = check_invalid_predictions(cur)
     duplicate_preds   = check_duplicate_predictions(cur)
@@ -299,7 +374,7 @@ def main():
     conn.commit()
 
     all_alerts = (
-        health_alerts + upcoming_alerts + invalid_preds +
+        health_alerts + pre_copa_alerts + upcoming_alerts + invalid_preds +
         duplicate_preds + invalid_groups + invalid_podium +
         unscored + count_drop
     )
@@ -323,7 +398,7 @@ def main():
     # Envia sempre se houver alertas, ou se --full foi passado
     has_upcoming = bool(upcoming_alerts)
     has_critical  = bool(
-        invalid_preds + duplicate_preds + invalid_groups +
+        pre_copa_alerts + invalid_preds + duplicate_preds + invalid_groups +
         invalid_podium + unscored + count_drop + health_alerts
     )
 
@@ -338,6 +413,10 @@ def main():
     if not all_alerts:
         linhas.append("✅ Sistema saudável — 0 alertas.")
     else:
+        if pre_copa_alerts:
+            linhas.append("─── ⚠️ Atenção: Copa em breve! ───")
+            linhas.extend(pre_copa_alerts)
+            linhas.append("")
         if has_upcoming:
             linhas.append("─── Palpites pendentes ───")
             linhas.extend(upcoming_alerts)
