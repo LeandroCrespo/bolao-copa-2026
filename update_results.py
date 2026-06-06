@@ -304,6 +304,92 @@ def score_finished_match(conn, match_id, team1_score, team2_score):
 # PROPAGAÇÃO DE CONFRONTOS DO MATA-MATA
 # ============================================================
 
+def update_completed_group_results(conn):
+    """
+    Para cada grupo com todos os jogos finalizados, calcula 1º e 2º lugar
+    e atualiza group_results — que alimenta propagate_group_results().
+    """
+    cursor = conn.cursor()
+    updated = 0
+
+    for group in list('ABCDEFGHIJKL'):
+        # Verifica se todos os jogos do grupo estão finalizados
+        cursor.execute("""
+            SELECT COUNT(*) as total,
+                   SUM(CASE WHEN status = 'finished' THEN 1 ELSE 0 END) as finished
+            FROM matches
+            WHERE "group" = %s AND phase = 'Grupos'
+        """, (group,))
+        row = cursor.fetchone()
+        if not row or row[0] == 0 or row[0] != row[1]:
+            continue  # Grupo incompleto ou sem jogos
+
+        # Calcula classificação via SQL (pontos, saldo, gols)
+        cursor.execute("""
+            WITH stats AS (
+                SELECT team1_id AS team_id,
+                       SUM(CASE WHEN team1_score > team2_score THEN 3
+                                WHEN team1_score = team2_score THEN 1
+                                ELSE 0 END) AS pts,
+                       SUM(team1_score - team2_score) AS gd,
+                       SUM(team1_score) AS gf
+                FROM matches
+                WHERE "group" = %s AND phase = 'Grupos' AND status = 'finished'
+                  AND team1_id IS NOT NULL
+                GROUP BY team1_id
+                UNION ALL
+                SELECT team2_id,
+                       SUM(CASE WHEN team2_score > team1_score THEN 3
+                                WHEN team2_score = team1_score THEN 1
+                                ELSE 0 END),
+                       SUM(team2_score - team1_score),
+                       SUM(team2_score)
+                FROM matches
+                WHERE "group" = %s AND phase = 'Grupos' AND status = 'finished'
+                  AND team2_id IS NOT NULL
+                GROUP BY team2_id
+            ),
+            totals AS (
+                SELECT team_id, SUM(pts) AS points, SUM(gd) AS goal_diff, SUM(gf) AS goals_for
+                FROM stats GROUP BY team_id
+            )
+            SELECT team_id FROM totals
+            ORDER BY points DESC, goal_diff DESC, goals_for DESC
+            LIMIT 2
+        """, (group, group))
+
+        top2 = cursor.fetchall()
+        if len(top2) < 2:
+            continue
+
+        first_id, second_id = top2[0][0], top2[1][0]
+
+        # UPDATE se já existe, INSERT se não
+        cursor.execute("SELECT id FROM group_results WHERE group_name = %s", (group,))
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("""
+                UPDATE group_results
+                SET first_place_team_id = %s, second_place_team_id = %s
+                WHERE group_name = %s
+            """, (first_id, second_id, group))
+        else:
+            cursor.execute("""
+                INSERT INTO group_results (group_name, first_place_team_id, second_place_team_id)
+                VALUES (%s, %s, %s)
+            """, (group, first_id, second_id))
+
+        updated += 1
+        logger.info(f"✅ Grupo {group} completo — 1º: {first_id}, 2º: {second_id}")
+
+    if updated > 0:
+        conn.commit()
+        logger.info(f"Resultados de {updated} grupo(s) calculados automaticamente")
+
+    cursor.close()
+    return updated
+
+
 def propagate_knockout_winners(conn):
     """
     Propaga vencedores de jogos finalizados do mata-mata para a próxima fase.
@@ -594,6 +680,7 @@ def run_post():
         
         # Propaga confrontos do mata-mata
         if updated > 0:
+            update_completed_group_results(conn)
             prop_groups = propagate_group_results(conn)
             prop_knockout = propagate_knockout_winners(conn)
             if prop_groups + prop_knockout > 0:
@@ -632,6 +719,7 @@ def run_nightly():
         logger.info(f"Total de jogos atualizados na varredura: {updated}")
         
         # Propaga confrontos do mata-mata (sempre na varredura noturna)
+        update_completed_group_results(conn)
         prop_groups = propagate_group_results(conn)
         prop_knockout = propagate_knockout_winners(conn)
         if prop_groups + prop_knockout > 0:
