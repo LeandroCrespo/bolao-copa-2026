@@ -1,0 +1,51 @@
+name: "🔍 VAR — Auditoria do Bolão"
+
+on:
+  schedule:
+    - cron: '*/30 * * 6-7 *'   # A cada 30 min durante a Copa (junho-julho)
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Forçar relatório completo (--full)?'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          pip install psycopg2-binary pytz
+
+      - name: Executar VAR (schedule — modo normal)
+        if: github.event_name == 'schedule'
+        env:
+          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python auditor.py
+
+      - name: Executar VAR (manual — relatório completo)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.full }}" = "true" ]; then
+            python auditor.py --full
+          else
+            python auditor.py
+          fi
