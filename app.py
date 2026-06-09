@@ -1430,6 +1430,33 @@ def page_home():
 # =============================================================================
 # PÁGINA DE PALPITES - JOGOS
 # =============================================================================
+def _save_palpite_jogo(user_id, match_id):
+    """Salva (cria ou atualiza) o palpite de placar do usuário para um jogo,
+    lendo os valores atuais dos campos de gols no session_state.
+    Usado tanto pelo auto-save (on_change) quanto pelo botão Salvar."""
+    gols1 = st.session_state.get(f"gols1_{match_id}")
+    gols2 = st.session_state.get(f"gols2_{match_id}")
+    if gols1 is None or gols2 is None:
+        return
+
+    with session_scope(engine) as session:
+        pred = session.query(Prediction).filter_by(
+            user_id=user_id,
+            match_id=match_id
+        ).first()
+
+        if pred:
+            pred.pred_team1_score = gols1
+            pred.pred_team2_score = gols2
+        else:
+            session.add(Prediction(
+                user_id=user_id,
+                match_id=match_id,
+                pred_team1_score=gols1,
+                pred_team2_score=gols2
+            ))
+
+
 def page_palpites_jogos():
     """Página para fazer palpites nos jogos"""
     render_page_header()
@@ -1524,29 +1551,22 @@ def page_palpites_jogos():
                                 f"Gols {team1_display}",
                                 min_value=0, max_value=20,
                                 value=pred.pred_team1_score if pred else 0,
-                                key=f"gols1_{match.id}"
+                                key=f"gols1_{match.id}",
+                                on_change=_save_palpite_jogo,
+                                args=(st.session_state.user['id'], match.id)
                             )
                         with col2:
                             gols2 = st.number_input(
                                 f"Gols {team2_display}",
                                 min_value=0, max_value=20,
                                 value=pred.pred_team2_score if pred else 0,
-                                key=f"gols2_{match.id}"
+                                key=f"gols2_{match.id}",
+                                on_change=_save_palpite_jogo,
+                                args=(st.session_state.user['id'], match.id)
                             )
-                        
+
                         if st.button("💾 Salvar Palpite", key=f"save_{match.id}"):
-                            if pred:
-                                pred.pred_team1_score = gols1
-                                pred.pred_team2_score = gols2
-                            else:
-                                pred = Prediction(
-                                    user_id=st.session_state.user['id'],
-                                    match_id=match.id,
-                                    pred_team1_score=gols1,
-                                    pred_team2_score=gols2
-                                )
-                                session.add(pred)
-                            session.commit()
+                            _save_palpite_jogo(st.session_state.user['id'], match.id)
                             st.success("✅ Palpite salvo com sucesso!")
                             st.rerun()
                     else:
