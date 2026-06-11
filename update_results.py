@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 # CONFIGURAÇÃO
 # ============================================================
 
-API_KEY = os.environ.get('API_FOOTBALL_KEY', '')
-NEON_CONN = os.environ.get('NEON_CONNECTION_STRING', '')
+API_KEY = os.environ.get('API_FOOTBALL_KEY', '').strip()
+NEON_CONN = os.environ.get('NEON_CONNECTION_STRING', '').strip()
 API_BASE_URL = 'https://v3.football.api-sports.io'
 LEAGUE_ID = 1  # FIFA World Cup
 SEASON = 2026
