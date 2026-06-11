@@ -1,0 +1,25 @@
+name: "🔍 Diagnóstico API-Football"
+on:
+  workflow_dispatch:
+jobs:
+  api-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar status da conta API-Football
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: |
+          curl -s -H "x-apisports-key: ${API_FOOTBALL_KEY}" \
+            https://v3.football.api-sports.io/status \
+            | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          r = d.get('response', {})
+          sub = r.get('subscription', {})
+          req = r.get('requests', {})
+          print('Plano:', sub.get('plan'))
+          print('Ativo:', sub.get('active'))
+          print('Expira em:', sub.get('end'))
+          print('Requisicoes hoje:', req.get('current'))
+          print('Limite diario:', req.get('limit_day'))
+          "
