@@ -509,16 +509,19 @@ st.markdown("""
 
     /* Card de jogo ao vivo */
     .live-match-card {
-        background: linear-gradient(135deg, #3d0000, #7a0000);
+        background: linear-gradient(135deg, #ffe3e3, #ffcccc);
         border: 2px solid #ff4444;
         border-radius: 10px;
         padding: 12px 20px;
         margin: 8px 0;
         text-align: center;
-        color: white;
+        color: #7a0000;
     }
-    .live-badge { font-size: 0.8rem; color: #ff9999; }
-    .live-score { font-size: 2rem; font-weight: bold; margin: 0 16px; color: #ffdd00; }
+    .live-match-card strong, .live-match-card span {
+        color: #7a0000 !important;
+    }
+    .live-badge { font-size: 0.8rem; font-weight: bold; color: #cc0000 !important; }
+    .live-score { font-size: 2rem; font-weight: bold; margin: 0 16px; color: #b30000 !important; }
 
     /* Cards de estatísticas/métricas */
     [data-testid="stMetric"] {
