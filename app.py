@@ -1321,6 +1321,35 @@ def page_login():
 # =============================================================================
 # PÁGINA INICIAL (DASHBOARD)
 # =============================================================================
+@st.fragment(run_every="20s")
+def _live_jogos_home_fragment():
+    """Seção 'Jogos ao Vivo' da home - atualiza sozinha a cada 20s."""
+    from live_scoring import get_ongoing_matches as _get_ongoing
+
+    _now_br = get_brazil_time().replace(tzinfo=None)
+    with session_scope(engine) as session:
+        _jogos_live = [m for m in _get_ongoing(session) if m['is_live']]
+
+    if _jogos_live:
+        st.markdown("### 🔴 Jogos ao Vivo")
+        for _m in _jogos_live:
+            _elapsed = max(0, int((_now_br - _m['datetime']).total_seconds() / 60))
+            _s1 = _m['team1_score'] if _m['team1_score'] is not None else '-'
+            _s2 = _m['team2_score'] if _m['team2_score'] is not None else '-'
+            st.markdown(f"""
+            <div class="live-match-card">
+                <span class="live-badge">🔴 AO VIVO &nbsp;{_elapsed}'</span><br>
+                <strong>{_m['team1']}</strong>
+                <span class="live-score">{_s1} – {_s2}</span>
+                <strong>{_m['team2']}</strong>
+            </div>
+            """, unsafe_allow_html=True)
+        if st.button("📺 Ver detalhes ao vivo", key="btn_live_home"):
+            st.session_state.page = 'visualizacao_ao_vivo'
+            st.rerun(scope="app")
+        st.divider()
+
+
 def page_home():
     """Página inicial com resumo do bolão"""
     # Cabeçalho padrão
@@ -1355,27 +1384,7 @@ def page_home():
         st.divider()
 
         # Seção de jogos ao vivo (só aparece quando há jogo em andamento)
-        from live_scoring import get_ongoing_matches as _get_ongoing
-        _now_br = get_brazil_time().replace(tzinfo=None)
-        _jogos_live = [m for m in _get_ongoing(session) if m['is_live']]
-        if _jogos_live:
-            st.markdown("### 🔴 Jogos ao Vivo")
-            for _m in _jogos_live:
-                _elapsed = max(0, int((_now_br - _m['datetime']).total_seconds() / 60))
-                _s1 = _m['team1_score'] if _m['team1_score'] is not None else '-'
-                _s2 = _m['team2_score'] if _m['team2_score'] is not None else '-'
-                st.markdown(f"""
-                <div class="live-match-card">
-                    <span class="live-badge">🔴 AO VIVO &nbsp;{_elapsed}'</span><br>
-                    <strong>{_m['team1']}</strong>
-                    <span class="live-score">{_s1} – {_s2}</span>
-                    <strong>{_m['team2']}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-            if st.button("📺 Ver detalhes ao vivo", key="btn_live_home"):
-                st.session_state.page = 'visualizacao_ao_vivo'
-                st.rerun()
-            st.divider()
+        _live_jogos_home_fragment()
 
         col1, col2 = st.columns(2)
 
@@ -2213,6 +2222,188 @@ def page_dicas():
 # =============================================================================
 # PÁGINA DE RANKING
 # =============================================================================
+@st.fragment(run_every="60s")
+def _ranking_live_fragment(qtd_rebaixados):
+    """Podio + ranking completo - atualiza sozinho a cada 60s."""
+    ranking = cached_ranking(engine)
+
+    if not ranking:
+        st.info("Nenhum participante no ranking ainda.")
+        return
+
+    # Adiciona marca d'água do logo Copa 2026
+    st.markdown('<div class="ranking-watermark"></div>', unsafe_allow_html=True)
+        
+    # ========================================
+    # PÓDIO - TOP 3
+    # ========================================
+    st.subheader("🥇 Pódio")
+        
+    if len(ranking) >= 3:
+        primeiro = ranking[0]
+        segundo = ranking[1]
+        terceiro = ranking[2]
+
+        # ---- BANNER DO CAMPEÃO ----
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #FFE55C 0%, #FFD700 25%, #FFC200 50%, #FFA500 75%, #FF8C00 100%);
+            border-radius: 18px;
+            padding: 28px 20px 22px 20px;
+            text-align: center;
+            margin: 10px 0 18px 0;
+            box-shadow: 0 8px 30px rgba(255,165,0,0.5), 0 0 0 1px rgba(255,215,0,0.8);
+            border: 3px solid #B8860B;
+            position: relative;
+            overflow: hidden;
+        ">
+            <div style="font-size:0.8rem; font-weight:800; letter-spacing:4px; color:#7a4a00; text-transform:uppercase; margin-bottom:10px;">&#9733; Campeão do Bolão &#9733;</div>
+            <img src="https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/taca_copa_v2.png"
+                 style="height:110px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.35)); margin: 4px 0 10px 0;"
+                 alt="Taça Copa do Mundo" />
+            <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}</div>
+            <div style="display:inline-block; background: linear-gradient(135deg, #1E3A5F, #2d5a87); color:#FFFFFF; font-size:1.2rem; font-weight:900; padding: 6px 28px; border-radius:30px; margin-top:4px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);">{primeiro['total_pontos']} pts</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ---- 2º e 3º LUGAR ----
+        st.markdown('<div style="margin-top:12px;"></div>', unsafe_allow_html=True)
+        col_2, col_3 = st.columns(2)
+
+        with col_2:
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
+                border-radius: 14px;
+                padding: 18px 14px;
+                text-align: center;
+                border: 2px solid #C0C0C0;
+                box-shadow: 0 4px 15px rgba(192,192,192,0.4);
+            ">
+                <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#555; text-transform:uppercase; margin-bottom:8px;">2º Lugar</div>
+                <div style="font-size:2.2rem; margin: 4px 0;">&#129352;</div>
+                <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{segundo['nome']}</div>
+                <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{segundo['total_pontos']} pts</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_3:
+            st.markdown(f"""
+            <style>
+                @media (max-width: 640px) {{
+                    .podio-3-lugar {{ margin-top: 14px !important; }}
+                }}
+            </style>
+            <div class="podio-3-lugar" style="
+                background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
+                border-radius: 14px;
+                padding: 18px 14px;
+                text-align: center;
+                border: 2px solid #CD7F32;
+                box-shadow: 0 4px 15px rgba(205,127,50,0.4);
+            ">
+                <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#7a4a00; text-transform:uppercase; margin-bottom:8px;">3º Lugar</div>
+                <div style="font-size:2.2rem; margin: 4px 0;">&#129353;</div>
+                <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{terceiro['nome']}</div>
+                <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{terceiro['total_pontos']} pts</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+    elif len(ranking) > 0:
+        # Menos de 3 participantes - mostra o que tem
+        for i, r in enumerate(ranking[:3]):
+            medalha = ["🥇", "🥈", "🥉"][i]
+            st.markdown(f"**{medalha} {r['nome']}** - {r['total_pontos']} pts")
+        
+    st.divider()
+        
+    # ========================================
+    # RANKING COMPLETO
+    # ========================================
+    st.subheader("📊 Classificação Completa")
+        
+    # Determina a posição de início da zona de rebaixamento
+    total_participantes = len(ranking)
+    inicio_rebaixamento = total_participantes - qtd_rebaixados
+        
+    # Mostra ranking - separado em duas partes (antes e depois da zona de rebaixamento)
+    ranking_html_normal = ""
+    ranking_html_rebaixados = ""
+        
+    for i, r in enumerate(ranking):
+        posicao = i + 1
+        nome = r['nome']
+        pontos = r['total_pontos']
+            
+        # Verifica se está na zona de rebaixamento
+        is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
+            
+        # Classe CSS - adiciona classe de posição para os 3 primeiros
+        if is_rebaixado:
+            row_class = "ranking-row-rebaixado"
+        elif posicao <= 3:
+            row_class = f"ranking-row-{posicao}"
+        else:
+            row_class = ""
+            
+        # Ícone de posição
+        if posicao == 1:
+            icone = "🥇"
+        elif posicao == 2:
+            icone = "🥈"
+        elif posicao == 3:
+            icone = "🥉"
+        elif is_rebaixado:
+            icone = f"⬇️ {posicao}º"
+        else:
+            icone = f"{posicao}º"
+            
+        row_html = f'''
+        <div class="ranking-row {row_class}">
+            <div class="ranking-posicao">{icone}</div>
+            <div class="ranking-nome">{nome}</div>
+            <div class="ranking-pontos">{pontos} pts</div>
+        </div>
+        '''
+            
+        if is_rebaixado:
+            ranking_html_rebaixados += row_html
+        else:
+            ranking_html_normal += row_html
+        
+    # Renderiza ranking normal
+    st.markdown(ranking_html_normal, unsafe_allow_html=True)
+        
+    # Renderiza zona de rebaixamento (se houver)
+    if qtd_rebaixados > 0 and ranking_html_rebaixados:
+        st.warning(f"⚠️ ZONA DE REBAIXAMENTO ({qtd_rebaixados} {'vaga' if qtd_rebaixados == 1 else 'vagas'})")
+        st.markdown(ranking_html_rebaixados, unsafe_allow_html=True)
+        
+    # ========================================
+    # ESTATÍSTICAS ADICIONAIS
+    # ========================================
+    st.divider()
+    st.subheader("📈 Estatísticas")
+        
+    col1, col2, col3, col4 = st.columns(4)
+        
+    with col1:
+        st.metric("👥 Participantes", total_participantes)
+        
+    with col2:
+        if ranking:
+            maior_pontuacao = max(r['total_pontos'] for r in ranking)
+            st.metric("🏆 Maior Pontuação", f"{maior_pontuacao} pts")
+        
+    with col3:
+        if ranking:
+            media = sum(r['total_pontos'] for r in ranking) / len(ranking)
+            st.metric("📊 Média", f"{media:.1f} pts")
+        
+    with col4:
+        st.metric("⬇️ Zona de Rebaixamento", f"{qtd_rebaixados} vagas")
+
+
 def page_ranking():
     """
     Página de ranking com visual aprimorado:
@@ -2566,177 +2757,7 @@ def page_ranking():
 </style>
         """, unsafe_allow_html=True)
         
-        # Adiciona marca d'água do logo Copa 2026
-        st.markdown('<div class="ranking-watermark"></div>', unsafe_allow_html=True)
-        
-        # ========================================
-        # PÓDIO - TOP 3
-        # ========================================
-        st.subheader("🥇 Pódio")
-        
-        if len(ranking) >= 3:
-            primeiro = ranking[0]
-            segundo = ranking[1]
-            terceiro = ranking[2]
-
-            # ---- BANNER DO CAMPEÃO ----
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #FFE55C 0%, #FFD700 25%, #FFC200 50%, #FFA500 75%, #FF8C00 100%);
-                border-radius: 18px;
-                padding: 28px 20px 22px 20px;
-                text-align: center;
-                margin: 10px 0 18px 0;
-                box-shadow: 0 8px 30px rgba(255,165,0,0.5), 0 0 0 1px rgba(255,215,0,0.8);
-                border: 3px solid #B8860B;
-                position: relative;
-                overflow: hidden;
-            ">
-                <div style="font-size:0.8rem; font-weight:800; letter-spacing:4px; color:#7a4a00; text-transform:uppercase; margin-bottom:10px;">&#9733; Campeão do Bolão &#9733;</div>
-                <img src="https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/taca_copa_v2.png"
-                     style="height:110px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.35)); margin: 4px 0 10px 0;"
-                     alt="Taça Copa do Mundo" />
-                <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}</div>
-                <div style="display:inline-block; background: linear-gradient(135deg, #1E3A5F, #2d5a87); color:#FFFFFF; font-size:1.2rem; font-weight:900; padding: 6px 28px; border-radius:30px; margin-top:4px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);">{primeiro['total_pontos']} pts</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # ---- 2º e 3º LUGAR ----
-            st.markdown('<div style="margin-top:12px;"></div>', unsafe_allow_html=True)
-            col_2, col_3 = st.columns(2)
-
-            with col_2:
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%);
-                    border-radius: 14px;
-                    padding: 18px 14px;
-                    text-align: center;
-                    border: 2px solid #C0C0C0;
-                    box-shadow: 0 4px 15px rgba(192,192,192,0.4);
-                ">
-                    <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#555; text-transform:uppercase; margin-bottom:8px;">2º Lugar</div>
-                    <div style="font-size:2.2rem; margin: 4px 0;">&#129352;</div>
-                    <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{segundo['nome']}</div>
-                    <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{segundo['total_pontos']} pts</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col_3:
-                st.markdown(f"""
-                <style>
-                    @media (max-width: 640px) {{
-                        .podio-3-lugar {{ margin-top: 14px !important; }}
-                    }}
-                </style>
-                <div class="podio-3-lugar" style="
-                    background: linear-gradient(135deg, #E6A86E 0%, #CD7F32 50%, #B8860B 100%);
-                    border-radius: 14px;
-                    padding: 18px 14px;
-                    text-align: center;
-                    border: 2px solid #CD7F32;
-                    box-shadow: 0 4px 15px rgba(205,127,50,0.4);
-                ">
-                    <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#7a4a00; text-transform:uppercase; margin-bottom:8px;">3º Lugar</div>
-                    <div style="font-size:2.2rem; margin: 4px 0;">&#129353;</div>
-                    <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{terceiro['nome']}</div>
-                    <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{terceiro['total_pontos']} pts</div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        elif len(ranking) > 0:
-            # Menos de 3 participantes - mostra o que tem
-            for i, r in enumerate(ranking[:3]):
-                medalha = ["🥇", "🥈", "🥉"][i]
-                st.markdown(f"**{medalha} {r['nome']}** - {r['total_pontos']} pts")
-        
-        st.divider()
-        
-        # ========================================
-        # RANKING COMPLETO
-        # ========================================
-        st.subheader("📊 Classificação Completa")
-        
-        # Determina a posição de início da zona de rebaixamento
-        total_participantes = len(ranking)
-        inicio_rebaixamento = total_participantes - qtd_rebaixados
-        
-        # Mostra ranking - separado em duas partes (antes e depois da zona de rebaixamento)
-        ranking_html_normal = ""
-        ranking_html_rebaixados = ""
-        
-        for i, r in enumerate(ranking):
-            posicao = i + 1
-            nome = r['nome']
-            pontos = r['total_pontos']
-            
-            # Verifica se está na zona de rebaixamento
-            is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
-            
-            # Classe CSS - adiciona classe de posição para os 3 primeiros
-            if is_rebaixado:
-                row_class = "ranking-row-rebaixado"
-            elif posicao <= 3:
-                row_class = f"ranking-row-{posicao}"
-            else:
-                row_class = ""
-            
-            # Ícone de posição
-            if posicao == 1:
-                icone = "🥇"
-            elif posicao == 2:
-                icone = "🥈"
-            elif posicao == 3:
-                icone = "🥉"
-            elif is_rebaixado:
-                icone = f"⬇️ {posicao}º"
-            else:
-                icone = f"{posicao}º"
-            
-            row_html = f'''
-            <div class="ranking-row {row_class}">
-                <div class="ranking-posicao">{icone}</div>
-                <div class="ranking-nome">{nome}</div>
-                <div class="ranking-pontos">{pontos} pts</div>
-            </div>
-            '''
-            
-            if is_rebaixado:
-                ranking_html_rebaixados += row_html
-            else:
-                ranking_html_normal += row_html
-        
-        # Renderiza ranking normal
-        st.markdown(ranking_html_normal, unsafe_allow_html=True)
-        
-        # Renderiza zona de rebaixamento (se houver)
-        if qtd_rebaixados > 0 and ranking_html_rebaixados:
-            st.warning(f"⚠️ ZONA DE REBAIXAMENTO ({qtd_rebaixados} {'vaga' if qtd_rebaixados == 1 else 'vagas'})")
-            st.markdown(ranking_html_rebaixados, unsafe_allow_html=True)
-        
-        # ========================================
-        # ESTATÍSTICAS ADICIONAIS
-        # ========================================
-        st.divider()
-        st.subheader("📈 Estatísticas")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("👥 Participantes", total_participantes)
-        
-        with col2:
-            if ranking:
-                maior_pontuacao = max(r['total_pontos'] for r in ranking)
-                st.metric("🏆 Maior Pontuação", f"{maior_pontuacao} pts")
-        
-        with col3:
-            if ranking:
-                media = sum(r['total_pontos'] for r in ranking) / len(ranking)
-                st.metric("📊 Média", f"{media:.1f} pts")
-        
-        with col4:
-            st.metric("⬇️ Zona de Rebaixamento", f"{qtd_rebaixados} vagas")
+        _ranking_live_fragment(qtd_rebaixados)
         
         # ========================================
         # CRITÉRIOS DE DESEMPATE
@@ -4273,7 +4294,7 @@ def page_palpites_participantes():
         st.success("✅ A Copa já começou! Os palpites de grupos e pódio estão travados e visíveis para todos.")
         
         # Busca todos os participantes
-        users = session.query(User).filter(User.role == 'player', User.is_active == True).order_by(User.name).all()
+        users = session.query(User).filter(User.role == 'player', User.active == True).order_by(User.name).all()
         
         if not users:
             st.info("Nenhum participante cadastrado.")
@@ -4354,7 +4375,7 @@ def page_palpites_participantes():
         st.subheader("📊 Visão Geral - Pódio de Todos")
         
         all_podium = session.query(PodiumPrediction).join(User).filter(
-            User.role == 'player', User.is_active == True
+            User.role == 'player', User.active == True
         ).all()
         
         if all_podium:
@@ -4382,116 +4403,19 @@ def page_palpites_participantes():
 # =============================================================================
 # PÁGINA DE VISUALIZAÇÃO AO VIVO
 # =============================================================================
-def page_visualizacao_ao_vivo():
-    """
-    Página de visualização em tempo real dos jogos.
-    Mostra palpites de todos os participantes e variação de ranking.
-    Só mostra palpites após o jogo começar.
-    """
+@st.fragment(run_every="15s")
+def _live_view_ao_vivo_fragment(selected_match_id):
+    """Bloco de placar/palpites/ranking ao vivo - atualiza sozinho a cada 15s."""
     import streamlit as st
-    from datetime import datetime
-    import pytz
-    from db import get_session, get_config_value
     from live_scoring import (
-        get_ongoing_matches, get_live_match_predictions, 
+        get_ongoing_matches, get_live_match_predictions,
         calculate_live_ranking, get_podium_zone_info
     )
-    
-    render_page_header()
-    st.header("📺 Visualização ao Vivo")
-    st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
-    
+
     with session_scope(engine) as session:
-        # Pega jogos que já começaram
         matches = get_ongoing_matches(session)
-        
-        if not matches:
-            st.info("Nenhum jogo disponível para visualização ainda.")
-            return
-        
-        # Filtra apenas jogos que já começaram
         started_matches = [m for m in matches if m['has_started']]
-        
-        if not started_matches:
-            st.info("Aguardando início dos jogos...")
-            return
-        
-        # Seletor de jogo
-        st.subheader("🎮 Selecione o Jogo")
-        
-        match_options = {0: "🎯 Todos os jogos"}
-        for match in started_matches:
-            score_display = ""
-            if match['team1_score'] is not None and match['team2_score'] is not None:
-                score_display = f" - {match['team1_score']} x {match['team2_score']}"
-            
-            status_icon = "🔴" if match['is_live'] else "✅"
-            match_label = f"{status_icon} Jogo {match['match_number']}: {match['team1']} vs {match['team2']}{score_display}"
-            match_options[match['id']] = match_label
-        
-        selected_match_id = st.selectbox(
-            "Escolha o jogo:",
-            options=list(match_options.keys()),
-            format_func=lambda x: match_options[x],
-            index=0,
-            key="select_match_live"
-        )
-        
-        # CSS específico para esta página
-        st.markdown("""
-        <style>
-            /* Marca d'água do logo Copa 2026 */
-            .live-watermark {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                width: 350px;
-                height: 350px;
-                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
-                background-size: contain;
-                background-repeat: no-repeat;
-                background-position: center;
-                opacity: 0.05;
-                pointer-events: none;
-                z-index: 0;
-            }
-            
-            /* Corrige texto do selectbox na visualização ao vivo */
-            div[data-testid="stSelectbox"] div[data-baseweb="select"] {
-                background-color: #ffffff !important;
-                border: 1px solid #ccc !important;
-            }
-            div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-                background-color: #ffffff !important;
-                color: #1a1a2e !important;
-            }
-            div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
-                color: #1a1a2e !important;
-            }
-            div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-                color: #1a1a2e !important;
-            }
-            
-            /* Corrige fundo da tabela de palpites */
-            .live-table {
-                background-color: #ffffff !important;
-            }
-            .live-table td {
-                background-color: #ffffff !important;
-                color: #1a1a2e !important;
-            }
-            .live-table tr {
-                background-color: #ffffff !important;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Adiciona marca d'água do logo Copa 2026
-        st.markdown('<div class="live-watermark"></div>', unsafe_allow_html=True)
-        
-        st.divider()
-        
+
         # Se selecionou "Todos os jogos"
         if selected_match_id == 0:
             # Separa jogos em andamento e finalizados
@@ -4934,13 +4858,123 @@ def page_visualizacao_ao_vivo():
         with col2:
             if st.button("🔄 Atualizar", use_container_width=True):
                 st.rerun()
-        
-        # Auto-refresh a cada 30 segundos se o jogo estiver ao vivo
+
+        # Auto-refresh a cada 15 segundos se o jogo estiver ao vivo
         if selected_match['is_live']:
-            st.markdown("<small>🔄 Página atualiza automaticamente a cada 30 segundos</small>", unsafe_allow_html=True)
-            import time
-            time.sleep(30)
-            st.rerun()
+            st.markdown("<small>🔄 Página atualiza automaticamente a cada 15 segundos</small>", unsafe_allow_html=True)
+
+
+def page_visualizacao_ao_vivo():
+    """
+    Página de visualização em tempo real dos jogos.
+    Mostra palpites de todos os participantes e variação de ranking.
+    Só mostra palpites após o jogo começar.
+    """
+    import streamlit as st
+    from datetime import datetime
+    import pytz
+    from db import get_session, get_config_value
+    from live_scoring import (
+        get_ongoing_matches, get_live_match_predictions, 
+        calculate_live_ranking, get_podium_zone_info
+    )
+    
+    render_page_header()
+    st.header("📺 Visualização ao Vivo")
+    st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
+    
+    with session_scope(engine) as session:
+        # Pega jogos que já começaram
+        matches = get_ongoing_matches(session)
+        
+        if not matches:
+            st.info("Nenhum jogo disponível para visualização ainda.")
+            return
+        
+        # Filtra apenas jogos que já começaram
+        started_matches = [m for m in matches if m['has_started']]
+        
+        if not started_matches:
+            st.info("Aguardando início dos jogos...")
+            return
+        
+        # Seletor de jogo
+        st.subheader("🎮 Selecione o Jogo")
+        
+        match_options = {0: "🎯 Todos os jogos"}
+        for match in started_matches:
+            score_display = ""
+            if match['team1_score'] is not None and match['team2_score'] is not None:
+                score_display = f" - {match['team1_score']} x {match['team2_score']}"
+            
+            status_icon = "🔴" if match['is_live'] else "✅"
+            match_label = f"{status_icon} Jogo {match['match_number']}: {match['team1']} vs {match['team2']}{score_display}"
+            match_options[match['id']] = match_label
+        
+        selected_match_id = st.selectbox(
+            "Escolha o jogo:",
+            options=list(match_options.keys()),
+            format_func=lambda x: match_options[x],
+            index=0,
+            key="select_match_live"
+        )
+        
+        # CSS específico para esta página
+        st.markdown("""
+        <style>
+            /* Marca d'água do logo Copa 2026 */
+            .live-watermark {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 350px;
+                height: 350px;
+                background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
+                background-size: contain;
+                background-repeat: no-repeat;
+                background-position: center;
+                opacity: 0.05;
+                pointer-events: none;
+                z-index: 0;
+            }
+            
+            /* Corrige texto do selectbox na visualização ao vivo */
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+                background-color: #ffffff !important;
+                border: 1px solid #ccc !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
+                color: #1a1a2e !important;
+            }
+            div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+                color: #1a1a2e !important;
+            }
+            
+            /* Corrige fundo da tabela de palpites */
+            .live-table {
+                background-color: #ffffff !important;
+            }
+            .live-table td {
+                background-color: #ffffff !important;
+                color: #1a1a2e !important;
+            }
+            .live-table tr {
+                background-color: #ffffff !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Adiciona marca d'água do logo Copa 2026
+        st.markdown('<div class="live-watermark"></div>', unsafe_allow_html=True)
+        
+        st.divider()
+        
+        _live_view_ao_vivo_fragment(selected_match_id)
 
 
 # =============================================================================
@@ -5192,64 +5226,13 @@ def page_resumo_diario():
 # =============================================================================
 # PÁGINA DE RESULTADOS POR GRUPO
 # =============================================================================
-def page_resultados_grupos():
-    """
-    Página que mostra os resultados dos jogos e classificação por grupo.
-    Atualiza em tempo real conforme os resultados são lançados.
-    """
+@st.fragment(run_every="60s")
+def _grupos_standings_fragment(grupos_para_mostrar, view_mode):
+    """Classificacao e jogos por grupo - atualiza sozinho a cada 60s."""
     import pandas as pd
     from group_standings import get_official_group_standings
-    
-    render_page_header()
-    st.header("🏆 Resultados por Grupo")
-    st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
-    
-    # CSS e marca d'água do logo Copa 2026
-    st.markdown("""
-    <style>
-        .grupos-watermark {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 350px;
-            height: 350px;
-            background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-            opacity: 0.05;
-            pointer-events: none;
-            z-index: 0;
-        }
-    </style>
-    <div class="grupos-watermark"></div>
-    """, unsafe_allow_html=True)
-    
+
     with session_scope(engine) as session:
-        # Seletor de grupo
-        grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
-        
-        # Opção para ver todos os grupos ou selecionar um
-        view_mode = st.radio(
-            "Visualização:",
-            ["Todos os Grupos", "Selecionar Grupo"],
-            horizontal=True
-        )
-        
-        if view_mode == "Selecionar Grupo":
-            grupo_selecionado = st.selectbox(
-                "Selecione o Grupo:",
-                grupos,
-                format_func=lambda x: f"Grupo {x}"
-            )
-            grupos_para_mostrar = [grupo_selecionado]
-        else:
-            grupos_para_mostrar = grupos
-        
-        st.divider()
-        
-        # Mostra cada grupo
         for grupo in grupos_para_mostrar:
             with st.expander(f"🏅 Grupo {grupo}", expanded=(view_mode == "Selecionar Grupo")):
                 # Busca classificação do grupo
@@ -5379,6 +5362,67 @@ def page_resultados_grupos():
         - 🟢 Classificado em 1º lugar
         - 🟡 Classificado em 2º lugar
         """)
+
+
+def page_resultados_grupos():
+    """
+    Página que mostra os resultados dos jogos e classificação por grupo.
+    Atualiza em tempo real conforme os resultados são lançados.
+    """
+    import pandas as pd
+    from group_standings import get_official_group_standings
+    
+    render_page_header()
+    st.header("🏆 Resultados por Grupo")
+    st.markdown("Acompanhe a classificação e os jogos de cada grupo da fase de grupos.")
+    
+    # CSS e marca d'água do logo Copa 2026
+    st.markdown("""
+    <style>
+        .grupos-watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 350px;
+            height: 350px;
+            background-image: url('https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/logo_copa2026.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.05;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+    <div class="grupos-watermark"></div>
+    """, unsafe_allow_html=True)
+    
+    with session_scope(engine) as session:
+        # Seletor de grupo
+        grupos = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        
+        # Opção para ver todos os grupos ou selecionar um
+        view_mode = st.radio(
+            "Visualização:",
+            ["Todos os Grupos", "Selecionar Grupo"],
+            horizontal=True
+        )
+        
+        if view_mode == "Selecionar Grupo":
+            grupo_selecionado = st.selectbox(
+                "Selecione o Grupo:",
+                grupos,
+                format_func=lambda x: f"Grupo {x}"
+            )
+            grupos_para_mostrar = [grupo_selecionado]
+        else:
+            grupos_para_mostrar = grupos
+        
+        st.divider()
+        
+        # Mostra cada grupo
+        _grupos_standings_fragment(grupos_para_mostrar, view_mode)
 
 
 # =============================================================================
