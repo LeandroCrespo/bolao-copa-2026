@@ -1,13 +1,20 @@
 name: "⚽ Atualização ao Vivo"
-# Roda a cada 5 minutos durante o período da Copa (11/06 a 19/07/2026)
+# Cobre o periodo da Copa (11/06 a 19/07/2026).
+# O cron do GitHub para */5 min as vezes nao dispara, entao cada execucao
+# (manual ou agendada) roda em loop interno por ~3h, atualizando o placar
+# a cada 3 minutos. Assim, um unico disparo cobre uma partida inteira.
 on:
   schedule:
-    - cron: '*/5 15-23 * 6-7 *'
-    - cron: '*/5 0-5 * 6-7 *'
+    - cron: '*/20 15-23 * 6-7 *'
+    - cron: '*/20 0-5 * 6-7 *'
   workflow_dispatch:
+concurrency:
+  group: update-live
+  cancel-in-progress: true
 jobs:
   update-live:
     runs-on: ubuntu-latest
+    timeout-minutes: 200
     if: >
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'schedule')
@@ -21,9 +28,12 @@ jobs:
       - name: Instalar dependências
         run: |
           pip install requests psycopg2-binary pytz
-      - name: Executar atualização ao vivo
+      - name: Executar atualização ao vivo (loop ~3h)
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
         run: |
-          python update_results.py --mode live
+          for i in $(seq 1 60); do
+            python update_results.py --mode live
+            sleep 180
+          done
