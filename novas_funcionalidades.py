@@ -257,49 +257,70 @@ def render_ranking_evolution_chart(session):
         st.info("📊 Dados insuficientes para o gráfico de evolução.")
         return
     
+    # Seletor para destacar participantes (útil quando há muitas linhas,
+    # especialmente no mobile)
+    all_names = [user_positions[u.id]['name'] for u in users]
+    highlighted = st.multiselect(
+        "🔦 Destacar participantes (vazio = todos coloridos)",
+        all_names,
+        key="rank_evo_highlight"
+    )
+
     # Cria gráfico
     fig = go.Figure()
-    
-    colors = px.colors.qualitative.Set2
-    
+
+    colors = px.colors.qualitative.Dark24
+
     for i, (uid, data) in enumerate(user_positions.items()):
-        color = colors[i % len(colors)]
+        is_dimmed = bool(highlighted) and data['name'] not in highlighted
+        color = 'rgba(180,180,180,0.35)' if is_dimmed else colors[i % len(colors)]
         fig.add_trace(go.Scatter(
             x=dates,
             y=data['positions'],
             mode='lines+markers',
             name=data['name'],
-            line=dict(width=2.5, color=color),
-            marker=dict(size=7, color=color),
-            hovertemplate=f"<b>{data['name']}</b><br>Data: %{{x}}<br>Posição: %{{y}}º<extra></extra>"
+            line=dict(width=1.5 if is_dimmed else 3, color=color),
+            marker=dict(size=5 if is_dimmed else 8, color=color),
+            opacity=1,
+            hovertemplate=f"<b>{data['name']}</b><br>%{{x}} — %{{y}}º lugar<extra></extra>"
         ))
-    
+
+    n_users = len(users)
     fig.update_layout(
-        title='Evolução das Posições no Ranking',
-        xaxis_title='Data',
-        yaxis_title='Posição',
         yaxis=dict(
-            autorange='reversed',  # 1º lugar no topo
-            dtick=1,
-            range=[len(users) + 0.5, 0.5]
+            autorange=False,
+            range=[n_users + 0.5, 0.5],  # 1º lugar no topo
+            tickmode='array',
+            tickvals=list(range(1, n_users + 1)),
+            ticktext=[f"{p}º" for p in range(1, n_users + 1)],
+            title=None,
+            fixedrange=True
         ),
+        xaxis=dict(title=None, fixedrange=True),
         legend=dict(
             orientation='h',
-            yanchor='bottom',
-            y=-0.3,
-            xanchor='center',
-            x=0.5
+            yanchor='top',
+            y=-0.08,
+            xanchor='left',
+            x=0,
+            font=dict(size=11),
+            itemwidth=30
         ),
-        hovermode='x unified',
+        hovermode='closest',
         plot_bgcolor='white',
         paper_bgcolor='white',
-        height=450
+        height=480,
+        margin=dict(l=10, r=10, t=10, b=10)
     )
-    
+
     fig.update_xaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
     fig.update_yaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-    
-    st.plotly_chart(fig, use_container_width=True)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={'displayModeBar': False}
+    )
 
 
 # =============================================================================
