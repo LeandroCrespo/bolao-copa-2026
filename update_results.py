@@ -18,6 +18,7 @@ import json
 import logging
 import requests
 import psycopg2
+import pytz
 from datetime import datetime, timedelta, timezone
 
 # Configurar logging
@@ -747,8 +748,9 @@ def run_nightly():
         # Verificar jogos que deveriam ter resultado mas não foram atualizados
         remaining = get_pending_matches(conn)
         now = datetime.now(timezone.utc)
+        brazil_tz = pytz.timezone('America/Sao_Paulo')
         overdue = [m for m in remaining
-                   if m['datetime'] and m['datetime'].replace(tzinfo=timezone.utc) < now - timedelta(hours=3)]
+                   if m['datetime'] and brazil_tz.localize(m['datetime']).astimezone(timezone.utc) < now - timedelta(hours=3)]
         if overdue:
             logger.warning(f"⚠️ {len(overdue)} jogos com mais de 3h sem resultado:")
             for m in overdue:
