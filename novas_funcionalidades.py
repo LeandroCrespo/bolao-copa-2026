@@ -652,32 +652,34 @@ def render_comparison(session):
         st.info("É necessário pelo menos 2 participantes para comparar.")
         return
     
+    user_options = {u.id: u.name for u in users}
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        user1 = st.selectbox(
+        user1_id = st.selectbox(
             "Participante 1",
-            users,
-            format_func=lambda u: u.name,
+            list(user_options.keys()),
+            format_func=lambda uid: user_options[uid],
             key="comp_user1"
         )
-    
+
     with col2:
-        users_filtered = [u for u in users if u.id != user1.id]
-        user2 = st.selectbox(
+        user2_ids = [uid for uid in user_options if uid != user1_id]
+        user2_id = st.selectbox(
             "Participante 2",
-            users_filtered,
-            format_func=lambda u: u.name,
+            user2_ids,
+            format_func=lambda uid: user_options[uid],
             key="comp_user2"
         )
-    
+
     if st.button("🔍 Comparar", key="btn_compare"):
-        stats1 = get_user_stats(session, user1.id)
-        stats2 = get_user_stats(session, user2.id)
-        
+        stats1 = get_user_stats(session, user1_id)
+        stats2 = get_user_stats(session, user2_id)
+
         ranking = get_ranking(session)
-        pos1 = next((r['posicao'] for r in ranking if r['user_id'] == user1.id), '-')
-        pos2 = next((r['posicao'] for r in ranking if r['user_id'] == user2.id), '-')
+        pos1 = next((r['posicao'] for r in ranking if r['user_id'] == user1_id), '-')
+        pos2 = next((r['posicao'] for r in ranking if r['user_id'] == user2_id), '-')
         
         # Tabela comparativa
         st.markdown(f"""
@@ -710,9 +712,9 @@ def render_comparison(session):
         </style>
         <table class="comp-table">
             <tr>
-                <th>{user1.name}</th>
+                <th>{user_options[user1_id]}</th>
                 <th>Estatística</th>
-                <th>{user2.name}</th>
+                <th>{user_options[user2_id]}</th>
             </tr>
             <tr>
                 <td class="{'comp-winner' if isinstance(pos1, int) and isinstance(pos2, int) and pos1 < pos2 else ''}">{pos1}º</td>
@@ -765,8 +767,8 @@ def render_comparison(session):
         ).order_by(desc(Match.datetime)).limit(20).all()
         
         for match in matches:
-            pred1 = session.query(Prediction).filter_by(user_id=user1.id, match_id=match.id).first()
-            pred2 = session.query(Prediction).filter_by(user_id=user2.id, match_id=match.id).first()
+            pred1 = session.query(Prediction).filter_by(user_id=user1_id, match_id=match.id).first()
+            pred2 = session.query(Prediction).filter_by(user_id=user2_id, match_id=match.id).first()
             
             t1 = match.team1.flag + " " + match.team1.name if match.team1 else match.team1_code
             t2 = match.team2.flag + " " + match.team2.name if match.team2 else match.team2_code
