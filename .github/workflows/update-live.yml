@@ -1,12 +1,13 @@
 name: "⚽ Atualização ao Vivo"
-# Cobre o periodo da Copa (11/06 a 19/07/2026).
-# O cron do GitHub para */5 min as vezes nao dispara, entao cada execucao
-# (manual ou agendada) roda em loop interno por ~3h, atualizando o placar
-# a cada 3 minutos. Assim, um unico disparo cobre uma partida inteira.
+# Cobre o periodo da Copa (11/06 a 19/07/2026), 24h por dia.
+# O cron do GitHub e impreciso e pode nao disparar a cada 15min, entao cada
+# execucao (manual ou agendada) roda em loop interno por ~3h, atualizando o
+# placar a cada 3 minutos. Assim, basta UM disparo do cron cair dentro da
+# janela de qualquer partida (de qualquer dia) para cobri-la inteira,
+# sem depender de chat aberto ou de jogo especifico.
 on:
   schedule:
-    - cron: '*/20 15-23 * 6-7 *'
-    - cron: '*/20 0-5 * 6-7 *'
+    - cron: '*/15 * * 6-7 *'
   workflow_dispatch:
 concurrency:
   group: update-live
