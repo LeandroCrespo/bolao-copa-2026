@@ -111,69 +111,62 @@ def get_daily_scorers(session, target_date=None):
 
 def calculate_ranking_changes(session, target_date=None):
     """
-    Calcula as maiores variações de ranking do dia.
-    
+    Calcula as maiores variações de ranking do dia selecionado.
+
+    Compara duas "fotos" reais do ranking acumulado:
+    - posição ao FIM do dia anterior (jogos até a meia-noite do dia selecionado)
+    - posição ao FIM do dia selecionado
+    Assim a variação se mantém consistente de um dia para o outro, mesmo
+    consultando datas passadas.
+
     Args:
         session: Sessão do banco de dados
         target_date: Data alvo (datetime). Se None, usa hoje.
-        
+
     Returns:
         Lista com maiores subidas e quedas
     """
-    # Para calcular variação, precisaríamos ter um histórico de ranking
-    # Por enquanto, vamos simular comparando ranking atual com pontos do dia
-    
-    current_ranking = get_ranking(session)
-    daily_scorers = get_daily_scorers(session, target_date)
-    
-    if not daily_scorers['top']:
+    if target_date is None:
+        target_date = get_brazil_time()
+
+    # Normaliza para naive em horário de Brasília (padrão do banco)
+    brazil_tz = pytz.timezone('America/Sao_Paulo')
+    if target_date.tzinfo is not None:
+        target_date = target_date.astimezone(brazil_tz).replace(tzinfo=None)
+
+    day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+
+    # Pontos do dia de TODOS os participantes (não só top/bottom 3)
+    matches = get_matches_by_date(session, target_date)
+    finished_matches = [m for m in matches if m.status == 'finished' and m.team1_score is not None]
+
+    if not finished_matches:
         return {'gains': [], 'losses': []}
-    
-    # Cria mapa de pontos do dia
-    daily_points_map = {}
-    for scorer in daily_scorers['top'] + daily_scorers['bottom']:
-        daily_points_map[scorer['user_id']] = scorer['points']
-    
-    # Simula ranking sem os pontos do dia
-    simulated_ranking = []
-    for user_data in current_ranking:
-        user_id = user_data['user_id']
-        daily_points = daily_points_map.get(user_id, 0)
-        
-        simulated_ranking.append({
-            'user_id': user_id,
-            'user_name': user_data['nome'],
-            'total_pontos': user_data['total_pontos'] - daily_points,
-            'placares_exatos': user_data['placares_exatos'],
-            'resultado_gols': user_data['resultado_gols'],
-            'resultado': user_data['resultado'],
-            'gols': user_data['gols'],
-            'zeros': user_data['zeros']
-        })
-    
-    # Reordena ranking simulado
-    simulated_ranking.sort(key=lambda x: (
-        x['total_pontos'],
-        x['placares_exatos'],
-        x['resultado_gols'],
-        x['resultado'],
-        x['gols'],
-        -x['zeros'],
-        -x['user_id']
-    ), reverse=True)
-    
-    # Cria mapa de posições anteriores
-    previous_positions = {user['user_id']: i + 1 for i, user in enumerate(simulated_ranking)}
-    current_positions = {user['user_id']: i + 1 for i, user in enumerate(current_ranking)}
-    
+
+    from collections import defaultdict
+    match_ids = [m.id for m in finished_matches]
+    daily_points_map = defaultdict(int)
+    for pred in session.query(Prediction).filter(Prediction.match_id.in_(match_ids)).all():
+        daily_points_map[pred.user_id] += pred.points_awarded or 0
+
+    # Fotos reais do ranking (mesmos critérios oficiais de desempate)
+    previous_ranking = get_ranking(session, cutoff_datetime=day_start)
+    current_ranking = get_ranking(session, cutoff_datetime=day_end)
+
+    previous_positions = {r['user_id']: r['posicao'] for r in previous_ranking}
+    current_positions = {r['user_id']: r['posicao'] for r in current_ranking}
+
     # Calcula variações
     changes = []
     for user_data in current_ranking:
         user_id = user_data['user_id']
-        prev_pos = previous_positions.get(user_id, 0)
-        curr_pos = current_positions.get(user_id, 0)
+        prev_pos = previous_positions.get(user_id)
+        curr_pos = current_positions.get(user_id)
+        if prev_pos is None or curr_pos is None:
+            continue
         variation = prev_pos - curr_pos
-        
+
         if variation != 0:
             changes.append({
                 'user_id': user_id,

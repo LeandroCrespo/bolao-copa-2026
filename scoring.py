@@ -376,10 +376,10 @@ def get_user_stats(session, user_id: int) -> dict:
     return stats
 
 
-def get_ranking(session) -> list:
+def get_ranking(session, cutoff_datetime=None) -> list:
     """
     Gera o ranking completo dos participantes com critérios de desempate.
-    
+
     Critérios de desempate (em ordem):
     1. Maior pontuação total
     2. Maior número de placares exatos (20 pts)
@@ -390,19 +390,26 @@ def get_ranking(session) -> list:
     7. Maior número de acerto de gols de um time (5 pts)
     8. Menos palpites zerados
     9. Ordem de inscrição (quem se inscreveu primeiro)
-    
+
     IMPORTANTE: Só considera jogos que TÊM PLACAR REGISTRADO (não usa 0x0 implícito)
+
+    Args:
+        cutoff_datetime: se informado (naive, horário de Brasília), considera
+            apenas jogos com início até esse momento — permite gerar a "foto"
+            do ranking ao fim de um dia específico.
     """
     from datetime import datetime
     import pytz
-    
+
     users = session.query(User).filter_by(active=True).filter(User.role != 'admin').all()
-    
+
     # Pega horário atual (Brasília, naive para comparar com banco)
     brazil_tz = pytz.timezone('America/Sao_Paulo')
     now_br = datetime.now(brazil_tz)
     now_naive = now_br.replace(tzinfo=None)
-    
+    if cutoff_datetime is not None:
+        now_naive = cutoff_datetime
+
     # Pega jogos que já começaram E TÊM PLACAR REGISTRADO
     matches_with_score = session.query(Match).filter(
         Match.datetime <= now_naive,
