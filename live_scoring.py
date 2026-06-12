@@ -159,32 +159,37 @@ def calculate_live_ranking(session, match_id: int = None) -> list:
     return current_ranking
 
 
-def get_ongoing_matches(session) -> list:
+def get_ongoing_matches(session, today_only=True) -> list:
     """
-    Retorna lista de jogos do dia atual (em andamento ou finalizados).
-    Só mostra jogos cujo horário de início seja no dia de hoje.
-    
+    Retorna lista de jogos em andamento ou finalizados.
+    Por padrão, só mostra jogos cujo horário de início seja no dia de hoje.
+    Com today_only=False, inclui todos os jogos já realizados da Copa.
+
     Returns:
         Lista de jogos com status e informações
     """
     from datetime import datetime, timedelta
     import pytz
-    
+
     # Timezone do Brasil
     brazil_tz = pytz.timezone('America/Sao_Paulo')
     now_br = datetime.now(brazil_tz)
     now_naive = now_br.replace(tzinfo=None)  # Para comparar com banco (naive)
-    
+
     # Início e fim do dia atual (meia-noite a meia-noite) - naive
     today_start = now_naive.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
-    
-    # Pega jogos do dia atual que já começaram (comparação naive)
-    matches = session.query(Match).filter(
-        Match.datetime >= today_start,
-        Match.datetime < today_end,
+
+    # Pega jogos que já começaram (comparação naive)
+    query = session.query(Match).filter(
         Match.datetime <= now_naive  # Já começou
-    ).order_by(Match.datetime.desc()).all()
+    )
+    if today_only:
+        query = query.filter(
+            Match.datetime >= today_start,
+            Match.datetime < today_end
+        )
+    matches = query.order_by(Match.datetime.desc()).all()
     
     result = []
     
@@ -218,7 +223,8 @@ def get_ongoing_matches(session) -> list:
             'status': match.status,
             'is_live': is_live,
             'is_finished': is_finished,
-            'has_started': time_since_start.total_seconds() > 0
+            'has_started': time_since_start.total_seconds() > 0,
+            'is_today': today_start <= match_time < today_end
         })
     
     return result

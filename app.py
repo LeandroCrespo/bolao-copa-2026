@@ -4416,14 +4416,15 @@ def _live_view_ao_vivo_fragment(selected_match_id):
     )
 
     with session_scope(engine) as session:
-        matches = get_ongoing_matches(session)
+        matches = get_ongoing_matches(session, today_only=False)
         started_matches = [m for m in matches if m['has_started']]
+        todays_matches = [m for m in started_matches if m.get('is_today')]
 
-        # Se selecionou "Todos os jogos"
+        # Se selecionou "Todos os jogos" (apenas os do dia)
         if selected_match_id == 0:
             # Separa jogos em andamento e finalizados
-            jogos_em_andamento = [m for m in started_matches if m['is_live']]
-            jogos_finalizados = [m for m in started_matches if m.get('is_finished', False)]
+            jogos_em_andamento = [m for m in todays_matches if m['is_live']]
+            jogos_finalizados = [m for m in todays_matches if m.get('is_finished', False)]
             
             # Mostra jogos em andamento
             if jogos_em_andamento:
@@ -4451,8 +4452,8 @@ def _live_view_ao_vivo_fragment(selected_match_id):
             
             # Dicionário para somar pontos de cada usuário
             total_points_by_user = {}
-            
-            for match in started_matches:
+
+            for match in todays_matches:
                 predictions = get_live_match_predictions(session, match['id'])
                 for pred in predictions:
                     user_name = pred['user_name']
@@ -4466,7 +4467,7 @@ def _live_view_ao_vivo_fragment(selected_match_id):
             # Mostra pontuação total em tabela
             if sorted_users:
                 # Calcula ranking ao vivo para variação
-                live_ranking = calculate_live_ranking(session, started_matches[0]['id'] if started_matches else None)
+                live_ranking = calculate_live_ranking(session, todays_matches[0]['id'] if todays_matches else None)
                 variacao_map = {user['user_id']: user for user in live_ranking}
                 
                 # Pega informações de pódio e rebaixamento
@@ -4887,31 +4888,34 @@ def page_visualizacao_ao_vivo():
     st.markdown("Acompanhe os jogos em tempo real e veja como está a pontuação de cada participante!")
     
     with session_scope(engine) as session:
-        # Pega jogos que já começaram
-        matches = get_ongoing_matches(session)
-        
+        # Pega todos os jogos já realizados/em andamento da Copa
+        matches = get_ongoing_matches(session, today_only=False)
+
         if not matches:
             st.info("Nenhum jogo disponível para visualização ainda.")
             return
-        
+
         # Filtra apenas jogos que já começaram
         started_matches = [m for m in matches if m['has_started']]
-        
+
         if not started_matches:
             st.info("Aguardando início dos jogos...")
             return
-        
-        # Seletor de jogo
+
+        # Seletor de jogo (ao vivo primeiro, depois os demais por data decrescente)
         st.subheader("🎮 Selecione o Jogo")
-        
-        match_options = {0: "🎯 Todos os jogos"}
+
+        started_matches = sorted(started_matches, key=lambda m: not m['is_live'])
+
+        match_options = {0: "🎯 Todos os jogos do dia"}
         for match in started_matches:
             score_display = ""
             if match['team1_score'] is not None and match['team2_score'] is not None:
                 score_display = f" - {match['team1_score']} x {match['team2_score']}"
-            
+
             status_icon = "🔴" if match['is_live'] else "✅"
-            match_label = f"{status_icon} Jogo {match['match_number']}: {match['team1']} vs {match['team2']}{score_display}"
+            date_display = "" if match.get('is_today') else f" ({match['datetime'].strftime('%d/%m')})"
+            match_label = f"{status_icon} Jogo {match['match_number']}: {match['team1']} vs {match['team2']}{score_display}{date_display}"
             match_options[match['id']] = match_label
         
         selected_match_id = st.selectbox(
