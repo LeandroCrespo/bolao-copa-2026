@@ -257,62 +257,93 @@ def render_ranking_evolution_chart(session):
         st.info("📊 Dados insuficientes para o gráfico de evolução.")
         return
     
-    # Mapa de calor: cada participante tem sua linha fixa (nome à esquerda),
-    # cada coluna é um dia, a célula mostra a posição com cor verde→vermelho.
+    # Gráfico de linhas com:
+    # - a linha do usuário logado sempre em destaque (grossa e colorida)
+    # - demais linhas em cinza-claro ao fundo (sem poluição visual)
+    # - nome de cada participante escrito na ponta direita da sua linha
+    #   (posições finais são únicas, então os nomes não se sobrepõem)
+    # - seletor para destacar outros participantes para comparação
     n_users = len(users)
+    current_user_id = st.session_state.get('user', {}).get('id')
 
-    # Limita às últimas 15 datas por padrão (legibilidade no mobile)
-    show_dates = dates
-    if len(dates) > 15:
-        if not st.toggle("📆 Ver Copa inteira", key="rank_evo_all_dates"):
-            show_dates = dates[-15:]
-    date_offset = len(dates) - len(show_dates)
-
-    # Ordena participantes pela posição na última data (líder no topo)
-    sorted_uids = sorted(
-        user_positions.keys(),
-        key=lambda uid: user_positions[uid]['positions'][-1]
+    all_names = [user_positions[u.id]['name'] for u in users]
+    highlighted = st.multiselect(
+        "🔦 Destacar participantes para comparar",
+        all_names,
+        key="rank_evo_highlight",
+        help="Sua linha já aparece destacada automaticamente"
     )
 
-    # go.Heatmap desenha a primeira linha embaixo — inverte para o líder ficar no topo
-    plot_uids = list(reversed(sorted_uids))
-    y_names = [user_positions[uid]['name'] for uid in plot_uids]
-    z = [
-        [user_positions[uid]['positions'][date_offset + j] for j in range(len(show_dates))]
-        for uid in plot_uids
-    ]
+    fig = go.Figure()
 
-    fig = go.Figure(go.Heatmap(
-        z=z,
-        x=show_dates,
-        y=y_names,
-        colorscale='RdYlGn',
-        reversescale=True,  # 1º = verde, último = vermelho
-        zmin=1,
-        zmax=n_users,
-        xgap=2,
-        ygap=2,
-        texttemplate='%{z}',
-        textfont=dict(size=11),
-        hovertemplate='<b>%{y}</b><br>%{x} — %{z}º lugar<extra></extra>',
-        showscale=False
-    ))
+    colors = px.colors.qualitative.Dark24
+    DIM_COLOR = 'rgba(170,170,170,0.45)'
+    USER_COLOR = '#E61D25'  # vermelho da identidade visual da Copa
+
+    for i, (uid, data) in enumerate(user_positions.items()):
+        is_current_user = (uid == current_user_id)
+        is_highlighted = is_current_user or data['name'] in highlighted
+
+        if is_current_user:
+            color = USER_COLOR
+        elif is_highlighted:
+            color = colors[i % len(colors)]
+        else:
+            color = DIM_COLOR
+
+        fig.add_trace(go.Scatter(
+            x=dates,
+            y=data['positions'],
+            mode='lines+markers' if is_highlighted else 'lines',
+            name=data['name'],
+            line=dict(width=4 if is_highlighted else 1.5, color=color),
+            marker=dict(size=8, color=color),
+            showlegend=False,
+            hovertemplate=f"<b>{data['name']}</b><br>%{{x}} — %{{y}}º lugar<extra></extra>"
+        ))
+
+        # Nome na ponta direita da linha
+        label = data['name'] if is_highlighted else data['name'].split()[0]
+        fig.add_annotation(
+            x=dates[-1],
+            y=data['positions'][-1],
+            text=f"<b>{label} (você)</b>" if is_current_user else (f"<b>{label}</b>" if is_highlighted else label),
+            xanchor='left',
+            xshift=8,
+            showarrow=False,
+            font=dict(
+                size=12 if is_highlighted else 10,
+                color=color if is_highlighted else 'rgba(110,110,110,0.9)'
+            )
+        )
 
     fig.update_layout(
-        xaxis=dict(side='top', fixedrange=True, title=None),
-        yaxis=dict(fixedrange=True, title=None, tickfont=dict(size=12)),
+        yaxis=dict(
+            autorange=False,
+            range=[n_users + 0.5, 0.5],  # 1º lugar no topo
+            tickmode='array',
+            tickvals=list(range(1, n_users + 1)),
+            ticktext=[f"{p}º" for p in range(1, n_users + 1)],
+            title=None,
+            fixedrange=True,
+            tickfont=dict(size=10)
+        ),
+        xaxis=dict(title=None, fixedrange=True),
+        hovermode='closest',
         plot_bgcolor='white',
         paper_bgcolor='white',
-        height=max(420, 30 * n_users + 60),
-        margin=dict(l=10, r=10, t=40, b=10)
+        height=max(480, 26 * n_users + 60),
+        margin=dict(l=10, r=110, t=10, b=10)
     )
+
+    fig.update_xaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
+    fig.update_yaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
 
     st.plotly_chart(
         fig,
         use_container_width=True,
         config={'displayModeBar': False}
     )
-    st.caption("🟩 topo do ranking · 🟥 fundo do ranking — o número é a posição no dia")
 
 
 # =============================================================================
