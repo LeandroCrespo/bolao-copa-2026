@@ -16,24 +16,28 @@ def get_brazil_time():
     return datetime.now(brazil_tz)
 
 
-def get_matches_by_date(session, target_date=None):
+def get_matches_by_date(session, target_date=None, end_date=None):
     """
-    Retorna jogos de uma data específica.
-    
+    Retorna jogos de uma data específica ou de um período.
+
     Args:
         session: Sessão do banco de dados
-        target_date: Data alvo (datetime). Se None, usa hoje.
-        
+        target_date: Data alvo/inicial (datetime). Se None, usa hoje.
+        end_date: Data final do período (datetime). Se None, usa target_date
+            (resumo de um único dia).
+
     Returns:
-        Lista de jogos da data
+        Lista de jogos do período
     """
     if target_date is None:
         target_date = get_brazil_time()
-    
-    # Define início e fim do dia
+    if end_date is None:
+        end_date = target_date
+
+    # Define início e fim do período
     brazil_tz = pytz.timezone('America/Sao_Paulo')
     start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_of_day = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    end_of_day = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     # Converte para UTC para comparar com banco
     start_utc = start_of_day.astimezone(pytz.UTC)
@@ -49,18 +53,19 @@ def get_matches_by_date(session, target_date=None):
     return matches
 
 
-def get_daily_scorers(session, target_date=None):
+def get_daily_scorers(session, target_date=None, end_date=None):
     """
-    Retorna os maiores e menores pontuadores do dia.
-    
+    Retorna os maiores e menores pontuadores do dia ou período.
+
     Args:
         session: Sessão do banco de dados
-        target_date: Data alvo (datetime). Se None, usa hoje.
-        
+        target_date: Data alvo/inicial (datetime). Se None, usa hoje.
+        end_date: Data final do período (datetime). Se None, usa target_date.
+
     Returns:
         Dicionário com top e bottom scorers
     """
-    matches = get_matches_by_date(session, target_date)
+    matches = get_matches_by_date(session, target_date, end_date)
     
     if not matches:
         return {'top': [], 'bottom': []}
@@ -109,36 +114,41 @@ def get_daily_scorers(session, target_date=None):
     }
 
 
-def calculate_ranking_changes(session, target_date=None):
+def calculate_ranking_changes(session, target_date=None, end_date=None):
     """
-    Calcula as maiores variações de ranking do dia selecionado.
+    Calcula as maiores variações de ranking do dia ou período selecionado.
 
     Compara duas "fotos" reais do ranking acumulado:
-    - posição ao FIM do dia anterior (jogos até a meia-noite do dia selecionado)
-    - posição ao FIM do dia selecionado
+    - posição ao FIM do dia anterior ao início do período
+    - posição ao FIM do último dia do período
     Assim a variação se mantém consistente de um dia para o outro, mesmo
     consultando datas passadas.
 
     Args:
         session: Sessão do banco de dados
-        target_date: Data alvo (datetime). Se None, usa hoje.
+        target_date: Data alvo/inicial (datetime). Se None, usa hoje.
+        end_date: Data final do período (datetime). Se None, usa target_date.
 
     Returns:
         Lista com maiores subidas e quedas
     """
     if target_date is None:
         target_date = get_brazil_time()
+    if end_date is None:
+        end_date = target_date
 
     # Normaliza para naive em horário de Brasília (padrão do banco)
     brazil_tz = pytz.timezone('America/Sao_Paulo')
     if target_date.tzinfo is not None:
         target_date = target_date.astimezone(brazil_tz).replace(tzinfo=None)
+    if end_date.tzinfo is not None:
+        end_date = end_date.astimezone(brazil_tz).replace(tzinfo=None)
 
     day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    day_end = day_start + timedelta(days=1)
+    day_end = end_date.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
-    # Pontos do dia de TODOS os participantes (não só top/bottom 3)
-    matches = get_matches_by_date(session, target_date)
+    # Pontos do período de TODOS os participantes (não só top/bottom 3)
+    matches = get_matches_by_date(session, target_date, end_date)
     finished_matches = [m for m in matches if m.status == 'finished' and m.team1_score is not None]
 
     if not finished_matches:
@@ -191,38 +201,48 @@ def calculate_ranking_changes(session, target_date=None):
     }
 
 
-def generate_daily_summary(session, target_date=None, format_type='rich'):
+def generate_daily_summary(session, target_date=None, format_type='rich', end_date=None):
     """
-    Gera resumo diário completo.
-    
+    Gera resumo completo de um dia ou de um período.
+
     Args:
         session: Sessão do banco de dados
-        target_date: Data alvo (datetime). Se None, usa hoje.
+        target_date: Data alvo/inicial (datetime). Se None, usa hoje.
         format_type: 'rich' (com emojis e formatação) ou 'plain' (texto simples)
-        
+        end_date: Data final do período (datetime). Se None, resumo de um dia só.
+
     Returns:
         String com o resumo formatado
     """
     if target_date is None:
         target_date = get_brazil_time()
-    
+
+    is_period = end_date is not None and end_date.date() != target_date.date()
+    if end_date is None:
+        end_date = target_date
+
     # Pega dados
-    matches = get_matches_by_date(session, target_date)
-    scorers = get_daily_scorers(session, target_date)
-    changes = calculate_ranking_changes(session, target_date)
-    
+    matches = get_matches_by_date(session, target_date, end_date)
+    scorers = get_daily_scorers(session, target_date, end_date)
+    changes = calculate_ranking_changes(session, target_date, end_date)
+
     # Filtra jogos finalizados
     finished_matches = [m for m in matches if m.status == 'finished' and m.team1_score is not None]
-    
-    # Formata data
-    date_str = target_date.strftime('%d/%m/%Y')
-    
+
+    # Formata data/período
+    if is_period:
+        date_str = f"{target_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}"
+        titulo = "RESUMO DO PERÍODO"
+    else:
+        date_str = target_date.strftime('%d/%m/%Y')
+        titulo = "RESUMO DO DIA"
+
     # Monta resumo
     if format_type == 'rich':
-        summary = f"📅 *RESUMO DO DIA - {date_str}*\n"
+        summary = f"📅 *{titulo} - {date_str}*\n"
         summary += "=" * 40 + "\n\n"
     else:
-        summary = f"RESUMO DO DIA - {date_str}\n"
+        summary = f"{titulo} - {date_str}\n"
         summary += "=" * 40 + "\n\n"
     
     # Resultados dos jogos
@@ -236,22 +256,25 @@ def generate_daily_summary(session, target_date=None, format_type='rich'):
             team1 = match.get_team1_display()
             team2 = match.get_team2_display()
             score = f"{match.team1_score} x {match.team2_score}"
-            
+            # Em períodos de mais de um dia, mostra a data de cada jogo
+            day_prefix = f"({match.datetime.strftime('%d/%m')}) " if is_period else ""
+
             if format_type == 'rich':
-                summary += f"🏟️ {team1} *{score}* {team2}\n"
+                summary += f"🏟️ {day_prefix}{team1} *{score}* {team2}\n"
             else:
-                summary += f"   {team1} {score} {team2}\n"
-        
+                summary += f"   {day_prefix}{team1} {score} {team2}\n"
+
         summary += "\n"
     else:
-        summary += "Nenhum jogo finalizado hoje.\n\n"
+        summary += "Nenhum jogo finalizado no período.\n\n" if is_period else "Nenhum jogo finalizado hoje.\n\n"
     
     # Maiores pontuadores
+    periodo_label = "DO PERÍODO" if is_period else "DO DIA"
     if scorers['top']:
         if format_type == 'rich':
-            summary += "🏆 *MAIORES PONTUADORES DO DIA*\n\n"
+            summary += f"🏆 *MAIORES PONTUADORES {periodo_label}*\n\n"
         else:
-            summary += "MAIORES PONTUADORES DO DIA\n\n"
+            summary += f"MAIORES PONTUADORES {periodo_label}\n\n"
         
         medals = ['🥇', '🥈', '🥉']
         for i, scorer in enumerate(scorers['top']):
@@ -266,9 +289,9 @@ def generate_daily_summary(session, target_date=None, format_type='rich'):
     # Menores pontuadores
     if scorers['bottom']:
         if format_type == 'rich':
-            summary += "📉 *MENORES PONTUADORES DO DIA*\n\n"
+            summary += f"📉 *MENORES PONTUADORES {periodo_label}*\n\n"
         else:
-            summary += "MENORES PONTUADORES DO DIA\n\n"
+            summary += f"MENORES PONTUADORES {periodo_label}\n\n"
         
         for scorer in scorers['bottom']:
             if format_type == 'rich':

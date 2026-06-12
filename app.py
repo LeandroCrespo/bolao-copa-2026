@@ -5120,14 +5120,16 @@ def page_resumo_diario():
         st.subheader("📅 Selecione a Data")
         
         col1, col2 = st.columns([2, 1])
-        
+
         with col1:
-            target_date = st.date_input(
-                "Data do resumo:",
-                value=get_brazil_time().date(),
-                help="Selecione a data para gerar o resumo"
+            hoje = get_brazil_time().date()
+            periodo = st.date_input(
+                "Data ou período do resumo:",
+                value=(hoje, hoje),
+                help="Para um único dia, selecione a mesma data duas vezes. "
+                     "Para um período (ex.: 11/06 a 12/06), selecione início e fim."
             )
-        
+
         with col2:
             format_type = st.selectbox(
                 "Formato:",
@@ -5135,11 +5137,26 @@ def page_resumo_diario():
                 format_func=lambda x: 'Rico (com emojis)' if x == 'rich' else 'Simples (texto puro)',
                 index=0
             )
-        
+
+        # Normaliza a seleção (pode vir 1 ou 2 datas durante a escolha)
+        if isinstance(periodo, (tuple, list)):
+            if len(periodo) == 2:
+                start_date, end_date = periodo
+            elif len(periodo) == 1:
+                start_date = end_date = periodo[0]
+            else:
+                start_date = end_date = hoje
+        else:
+            start_date = end_date = periodo
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+
+        target_date = start_date  # usado no nome do arquivo de download
+
         # Converte date para datetime
         brazil_tz = pytz.timezone('America/Sao_Paulo')
-        target_datetime = datetime.combine(target_date, datetime.min.time())
-        target_datetime = brazil_tz.localize(target_datetime)
+        target_datetime = brazil_tz.localize(datetime.combine(start_date, datetime.min.time()))
+        end_datetime = brazil_tz.localize(datetime.combine(end_date, datetime.min.time())) if end_date != start_date else None
         
         st.divider()
         
@@ -5149,7 +5166,7 @@ def page_resumo_diario():
         with col1:
             if st.button("📝 Gerar Resumo", use_container_width=True):
                 with st.spinner('Gerando resumo...'):
-                    summary = generate_daily_summary(session, target_datetime, format_type)
+                    summary = generate_daily_summary(session, target_datetime, format_type, end_date=end_datetime)
                     st.session_state['daily_summary'] = summary
 
         with col2:
@@ -5175,10 +5192,13 @@ def page_resumo_diario():
             
             with col1:
                 # Botão de copiar (usando componente nativo do Streamlit)
+                _fname = f"resumo_{start_date.strftime('%Y%m%d')}"
+                if end_date != start_date:
+                    _fname += f"_a_{end_date.strftime('%Y%m%d')}"
                 st.download_button(
                     label="📋 Baixar como TXT",
                     data=st.session_state['daily_summary'],
-                    file_name=f"resumo_{target_date.strftime('%Y%m%d')}.txt",
+                    file_name=f"{_fname}.txt",
                     mime="text/plain",
                     use_container_width=True
                 )
