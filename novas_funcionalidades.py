@@ -264,7 +264,11 @@ def render_ranking_evolution_chart(session):
     #   (posições finais são únicas, então os nomes não se sobrepõem)
     # - seletor para destacar outros participantes para comparação
     n_users = len(users)
-    current_user_id = st.session_state.get('user', {}).get('id')
+    _session_user = st.session_state.get('user') or {}
+    try:
+        current_user_id = int(_session_user.get('id'))
+    except (TypeError, ValueError):
+        current_user_id = None
 
     all_names = [user_positions[u.id]['name'] for u in users]
     highlighted = st.multiselect(
@@ -273,6 +277,12 @@ def render_ranking_evolution_chart(session):
         key="rank_evo_highlight",
         help="Sua linha já aparece destacada automaticamente"
     )
+
+    if current_user_id not in user_positions:
+        st.caption(
+            "💡 Conta logada não participa do ranking (ex.: admin) — "
+            "use o seletor acima para destacar participantes."
+        )
 
     fig = go.Figure()
 
@@ -313,7 +323,7 @@ def render_ranking_evolution_chart(session):
             showarrow=False,
             font=dict(
                 size=12 if is_highlighted else 10,
-                color=color if is_highlighted else 'rgba(110,110,110,0.9)'
+                color=color if is_highlighted else '#555555'
             )
         )
 
@@ -326,9 +336,9 @@ def render_ranking_evolution_chart(session):
             ticktext=[f"{p}º" for p in range(1, n_users + 1)],
             title=None,
             fixedrange=True,
-            tickfont=dict(size=10)
+            tickfont=dict(size=11, color='#1a1a2e')
         ),
-        xaxis=dict(title=None, fixedrange=True),
+        xaxis=dict(title=None, fixedrange=True, tickfont=dict(size=11, color='#1a1a2e')),
         hovermode='closest',
         plot_bgcolor='white',
         paper_bgcolor='white',

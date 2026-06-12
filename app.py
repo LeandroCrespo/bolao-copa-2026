@@ -647,6 +647,29 @@ st.markdown("""
     [data-baseweb="menu"] li:hover {
         background-color: #2d5a87 !important;
     }
+
+    /* MULTISELECT - campo claro para boa leitura */
+    .stMultiSelect [data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border: 1px solid #1E3A5F !important;
+    }
+    .stMultiSelect div[data-baseweb="select"] * {
+        color: #1a1a2e !important;
+    }
+    .stMultiSelect [data-baseweb="select"] input {
+        color: #1a1a2e !important;
+        -webkit-text-fill-color: #1a1a2e !important;
+    }
+    /* Tags dos itens selecionados no multiselect */
+    .stMultiSelect [data-baseweb="tag"] {
+        background-color: #1E3A5F !important;
+    }
+    .stMultiSelect [data-baseweb="tag"] span {
+        color: #ffffff !important;
+    }
+    .stMultiSelect [data-baseweb="tag"] svg {
+        fill: #ffffff !important;
+    }
     
     .stSelectbox svg {
         fill: #ffffff !important;
