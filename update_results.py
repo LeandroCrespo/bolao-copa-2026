@@ -301,6 +301,61 @@ def score_finished_match(conn, match_id, team1_score, team2_score):
     return updated
 
 
+def lock_missing_predictions(conn):
+    """
+    Regra do bolão: palpite não salvo até o início do jogo é registrado
+    automaticamente como 0 x 0 (valor padrão exibido na tela de palpites).
+
+    Idempotente: só insere onde não existe palpite, apenas para jogos que já
+    começaram. Para jogos já finalizados, recalcula a pontuação dos palpites
+    recém-criados via score_finished_match.
+    """
+    cursor = conn.cursor()
+
+    brazil_tz = pytz.timezone('America/Sao_Paulo')
+    now_naive = datetime.now(brazil_tz).replace(tzinfo=None)
+
+    cursor.execute("""
+        INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at)
+        SELECT u.id, m.id, 0, 0, NOW()
+        FROM users u
+        CROSS JOIN matches m
+        WHERE u.active = TRUE
+          AND u.role <> 'admin'
+          AND m.datetime <= %s
+          AND NOT EXISTS (
+              SELECT 1 FROM predictions p
+              WHERE p.user_id = u.id AND p.match_id = m.id
+          )
+        RETURNING match_id
+    """, (now_naive,))
+    rows = cursor.fetchall()
+    conn.commit()
+
+    if not rows:
+        cursor.close()
+        return 0
+
+    match_ids = sorted({r[0] for r in rows})
+    logger.info(f"Palpites 0x0 automaticos criados: {len(rows)} (jogos id {match_ids})")
+
+    # Recalcula pontos dos jogos afetados que já têm placar final
+    cursor.execute("""
+        SELECT id, team1_score, team2_score FROM matches
+        WHERE id = ANY(%s)
+          AND status = 'finished'
+          AND team1_score IS NOT NULL
+          AND team2_score IS NOT NULL
+    """, (match_ids,))
+    finished = cursor.fetchall()
+    cursor.close()
+
+    for mid, s1, s2 in finished:
+        score_finished_match(conn, mid, s1, s2)
+
+    return len(rows)
+
+
 # ============================================================
 # PROPAGAÇÃO DE CONFRONTOS DO MATA-MATA
 # ============================================================
@@ -633,6 +688,9 @@ def run_live():
         return
 
     try:
+        # Palpites não salvos viram 0x0 quando o jogo começa
+        lock_missing_predictions(conn)
+
         pending = get_pending_matches(conn)
         if not pending:
             logger.info("Nenhum jogo pendente no banco")
@@ -663,6 +721,9 @@ def run_post():
         return
 
     try:
+        # Palpites não salvos viram 0x0 quando o jogo começa
+        lock_missing_predictions(conn)
+
         pending = get_pending_matches(conn)
         if not pending:
             logger.info("Nenhum jogo pendente no banco")

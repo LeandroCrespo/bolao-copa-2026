@@ -953,7 +953,7 @@ def page_regras(get_session_func, engine):
     
     **Importante:**
     - Todos os horários são no fuso horário de Brasília (GMT-3).
-    - Palpites não feitos não pontuam (não existe palpite padrão 0x0).
+    - Palpite não salvo até o início do jogo é registrado automaticamente como **0 x 0** (o valor padrão da tela de palpites).
     - Em caso de jogo decidido nos pênaltis, o resultado considerado é o do tempo regulamentar/prorrogação.
     """)
 
