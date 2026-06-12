@@ -333,6 +333,54 @@ def generate_daily_summary(session, target_date=None, format_type='rich'):
     return summary
 
 
+def generate_ranking_text(session, format_type='rich'):
+    """
+    Gera a classificação atual completa do bolão, formatada para WhatsApp.
+
+    Args:
+        session: Sessão do banco de dados
+        format_type: 'rich' (com emojis e formatação) ou 'plain' (texto simples)
+
+    Returns:
+        String com a classificação formatada
+    """
+    ranking = get_ranking(session)
+    date_str = get_brazil_time().strftime('%d/%m/%Y')
+
+    if format_type == 'rich':
+        text = f"🏆 *CLASSIFICAÇÃO ATUAL - {date_str}*\n"
+    else:
+        text = f"CLASSIFICACAO ATUAL - {date_str}\n"
+    text += "=" * 40 + "\n\n"
+
+    if not ranking:
+        text += "Nenhum participante pontuou ainda.\n\n"
+    else:
+        medals = ['🥇', '🥈', '🥉']
+        for r in ranking:
+            pos = r['posicao']
+            if format_type == 'rich':
+                marker = medals[pos - 1] if pos <= 3 else f"*{pos}º*"
+                text += f"{marker} *{r['nome']}* — {r['total_pontos']} pts"
+                if r['placares_exatos'] > 0:
+                    text += f" ({r['placares_exatos']} exato{'s' if r['placares_exatos'] > 1 else ''})"
+                text += "\n"
+            else:
+                text += f"{pos}. {r['nome']} - {r['total_pontos']} pts\n"
+
+    text += "\n"
+    if format_type == 'rich':
+        text += "=" * 40 + "\n"
+        text += "🏆 *Bolão Copa do Mundo 2026*\n"
+        text += f"Gerado em {get_brazil_time().strftime('%d/%m/%Y às %H:%M')}"
+    else:
+        text += "=" * 40 + "\n"
+        text += "Bolão Copa do Mundo 2026\n"
+        text += f"Gerado em {get_brazil_time().strftime('%d/%m/%Y às %H:%M')}"
+
+    return text
+
+
 def format_for_whatsapp(summary_text):
     """
     Formata o resumo para WhatsApp (mantém formatação rica).

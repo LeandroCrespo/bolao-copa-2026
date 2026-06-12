@@ -5083,7 +5083,7 @@ def page_resumo_diario():
     from datetime import datetime, timedelta
     import pytz
     from db import get_session
-    from daily_summary import generate_daily_summary, get_brazil_time
+    from daily_summary import generate_daily_summary, generate_ranking_text, get_brazil_time
     
     st.header("📄 Resumo Diário")
     st.markdown("Gere resumos automáticos dos jogos e compartilhe no WhatsApp!")
@@ -5116,14 +5116,19 @@ def page_resumo_diario():
         
         st.divider()
         
-        # Botão para gerar resumo
-        col1, col2, col3 = st.columns([1, 1, 1])
-        
-        with col2:
+        # Botões para gerar resumo ou classificação atual
+        col1, col2 = st.columns(2)
+
+        with col1:
             if st.button("📝 Gerar Resumo", use_container_width=True):
                 with st.spinner('Gerando resumo...'):
                     summary = generate_daily_summary(session, target_datetime, format_type)
                     st.session_state['daily_summary'] = summary
+
+        with col2:
+            if st.button("🏆 Gerar Classificação Atual", use_container_width=True):
+                with st.spinner('Gerando classificação...'):
+                    st.session_state['daily_summary'] = generate_ranking_text(session, format_type)
         
         # Mostra resumo se existir
         if 'daily_summary' in st.session_state:
