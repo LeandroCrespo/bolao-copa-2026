@@ -2360,6 +2360,7 @@ def _ranking_live_fragment(qtd_rebaixados):
         posicao = i + 1
         nome = r['nome']
         pontos = r['total_pontos']
+        aproveitamento = r.get('aproveitamento', 0)
             
         # Verifica se está na zona de rebaixamento
         is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
@@ -2388,6 +2389,7 @@ def _ranking_live_fragment(qtd_rebaixados):
         <div class="ranking-row {row_class}">
             <div class="ranking-posicao">{icone}</div>
             <div class="ranking-nome">{nome}</div>
+            <span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>
             <div class="ranking-pontos">{pontos} pts</div>
         </div>
         '''
@@ -2616,6 +2618,19 @@ def page_ranking():
                 background: #e9ecef;
                 padding: 5px 15px;
                 border-radius: 20px;
+                white-space: nowrap;
+            }
+
+            .ranking-aproveitamento {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #2d5a87;
+                background: #f1f7fc;
+                border: 1px solid #cfe3f3;
+                padding: 4px 10px;
+                border-radius: 20px;
+                margin-right: 8px;
+                white-space: nowrap;
             }
             
             /* CSS da zona de rebaixamento removido - usando estilo inline */

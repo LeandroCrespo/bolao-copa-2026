@@ -582,8 +582,23 @@ def get_ranking(session, cutoff_datetime=None) -> list:
         x['user_id']               # 9. Ordem de inscrição
     ))
     
-    # Adiciona posição
+    # Máximo de pontos possível até agora (para % de aproveitamento):
+    # placar exato em todos os jogos com resultado + ordem correta nos grupos
+    # já definidos + pódio completo (se já definido)
+    max_pontos_possivel = config['placar_exato'] * len(matches_with_score_ids)
+    for gr in all_group_results.values():
+        if gr.first_place_team_id and gr.second_place_team_id:
+            max_pontos_possivel += config['grupo_ordem_correta']
+    _campeao_def = all_tournament_results.get('champion')
+    if _campeao_def and _campeao_def.team_id:
+        max_pontos_possivel += config['podio_completo']
+
+    # Adiciona posição e aproveitamento
     for i, r in enumerate(ranking, 1):
         r['posicao'] = i
-    
+        r['aproveitamento'] = (
+            round(100 * r['total_pontos'] / max_pontos_possivel, 1)
+            if max_pontos_possivel > 0 else 0.0
+        )
+
     return ranking
