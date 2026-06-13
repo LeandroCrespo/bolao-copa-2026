@@ -3038,11 +3038,14 @@ def page_estatisticas():
             tipos_acertos = []
         
         # Mapeamento de tipos para labels e cores
+        # As chaves devem corresponder aos points_type gravados no banco
+        # (ver calculate_match_points em scoring.py): placar_exato,
+        # resultado_gols, resultado, gols.
         tipo_config = {
             'placar_exato': ('Placar Exato (20pts)', '#3CAC3B'),
             'resultado_gols': ('Resultado + Gols (15pts)', '#2ECC71'),
-            'apenas_resultado': ('Resultado Correto (10pts)', '#2A398D'),
-            'apenas_gols': ('Gols de um Time (5pts)', '#F39C12'),
+            'resultado': ('Resultado Correto (10pts)', '#2A398D'),
+            'gols': ('Gols de um Time (5pts)', '#F39C12'),
         }
         
         if tipos_acertos:

@@ -376,7 +376,7 @@ def get_user_stats(session, user_id: int) -> dict:
     return stats
 
 
-def get_ranking(session, cutoff_datetime=None) -> list:
+def get_ranking(session, cutoff_datetime=None, exclude_match_id=None) -> list:
     """
     Gera o ranking completo dos participantes com critérios de desempate.
 
@@ -397,6 +397,8 @@ def get_ranking(session, cutoff_datetime=None) -> list:
         cutoff_datetime: se informado (naive, horário de Brasília), considera
             apenas jogos com início até esse momento — permite gerar a "foto"
             do ranking ao fim de um dia específico.
+        exclude_match_id: se informado, ignora esse jogo no cálculo — permite
+            obter a posição de cada participante "antes" daquele jogo específico.
     """
     from datetime import datetime
     import pytz
@@ -416,6 +418,8 @@ def get_ranking(session, cutoff_datetime=None) -> list:
         Match.team1_score.isnot(None),
         Match.team2_score.isnot(None)
     ).all()
+    if exclude_match_id is not None:
+        matches_with_score = [m for m in matches_with_score if m.id != exclude_match_id]
     matches_with_score_ids = {m.id for m in matches_with_score}
     
     # Mapa de placares

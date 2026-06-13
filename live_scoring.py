@@ -71,91 +71,46 @@ def get_live_match_predictions(session, match_id: int) -> list:
 
 def calculate_live_ranking(session, match_id: int = None) -> list:
     """
-    Calcula o ranking considerando o resultado atual de um jogo em andamento.
-    
+    Calcula o ranking considerando o resultado de um jogo, mostrando para qual
+    posição cada participante está indo COM o resultado desse jogo.
+
+    - posicao_atual: posição no ranking JÁ considerando os pontos deste jogo
+      (é a posição real do ranking, pois o jogo já tem placar registrado).
+    - posicao_anterior: posição que o participante tinha SEM os pontos deste jogo.
+    - variacao: posicao_anterior - posicao_atual (positivo = subiu).
+
     Args:
         session: Sessão do banco de dados
-        match_id: ID do jogo em andamento (opcional)
-        
+        match_id: ID do jogo de referência (opcional)
+
     Returns:
-        Lista com ranking atualizado incluindo variação de posição
+        Lista (ordenada pela posição atual) com variação de posição
     """
-    # Pega ranking atual (sem o jogo em andamento)
+    # Ranking real, já incluindo este jogo (o jogo tem placar registrado)
     current_ranking = get_ranking(session)
-    
-    # Se não há jogo especificado, retorna ranking atual
-    if not match_id:
-        for i, user_data in enumerate(current_ranking):
-            user_data['posicao_atual'] = i + 1
-            user_data['posicao_anterior'] = i + 1
-            user_data['variacao'] = 0
-        return current_ranking
-    
-    # Pega o jogo
-    match = session.query(Match).filter_by(id=match_id).first()
-    
+
+    match = session.query(Match).filter_by(id=match_id).first() if match_id else None
+
+    # Sem jogo válido ou sem placar: não há variação a calcular
     if not match or match.team1_score is None or match.team2_score is None:
-        # Sem placar, retorna ranking atual
         for i, user_data in enumerate(current_ranking):
             user_data['posicao_atual'] = i + 1
             user_data['posicao_anterior'] = i + 1
             user_data['variacao'] = 0
         return current_ranking
-    
-    # Guarda posições anteriores
-    posicoes_anteriores = {user_data['user_id']: i + 1 for i, user_data in enumerate(current_ranking)}
-    
-    # Pega configuração de pontos
-    config = get_scoring_config(session)
-    
-    # Calcula pontos adicionais para cada usuário neste jogo
-    predictions = session.query(Prediction).filter_by(match_id=match_id).all()
-    
-    pontos_adicionais = {}
-    for pred in predictions:
-        points, _, _ = calculate_match_points(
-            pred.pred_team1_score,
-            pred.pred_team2_score,
-            match.team1_score,
-            match.team2_score,
-            config
-        )
-        pontos_adicionais[pred.user_id] = points
-    
-    # Atualiza pontuação total temporária
-    for user_data in current_ranking:
-        user_id = user_data['user_id']
-        pontos_jogo = pontos_adicionais.get(user_id, 0)
-        
-        # Subtrai pontos já contabilizados deste jogo (se houver)
-        pred_existente = session.query(Prediction).filter_by(
-            user_id=user_id, 
-            match_id=match_id
-        ).first()
-        
-        if pred_existente and pred_existente.points_awarded:
-            pontos_jogo -= pred_existente.points_awarded
-        
-        user_data['pontos_jogo_atual'] = pontos_adicionais.get(user_id, 0)
-        user_data['total_pontos_temp'] = user_data['total_pontos'] + pontos_jogo
-    
-    # Reordena por pontuação temporária
-    current_ranking.sort(key=lambda x: (
-        x['total_pontos_temp'],
-        x['placares_exatos'],
-        x['resultado_gols'],
-        x['resultado'],
-        x['gols'],
-        -x['zeros'],
-        -x['user_id']
-    ), reverse=True)
-    
-    # Calcula variação de posição
+
+    # Ranking "antes" deste jogo: recalculado excluindo os pontos do jogo,
+    # com os mesmos critérios oficiais de desempate
+    ranking_anterior = get_ranking(session, exclude_match_id=match_id)
+    posicoes_anteriores = {u['user_id']: u['posicao'] for u in ranking_anterior}
+
     for i, user_data in enumerate(current_ranking):
-        user_data['posicao_atual'] = i + 1
-        user_data['posicao_anterior'] = posicoes_anteriores.get(user_data['user_id'], i + 1)
+        user_data['posicao_atual'] = user_data.get('posicao', i + 1)
+        user_data['posicao_anterior'] = posicoes_anteriores.get(
+            user_data['user_id'], user_data['posicao_atual']
+        )
         user_data['variacao'] = user_data['posicao_anterior'] - user_data['posicao_atual']
-    
+
     return current_ranking
 
 
