@@ -464,42 +464,30 @@ def render_achievements(session, user_id):
 
     st.markdown("""
     <style>
-        .achievement-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-            gap: 10px;
-            margin-top: 8px;
-        }
         .achievement-card {
             display: flex;
             align-items: center;
             gap: 12px;
-            background: linear-gradient(135deg, #ffffff 0%, #f1f7fc 100%);
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             border-radius: 12px;
             padding: 12px 16px;
+            margin: 6px 0;
             border-left: 5px solid;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
-        .achievement-card.locked {
-            background: #f3f4f6;
-            border-left-color: #c9ccd1 !important;
-            opacity: 0.85;
-        }
+        .achievement-card.locked { background: #f3f4f6; opacity: 0.9; }
+        .achievement-card.locked .achievement-icon { filter: grayscale(100%); opacity: 0.55; }
         .achievement-icon { font-size: 1.9rem; line-height: 1; }
-        .achievement-card.locked .achievement-icon { filter: grayscale(100%); opacity: 0.5; }
-        .achievement-info { display: flex; flex-direction: column; gap: 2px; }
+        .achievement-info { display: flex; flex-direction: column; }
         .achievement-title { font-weight: 700; font-size: 0.92rem; color: #1a1a2e; }
         .achievement-card.locked .achievement-title { color: #6b7280; }
         .achievement-criteria { font-size: 0.78rem; color: #555; }
-        .achievement-status {
-            font-size: 0.72rem; font-weight: 600; margin-top: 2px;
-        }
+        .achievement-status { font-size: 0.72rem; font-weight: 600; }
         .achievement-status.done { color: #2e7d32; }
         .achievement-status.todo { color: #8a8f98; }
     </style>
     """, unsafe_allow_html=True)
 
-    cards = []
     for ach in achievements:
         if ach['unlocked']:
             card_class = "achievement-card"
@@ -510,18 +498,18 @@ def render_achievements(session, user_id):
             border = "#c9ccd1"
             status = f'<span class="achievement-status todo">🔒 Progresso: {ach["progress"]}</span>'
 
-        cards.append(f"""
-        <div class="{card_class}" style="border-left-color: {border};">
-            <span class="achievement-icon">{ach['icon']}</span>
-            <div class="achievement-info">
-                <span class="achievement-title">{ach['title']}</span>
-                <span class="achievement-criteria">{ach['criteria']}</span>
-                {status}
-            </div>
-        </div>
-        """)
-
-    st.markdown(f'<div class="achievement-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+        # HTML em uma única linha: evita que o Streamlit interprete a
+        # indentação como bloco de código (markdown).
+        html = (
+            f'<div class="{card_class}" style="border-left-color: {border};">'
+            f'<span class="achievement-icon">{ach["icon"]}</span>'
+            f'<div class="achievement-info">'
+            f'<span class="achievement-title">{ach["title"]}</span>'
+            f'<span class="achievement-criteria">{ach["criteria"]}</span>'
+            f'{status}'
+            f'</div></div>'
+        )
+        st.markdown(html, unsafe_allow_html=True)
 
 
 # =============================================================================
