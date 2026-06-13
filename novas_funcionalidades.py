@@ -361,211 +361,167 @@ def render_ranking_evolution_chart(session):
 # =============================================================================
 def get_user_achievements(session, user_id):
     """
-    Calcula conquistas/medalhas de um participante.
+    Retorna o catálogo COMPLETO de conquistas, cada uma com:
+    - icon, title, color
+    - criteria: o que é preciso fazer para conquistar
+    - unlocked: se o participante já conquistou
+    - progress: progresso atual rumo à meta (ex.: "2/3")
     """
     tz_brazil = pytz.timezone('America/Sao_Paulo')
     now = datetime.now(tz_brazil).replace(tzinfo=None)
-    
-    achievements = []
-    
+
     # Busca palpites do usuário em jogos com resultado
     matches_with_score = session.query(Match).filter(
         Match.datetime <= now,
         Match.team1_score.isnot(None),
         Match.team2_score.isnot(None)
     ).all()
-    match_ids = {m.id for m in matches_with_score}
-    
+    match_by_id = {m.id: m for m in matches_with_score}
+    match_ids = set(match_by_id.keys())
+
     predictions = session.query(Prediction).filter(
         Prediction.user_id == user_id,
         Prediction.match_id.in_(match_ids) if match_ids else False
     ).all()
-    
+
     config = get_scoring_config(session)
-    
+
     # Contadores
     placares_exatos = 0
     resultados_corretos = 0
     sequencia_atual = 0
     maior_sequencia = 0
     total_pontos_jogos = 0
-    
-    # Ordena palpites pela data do jogo
-    pred_with_match = []
-    for pred in predictions:
-        match = session.query(Match).get(pred.match_id)
-        if match:
-            pred_with_match.append((pred, match))
-    
+
+    # Ordena palpites pela data do jogo (para calcular sequência)
+    pred_with_match = [(p, match_by_id[p.match_id]) for p in predictions if p.match_id in match_by_id]
     pred_with_match.sort(key=lambda x: x[1].datetime)
-    
+
     for pred, match in pred_with_match:
-        if match.team1_score is not None and match.team2_score is not None:
-            points, points_type, _ = calculate_match_points(
-                pred.pred_team1_score, pred.pred_team2_score,
-                match.team1_score, match.team2_score,
-                config
-            )
-            
-            total_pontos_jogos += points
-            
-            if points_type == 'placar_exato':
-                placares_exatos += 1
-                resultados_corretos += 1
-                sequencia_atual += 1
-            elif points_type in ('resultado_gols', 'resultado'):
-                resultados_corretos += 1
-                sequencia_atual += 1
-            else:
-                sequencia_atual = 0
-            
-            maior_sequencia = max(maior_sequencia, sequencia_atual)
-    
-    # Medalha: Primeiro Placar Exato
-    if placares_exatos >= 1:
-        achievements.append({
-            'icon': '🎯',
-            'title': 'Sniper',
-            'desc': 'Acertou o primeiro placar exato',
-            'color': '#E74C3C'
-        })
-    
-    # Medalha: 3 Placares Exatos
-    if placares_exatos >= 3:
-        achievements.append({
-            'icon': '🔥',
-            'title': 'Em Chamas',
-            'desc': f'{placares_exatos} placares exatos!',
-            'color': '#E67E22'
-        })
-    
-    # Medalha: 5 Placares Exatos
-    if placares_exatos >= 5:
-        achievements.append({
-            'icon': '💎',
-            'title': 'Diamante',
-            'desc': f'{placares_exatos} placares exatos!',
-            'color': '#3498DB'
-        })
-    
-    # Medalha: 10 Placares Exatos
-    if placares_exatos >= 10:
-        achievements.append({
-            'icon': '👑',
-            'title': 'Rei dos Placares',
-            'desc': f'{placares_exatos} placares exatos!',
-            'color': '#FFD700'
-        })
-    
-    # Medalha: Sequência de 3 acertos
-    if maior_sequencia >= 3:
-        achievements.append({
-            'icon': '⚡',
-            'title': 'Sequência de Fogo',
-            'desc': f'{maior_sequencia} acertos seguidos!',
-            'color': '#F39C12'
-        })
-    
-    # Medalha: Sequência de 5 acertos
-    if maior_sequencia >= 5:
-        achievements.append({
-            'icon': '🌟',
-            'title': 'Imbatível',
-            'desc': f'{maior_sequencia} acertos seguidos!',
-            'color': '#9B59B6'
-        })
-    
-    # Medalha: 10 resultados corretos
-    if resultados_corretos >= 10:
-        achievements.append({
-            'icon': '🏅',
-            'title': 'Consistente',
-            'desc': f'{resultados_corretos} resultados corretos',
-            'color': '#2ECC71'
-        })
-    
-    # Medalha: 50+ pontos em jogos
-    if total_pontos_jogos >= 50:
-        achievements.append({
-            'icon': '⭐',
-            'title': 'Meio Centenário',
-            'desc': f'{total_pontos_jogos} pontos em jogos',
-            'color': '#1ABC9C'
-        })
-    
-    # Medalha: 100+ pontos em jogos
-    if total_pontos_jogos >= 100:
-        achievements.append({
-            'icon': '💯',
-            'title': 'Centenário',
-            'desc': f'{total_pontos_jogos} pontos em jogos',
-            'color': '#E74C3C'
-        })
-    
-    # Medalha: Fez todos os palpites
+        points, points_type, _ = calculate_match_points(
+            pred.pred_team1_score, pred.pred_team2_score,
+            match.team1_score, match.team2_score,
+            config
+        )
+        total_pontos_jogos += points
+
+        if points_type == 'placar_exato':
+            placares_exatos += 1
+            resultados_corretos += 1
+            sequencia_atual += 1
+        elif points_type in ('resultado_gols', 'resultado'):
+            resultados_corretos += 1
+            sequencia_atual += 1
+        else:
+            sequencia_atual = 0
+
+        maior_sequencia = max(maior_sequencia, sequencia_atual)
+
+    # Palpites feitos em todos os jogos já iniciados
     total_matches = session.query(Match).filter(Match.datetime <= now).count()
     total_preds = session.query(Prediction).filter_by(user_id=user_id).count()
-    if total_matches > 0 and total_preds >= total_matches:
+
+    # Catálogo completo: (atual, meta) definem progresso e desbloqueio
+    catalogo = [
+        ('🎯', 'Sniper', 'Acerte 1 placar exato', '#E74C3C', placares_exatos, 1),
+        ('🔥', 'Em Chamas', 'Acerte 3 placares exatos', '#E67E22', placares_exatos, 3),
+        ('💎', 'Diamante', 'Acerte 5 placares exatos', '#3498DB', placares_exatos, 5),
+        ('👑', 'Rei dos Placares', 'Acerte 10 placares exatos', '#FFD700', placares_exatos, 10),
+        ('⚡', 'Sequência de Fogo', 'Acerte 3 jogos seguidos', '#F39C12', maior_sequencia, 3),
+        ('🌟', 'Imbatível', 'Acerte 5 jogos seguidos', '#9B59B6', maior_sequencia, 5),
+        ('🏅', 'Consistente', 'Acerte o resultado de 10 jogos', '#2ECC71', resultados_corretos, 10),
+        ('⭐', 'Meio Centenário', 'Some 50 pontos em jogos', '#1ABC9C', total_pontos_jogos, 50),
+        ('💯', 'Centenário', 'Some 100 pontos em jogos', '#E74C3C', total_pontos_jogos, 100),
+        ('📝', 'Dedicado', 'Faça palpite em todos os jogos já realizados', '#2980B9',
+         total_preds if total_matches > 0 else 0, max(total_matches, 1)),
+    ]
+
+    achievements = []
+    for icon, title, criteria, color, atual, meta in catalogo:
+        unlocked = atual >= meta
         achievements.append({
-            'icon': '📝',
-            'title': 'Dedicado',
-            'desc': 'Fez palpite em todos os jogos',
-            'color': '#2980B9'
+            'icon': icon,
+            'title': title,
+            'criteria': criteria,
+            'color': color,
+            'unlocked': unlocked,
+            'progress': f'{min(atual, meta)}/{meta}',
         })
-    
+
     return achievements
 
 
 def render_achievements(session, user_id):
-    """Renderiza as medalhas/conquistas de um usuário."""
+    """Renderiza a galeria de conquistas: as obtidas em destaque e as
+    ainda bloqueadas em cinza, sempre mostrando o critério de cada uma."""
     achievements = get_user_achievements(session, user_id)
-    
-    if not achievements:
-        st.info("🏅 Você ainda não conquistou nenhuma medalha. Continue palpitando!")
-        return
-    
+
+    conquistadas = sum(1 for a in achievements if a['unlocked'])
+    st.caption(
+        f"🏅 Você desbloqueou **{conquistadas} de {len(achievements)}** conquistas. "
+        "As cinzas mostram o que falta para conquistá-las."
+    )
+
     st.markdown("""
     <style>
-        .achievement-card {
-            display: inline-flex;
-            align-items: center;
+        .achievement-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
             gap: 10px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            margin-top: 8px;
+        }
+        .achievement-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: linear-gradient(135deg, #ffffff 0%, #f1f7fc 100%);
             border-radius: 12px;
             padding: 12px 16px;
-            margin: 5px;
-            border-left: 4px solid;
+            border-left: 5px solid;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
-        .achievement-icon {
-            font-size: 1.8rem;
+        .achievement-card.locked {
+            background: #f3f4f6;
+            border-left-color: #c9ccd1 !important;
+            opacity: 0.85;
         }
-        .achievement-info {
-            display: flex;
-            flex-direction: column;
+        .achievement-icon { font-size: 1.9rem; line-height: 1; }
+        .achievement-card.locked .achievement-icon { filter: grayscale(100%); opacity: 0.5; }
+        .achievement-info { display: flex; flex-direction: column; gap: 2px; }
+        .achievement-title { font-weight: 700; font-size: 0.92rem; color: #1a1a2e; }
+        .achievement-card.locked .achievement-title { color: #6b7280; }
+        .achievement-criteria { font-size: 0.78rem; color: #555; }
+        .achievement-status {
+            font-size: 0.72rem; font-weight: 600; margin-top: 2px;
         }
-        .achievement-title {
-            font-weight: 700;
-            font-size: 0.9rem;
-            color: #1a1a2e;
-        }
-        .achievement-desc {
-            font-size: 0.75rem;
-            color: #666;
-        }
+        .achievement-status.done { color: #2e7d32; }
+        .achievement-status.todo { color: #8a8f98; }
     </style>
     """, unsafe_allow_html=True)
-    
+
+    cards = []
     for ach in achievements:
-        st.markdown(f"""
-        <div class="achievement-card" style="border-left-color: {ach['color']};">
+        if ach['unlocked']:
+            card_class = "achievement-card"
+            border = ach['color']
+            status = '<span class="achievement-status done">✅ Conquistada</span>'
+        else:
+            card_class = "achievement-card locked"
+            border = "#c9ccd1"
+            status = f'<span class="achievement-status todo">🔒 Progresso: {ach["progress"]}</span>'
+
+        cards.append(f"""
+        <div class="{card_class}" style="border-left-color: {border};">
             <span class="achievement-icon">{ach['icon']}</span>
             <div class="achievement-info">
                 <span class="achievement-title">{ach['title']}</span>
-                <span class="achievement-desc">{ach['desc']}</span>
+                <span class="achievement-criteria">{ach['criteria']}</span>
+                {status}
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """)
+
+    st.markdown(f'<div class="achievement-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
