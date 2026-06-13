@@ -3001,20 +3001,20 @@ def page_estatisticas():
         st.divider()
         
         # ========================================
-        # GRÁFICO DE DISTRIBUIÇÃO DE PONTOS
+        # GRÁFICO DE DISTRIBUIÇÃO DA PONTUAÇÃO
         # ========================================
-        st.subheader("🎯 Distribuição de Acertos")
-        
-        # Conta tipos de acertos baseado no campo points_type
+        st.subheader("🎯 De Onde Vêm Seus Pontos")
+
+        # Soma os pontos por tipo de acerto (cada fatia = % da pontuação total)
         # SÓ considera jogos que já começaram E têm placar registrado
         from sqlalchemy import func
         from datetime import datetime
         import pytz
-        
+
         brazil_tz = pytz.timezone('America/Sao_Paulo')
         now_br = datetime.now(brazil_tz)
         now_naive = now_br.replace(tzinfo=None)
-        
+
         # Busca IDs de jogos que já começaram E têm placar registrado
         jogos_com_resultado = session.query(Match.id).filter(
             Match.datetime <= now_naive,
@@ -3022,12 +3022,12 @@ def page_estatisticas():
             Match.team2_score.isnot(None)
         ).all()
         jogos_com_resultado_ids = [j[0] for j in jogos_com_resultado]
-        
-        # Busca contagem por tipo de acerto apenas de jogos com resultado
+
+        # Soma a pontuação por tipo de acerto apenas de jogos com resultado
         if jogos_com_resultado_ids:
             tipos_acertos = session.query(
                 Prediction.points_type,
-                func.count(Prediction.id).label('count')
+                func.sum(Prediction.points_awarded).label('pontos')
             ).filter(
                 Prediction.user_id == st.session_state.user['id'],
                 Prediction.match_id.in_(jogos_com_resultado_ids),
@@ -3036,7 +3036,7 @@ def page_estatisticas():
             ).group_by(Prediction.points_type).all()
         else:
             tipos_acertos = []
-        
+
         # Mapeamento de tipos para labels e cores
         # As chaves devem corresponder aos points_type gravados no banco
         # (ver calculate_match_points em scoring.py): placar_exato,
@@ -3047,24 +3047,24 @@ def page_estatisticas():
             'resultado': ('Resultado Correto (10pts)', '#2A398D'),
             'gols': ('Gols de um Time (5pts)', '#F39C12'),
         }
-        
+
         if tipos_acertos:
             labels = []
             values = []
             colors = []
-            
-            for tipo, count in tipos_acertos:
+
+            for tipo, pontos in tipos_acertos:
                 if tipo in tipo_config:
                     label, color = tipo_config[tipo]
                     labels.append(label)
-                    values.append(count)
+                    values.append(int(pontos or 0))
                     colors.append(color)
-            
+
             # Só mostra o gráfico se houver dados válidos
             if values and sum(values) > 0:
                 # Ajusta pull dinamicamente baseado no número de categorias
                 pull_values = [0.05] + [0.02] * (len(values) - 1) if len(values) > 1 else [0.05]
-                
+
                 fig_pie = go.Figure(data=[go.Pie(
                     labels=labels,
                     values=values,
@@ -3073,11 +3073,12 @@ def page_estatisticas():
                     textinfo='percent',
                     textposition='inside',
                     insidetextfont=dict(size=14, color='white'),
-                    pull=pull_values
+                    pull=pull_values,
+                    hovertemplate='%{label}<br>%{value} pts (%{percent})<extra></extra>'
                 )])
-                
+
                 fig_pie.update_layout(
-                    title='Tipos de Acertos',
+                    title='Distribuição da Pontuação',
                     showlegend=True,
                     legend=dict(
                         orientation='h',
