@@ -520,124 +520,161 @@ def render_achievements(session, user_id):
 # =============================================================================
 def get_best_predictions_by_round(session):
     """
-    Retorna o melhor palpite de cada rodada (data de jogos).
+    Retorna, para cada rodada (data de jogos finalizados), os melhores E os
+    piores palpites. Em caso de empate, todos os empatados são incluídos.
+
+    Cada item: {date, num_matches, best: {points, users:[{name, exatos}]},
+                worst: {points, users:[{name, exatos}]} ou None}.
     """
     tz_brazil = pytz.timezone('America/Sao_Paulo')
     now = datetime.now(tz_brazil).replace(tzinfo=None)
-    
+
     # Busca jogos finalizados
     matches = session.query(Match).filter(
         Match.datetime <= now,
         Match.team1_score.isnot(None),
         Match.team2_score.isnot(None)
     ).order_by(Match.datetime).all()
-    
+
     if not matches:
         return []
-    
+
     # Agrupa por data
     matches_by_date = {}
     for m in matches:
         date_key = m.datetime.strftime('%d/%m/%Y')
-        if date_key not in matches_by_date:
-            matches_by_date[date_key] = []
-        matches_by_date[date_key].append(m)
-    
-    results = []
-    
+        matches_by_date.setdefault(date_key, []).append(m)
+
     config = get_scoring_config(session)
-    
+    users = session.query(User).filter_by(active=True).filter(User.role != 'admin').all()
+
+    results = []
+
     for date_key, date_matches in matches_by_date.items():
         match_ids = [m.id for m in date_matches]
-        
-        # Busca todos os palpites desses jogos
-        users = session.query(User).filter_by(active=True).filter(User.role != 'admin').all()
-        
-        best_user = None
-        best_points = -1
-        best_exatos = 0
-        
+        match_by_id = {m.id: m for m in date_matches}
+
+        # Busca todos os palpites desses jogos de uma vez (evita N+1)
+        preds = session.query(Prediction).filter(
+            Prediction.match_id.in_(match_ids)
+        ).all()
+        preds_by_user = {}
+        for p in preds:
+            preds_by_user.setdefault(p.user_id, []).append(p)
+
+        # Calcula pontos/exatos de cada participante que palpitou na rodada
+        scored = []
         for user in users:
+            user_preds = preds_by_user.get(user.id, [])
+            if not user_preds:
+                continue
             user_points = 0
             user_exatos = 0
-            
-            for match in date_matches:
-                pred = session.query(Prediction).filter_by(
-                    user_id=user.id,
-                    match_id=match.id
-                ).first()
-                
-                if pred and match.team1_score is not None:
-                    points, ptype, _ = calculate_match_points(
-                        pred.pred_team1_score, pred.pred_team2_score,
-                        match.team1_score, match.team2_score,
-                        config
-                    )
-                    user_points += points
-                    if ptype == 'placar_exato':
-                        user_exatos += 1
-            
-            if user_points > best_points or (user_points == best_points and user_exatos > best_exatos):
-                best_points = user_points
-                best_exatos = user_exatos
-                best_user = user
-        
-        if best_user and best_points > 0:
-            results.append({
-                'date': date_key,
-                'user_name': best_user.name,
-                'points': best_points,
-                'exatos': best_exatos,
-                'num_matches': len(date_matches)
-            })
-    
+            for p in user_preds:
+                m = match_by_id[p.match_id]
+                points, ptype, _ = calculate_match_points(
+                    p.pred_team1_score, p.pred_team2_score,
+                    m.team1_score, m.team2_score, config
+                )
+                user_points += points
+                if ptype == 'placar_exato':
+                    user_exatos += 1
+            scored.append({'name': user.name, 'points': user_points, 'exatos': user_exatos})
+
+        if not scored:
+            continue
+
+        best_points = max(s['points'] for s in scored)
+        worst_points = min(s['points'] for s in scored)
+
+        # Só destaca melhor se alguém efetivamente pontuou
+        if best_points <= 0:
+            continue
+
+        best_users = [
+            {'name': s['name'], 'exatos': s['exatos']}
+            for s in scored if s['points'] == best_points
+        ]
+
+        # Pior só faz sentido se não for o mesmo grupo dos melhores
+        worst = None
+        if worst_points < best_points:
+            worst = {
+                'points': worst_points,
+                'users': [
+                    {'name': s['name'], 'exatos': s['exatos']}
+                    for s in scored if s['points'] == worst_points
+                ],
+            }
+
+        results.append({
+            'date': date_key,
+            'num_matches': len(date_matches),
+            'best': {'points': best_points, 'users': best_users},
+            'worst': worst,
+        })
+
     return results
 
 
+def _render_prediction_cards(users, points, accent, bg_gradient, icon):
+    """Renderiza cards de participantes lado a lado (flex), um por pessoa.
+    HTML em uma linha por elemento para evitar interpretação como código."""
+    cards = []
+    for u in users:
+        exatos = (
+            f'<span style="margin-left:6px;font-size:0.72rem;color:#555;">🎯 {u["exatos"]} exato(s)</span>'
+            if u.get('exatos') else ''
+        )
+        cards.append(
+            f'<div style="flex:1 1 160px;min-width:150px;background:{bg_gradient};'
+            f'border-left:4px solid {accent};border-radius:10px;padding:10px 14px;">'
+            f'<div style="font-weight:700;color:#1a1a2e;font-size:0.95rem;">{icon} {u["name"]}</div>'
+            f'<div style="margin-top:4px;"><span style="background:{accent};color:#1a1a2e;'
+            f'padding:2px 10px;border-radius:14px;font-weight:700;font-size:0.8rem;">{points} pts</span>'
+            f'{exatos}</div></div>'
+        )
+    html = f'<div style="display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px 0;">{"".join(cards)}</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def render_best_predictions(session):
-    """Renderiza os melhores palpites por rodada."""
-    st.subheader("🌟 Melhor Palpite da Rodada")
-    
+    """Renderiza os melhores e piores palpites por rodada."""
+    st.subheader("🌟 Destaques da Rodada")
+
     results = get_best_predictions_by_round(session)
-    
+
     if not results:
         st.info("Ainda não há rodadas finalizadas.")
         return
-    
+
     for r in reversed(results):  # Mais recente primeiro
-        st.markdown(f"""
-        <div style="
-            background: linear-gradient(135deg, #f8f9fa 0%, #fff3cd 100%);
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin: 8px 0;
-            border-left: 4px solid #FFD700;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-        ">
-            <div>
-                <span style="font-weight: 700; color: #1a1a2e;">📅 {r['date']}</span>
-                <span style="color: #666; font-size: 0.8rem;"> ({r['num_matches']} jogos)</span>
-            </div>
-            <div>
-                <span style="font-size: 1.1rem; font-weight: 700; color: #1E3A5F;">
-                    🏆 {r['user_name']}
-                </span>
-                <span style="
-                    background: #FFD700;
-                    color: #1a1a2e;
-                    padding: 3px 10px;
-                    border-radius: 15px;
-                    font-weight: 700;
-                    font-size: 0.85rem;
-                    margin-left: 8px;
-                ">{r['points']} pts</span>
-                {"<span style='margin-left: 5px; font-size: 0.8rem;'>🎯 " + str(r['exatos']) + " exato(s)</span>" if r['exatos'] > 0 else ""}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-weight:700;color:#1a1a2e;margin-top:6px;">📅 {r["date"]} '
+            f'<span style="color:#666;font-size:0.8rem;font-weight:400;">({r["num_matches"]} jogos)</span></div>',
+            unsafe_allow_html=True,
+        )
+
+        plural_melhor = "Melhores palpites" if len(r['best']['users']) > 1 else "Melhor palpite"
+        st.markdown(
+            f'<div style="font-size:0.82rem;color:#856404;font-weight:600;margin:2px 0;">🏆 {plural_melhor}</div>',
+            unsafe_allow_html=True,
+        )
+        _render_prediction_cards(
+            r['best']['users'], r['best']['points'],
+            accent='#FFD700', bg_gradient='linear-gradient(135deg,#fffef5 0%,#fff3cd 100%)', icon='🏆'
+        )
+
+        if r['worst']:
+            plural_pior = "Piores palpites" if len(r['worst']['users']) > 1 else "Pior palpite"
+            st.markdown(
+                f'<div style="font-size:0.82rem;color:#721c24;font-weight:600;margin:2px 0;">🥶 {plural_pior}</div>',
+                unsafe_allow_html=True,
+            )
+            _render_prediction_cards(
+                r['worst']['users'], r['worst']['points'],
+                accent='#E68A8A', bg_gradient='linear-gradient(135deg,#fff8f8 0%,#ffe3e3 100%)', icon='🥶'
+            )
 
 
 # =============================================================================
