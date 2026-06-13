@@ -306,14 +306,24 @@ def get_user_stats(session, user_id: int) -> dict:
     
     # Pega todos os palpites do usuário
     all_predictions = session.query(Prediction).filter_by(user_id=user_id).all()
-    
+
     # Filtra apenas palpites de jogos que têm placar registrado
     predictions = [p for p in all_predictions if p.match_id in matches_with_score_ids]
-    
+
+    # Jogos com confronto já definido (times conhecidos). Palpites de jogos de
+    # mata-mata só contam a partir do momento em que a fase estiver definida.
+    jogos_definidos_ids = {
+        m_id for (m_id,) in session.query(Match.id).filter(
+            Match.team1_id.isnot(None),
+            Match.team2_id.isnot(None)
+        ).all()
+    }
+    total_palpites = sum(1 for p in all_predictions if p.match_id in jogos_definidos_ids)
+
     config = get_scoring_config(session)
-    
+
     stats = {
-        'total_palpites': len(all_predictions),  # Total de palpites feitos
+        'total_palpites': total_palpites,  # Palpites em jogos com confronto definido
         'placares_exatos': 0,
         'resultados_corretos': 0,
         'gols_corretos': 0,
