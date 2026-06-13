@@ -475,8 +475,8 @@ def render_achievements(session, user_id):
             border-left: 5px solid;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
-        .achievement-card.locked { background: #f3f4f6; opacity: 0.9; }
-        .achievement-card.locked .achievement-icon { filter: grayscale(100%); opacity: 0.55; }
+        .achievement-card.locked { background: #fbfcfd; opacity: 0.7; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+        .achievement-card.locked .achievement-icon { filter: grayscale(100%); opacity: 0.45; }
         .achievement-icon { font-size: 1.9rem; line-height: 1; }
         .achievement-info { display: flex; flex-direction: column; }
         .achievement-title { font-weight: 700; font-size: 0.92rem; color: #1a1a2e; }
@@ -487,6 +487,9 @@ def render_achievements(session, user_id):
         .achievement-status.todo { color: #8a8f98; }
     </style>
     """, unsafe_allow_html=True)
+
+    # Conquistadas primeiro, mantendo a ordem do catálogo dentro de cada grupo
+    achievements = sorted(achievements, key=lambda a: not a['unlocked'])
 
     for ach in achievements:
         if ach['unlocked']:
