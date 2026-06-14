@@ -639,7 +639,7 @@ def _render_prediction_cards(users, points, accent, bg_gradient, icon):
 
 
 def render_best_predictions(session):
-    """Renderiza os melhores e piores palpites por rodada."""
+    """Renderiza os melhores e piores palpites da rodada escolhida."""
     st.subheader("🌟 Destaques da Rodada")
 
     results = get_best_predictions_by_round(session)
@@ -648,33 +648,44 @@ def render_best_predictions(session):
         st.info("Ainda não há rodadas finalizadas.")
         return
 
-    for r in reversed(results):  # Mais recente primeiro
-        st.markdown(
-            f'<div style="font-weight:700;color:#1a1a2e;margin-top:6px;">📅 {r["date"]} '
-            f'<span style="color:#666;font-size:0.8rem;font-weight:400;">({r["num_matches"]} jogos)</span></div>',
-            unsafe_allow_html=True,
-        )
+    results_desc = list(reversed(results))  # mais recente primeiro
+    date_options = [r['date'] for r in results_desc]
 
-        plural_melhor = "Melhores palpites" if len(r['best']['users']) > 1 else "Melhor palpite"
+    selected_date = st.selectbox(
+        "Escolha o dia",
+        date_options,
+        index=0,
+        key="destaques_rodada_data",
+    )
+
+    r = next(r for r in results_desc if r['date'] == selected_date)
+
+    st.markdown(
+        f'<div style="font-weight:700;color:#1a1a2e;margin-top:6px;">📅 {r["date"]} '
+        f'<span style="color:#666;font-size:0.8rem;font-weight:400;">({r["num_matches"]} jogos)</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    plural_melhor = "Melhores palpites" if len(r['best']['users']) > 1 else "Melhor palpite"
+    st.markdown(
+        f'<div style="font-size:0.82rem;color:#856404;font-weight:600;margin:2px 0;">🏆 {plural_melhor}</div>',
+        unsafe_allow_html=True,
+    )
+    _render_prediction_cards(
+        r['best']['users'], r['best']['points'],
+        accent='#FFD700', bg_gradient='linear-gradient(135deg,#fffef5 0%,#fff3cd 100%)', icon='🏆'
+    )
+
+    if r['worst']:
+        plural_pior = "Piores palpites" if len(r['worst']['users']) > 1 else "Pior palpite"
         st.markdown(
-            f'<div style="font-size:0.82rem;color:#856404;font-weight:600;margin:2px 0;">🏆 {plural_melhor}</div>',
+            f'<div style="font-size:0.82rem;color:#721c24;font-weight:600;margin:2px 0;">🥶 {plural_pior}</div>',
             unsafe_allow_html=True,
         )
         _render_prediction_cards(
-            r['best']['users'], r['best']['points'],
-            accent='#FFD700', bg_gradient='linear-gradient(135deg,#fffef5 0%,#fff3cd 100%)', icon='🏆'
+            r['worst']['users'], r['worst']['points'],
+            accent='#E68A8A', bg_gradient='linear-gradient(135deg,#fff8f8 0%,#ffe3e3 100%)', icon='🥶'
         )
-
-        if r['worst']:
-            plural_pior = "Piores palpites" if len(r['worst']['users']) > 1 else "Pior palpite"
-            st.markdown(
-                f'<div style="font-size:0.82rem;color:#721c24;font-weight:600;margin:2px 0;">🥶 {plural_pior}</div>',
-                unsafe_allow_html=True,
-            )
-            _render_prediction_cards(
-                r['worst']['users'], r['worst']['points'],
-                accent='#E68A8A', bg_gradient='linear-gradient(135deg,#fff8f8 0%,#ffe3e3 100%)', icon='🥶'
-            )
 
 
 # =============================================================================
