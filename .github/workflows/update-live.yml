@@ -34,7 +34,14 @@ jobs:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           NEON_CONNECTION_STRING: ${{ secrets.NEON_CONNECTION_STRING }}
         run: |
+          # --mode live so retorna jogos que a API ainda lista como "ao vivo".
+          # No instante em que o jogo termina, ele some dessa lista antes do
+          # placar final ser capturado -- por isso roda --mode post tambem em
+          # todo ciclo (mesma cadencia de 3min), em vez de depender so dos
+          # horarios fixos do update-post.yml (que podem deixar o placar
+          # parado por horas).
           for i in $(seq 1 60); do
             python update_results.py --mode live
+            python update_results.py --mode post
             sleep 180
           done
