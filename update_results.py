@@ -55,6 +55,7 @@ API_NAME_TO_NEON_CODE = {
     "Croatia": "CRO",
     "Curaçao": "CUW",
     "Czech Republic": "CZE",
+    "Czechia": "CZE",
     "Ecuador": "ECU",
     "Egypt": "EGY",
     "England": "ENG",
