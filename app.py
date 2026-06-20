@@ -2366,7 +2366,8 @@ def _ranking_live_fragment(qtd_rebaixados):
         nome = r['nome']
         pontos = r['total_pontos']
         aproveitamento = r.get('aproveitamento', 0)
-            
+        placares_exatos = r.get('placares_exatos', 0)
+
         # Verifica se está na zona de rebaixamento
         is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
             
@@ -2394,8 +2395,11 @@ def _ranking_live_fragment(qtd_rebaixados):
         <div class="ranking-row {row_class}">
             <div class="ranking-posicao">{icone}</div>
             <div class="ranking-nome">{nome}</div>
-            <span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>
-            <div class="ranking-pontos">{pontos} pts</div>
+            <div class="ranking-badges">
+                <span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>
+                <span class="ranking-exatos">🎯 {placares_exatos}</span>
+                <div class="ranking-pontos">{pontos} pts</div>
+            </div>
         </div>
         '''
             
@@ -2572,6 +2576,8 @@ def page_ranking():
             .ranking-row {
                 display: flex;
                 align-items: center;
+                flex-wrap: wrap;
+                gap: 6px 0;
                 padding: 12px 20px;
                 margin: 5px 0;
                 border-radius: 10px;
@@ -2634,10 +2640,48 @@ def page_ranking():
                 border: 1px solid #cfe3f3;
                 padding: 4px 10px;
                 border-radius: 20px;
-                margin-right: 8px;
                 white-space: nowrap;
             }
-            
+
+            .ranking-exatos {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #7a4a00;
+                background: #fff6e0;
+                border: 1px solid #ffe2a8;
+                padding: 4px 10px;
+                border-radius: 20px;
+                white-space: nowrap;
+            }
+
+            /* Agrupa os badges (aproveitamento, exatos, pontos) à direita do
+               nome. Em telas largas ficam numa linha só; em telas estreitas
+               quebram para uma linha abaixo do nome, em vez de espremer ou
+               cortar o conteúdo. */
+            .ranking-badges {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-left: auto;
+                flex-wrap: wrap;
+            }
+
+            @media (max-width: 480px) {
+                .ranking-row {
+                    padding: 10px 14px;
+                }
+                .ranking-nome {
+                    flex: 1 1 100%;
+                    font-size: 1rem;
+                    margin-bottom: 4px;
+                }
+                .ranking-badges {
+                    margin-left: 0;
+                    width: 100%;
+                    justify-content: flex-end;
+                }
+            }
+
             /* CSS da zona de rebaixamento removido - usando estilo inline */
             
             /* ========================================
