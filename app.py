@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import pytz
 import json
 import time
+from sqlalchemy import text
 from streamlit_cookies_controller import CookieController
 
 # Inicializa o gerenciador de cookies para persistência de sessão
@@ -1468,28 +1469,32 @@ def page_home():
 def _save_palpite_jogo(user_id, match_id):
     """Salva (cria ou atualiza) o palpite de placar do usuário para um jogo,
     lendo os valores atuais dos campos de gols no session_state.
-    Usado tanto pelo auto-save (on_change) quanto pelo botão Salvar."""
+    Usado tanto pelo auto-save (on_change) quanto pelo botão Salvar.
+
+    Usa INSERT ... ON CONFLICT (upsert atômico) em vez de "SELECT, depois
+    decide se insere ou atualiza": esse padrão antigo não era seguro contra
+    corridas (o on_change de cada campo de gols dispara uma chamada separada,
+    e duas chamadas quase simultâneas podiam cada uma ver "nenhum palpite
+    existente" e inserir uma linha duplicada). A constraint UNIQUE
+    (user_id, match_id) no banco torna isso impossível mesmo nesse caso."""
     gols1 = st.session_state.get(f"gols1_{match_id}")
     gols2 = st.session_state.get(f"gols2_{match_id}")
     if gols1 is None or gols2 is None:
         return
 
     with session_scope(engine) as session:
-        pred = session.query(Prediction).filter_by(
-            user_id=user_id,
-            match_id=match_id
-        ).first()
-
-        if pred:
-            pred.pred_team1_score = gols1
-            pred.pred_team2_score = gols2
-        else:
-            session.add(Prediction(
-                user_id=user_id,
-                match_id=match_id,
-                pred_team1_score=gols1,
-                pred_team2_score=gols2
-            ))
+        session.execute(
+            text("""
+                INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at, updated_at)
+                VALUES (:user_id, :match_id, :g1, :g2, :now, :now)
+                ON CONFLICT (user_id, match_id) DO UPDATE
+                SET pred_team1_score = EXCLUDED.pred_team1_score,
+                    pred_team2_score = EXCLUDED.pred_team2_score,
+                    updated_at = EXCLUDED.updated_at
+                WHERE predictions.locked_at IS NULL
+            """),
+            {"user_id": user_id, "match_id": match_id, "g1": gols1, "g2": gols2, "now": datetime.utcnow()}
+        )
 
 
 def page_palpites_jogos():
@@ -4184,17 +4189,19 @@ def admin_palpites(session):
                             )
                         
                         if st.form_submit_button("💾 Salvar"):
-                            if pred:
-                                pred.pred_team1_score = gols1
-                                pred.pred_team2_score = gols2
-                            else:
-                                pred = Prediction(
-                                    user_id=selected_user_id,
-                                    match_id=match.id,
-                                    pred_team1_score=gols1,
-                                    pred_team2_score=gols2
-                                )
-                                session.add(pred)
+                            # Upsert atomico (mesmo padrao de _save_palpite_jogo) --
+                            # evita duplicar a linha de palpite em corridas.
+                            session.execute(
+                                text("""
+                                    INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at, updated_at)
+                                    VALUES (:user_id, :match_id, :g1, :g2, :now, :now)
+                                    ON CONFLICT (user_id, match_id) DO UPDATE
+                                    SET pred_team1_score = EXCLUDED.pred_team1_score,
+                                        pred_team2_score = EXCLUDED.pred_team2_score,
+                                        updated_at = EXCLUDED.updated_at
+                                """),
+                                {"user_id": selected_user_id, "match_id": match.id, "g1": gols1, "g2": gols2, "now": datetime.utcnow()}
+                            )
                             session.commit()
                             log_action(session, st.session_state.user['id'], 'palpite_editado', selected_user_id, f"Jogo #{match.match_number}")
                             st.success("Palpite salvo!")

@@ -2,7 +2,7 @@
 Modelos do banco de dados para o Bolão Copa do Mundo 2026
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -104,9 +104,13 @@ class Prediction(Base):
     created_at = Column(DateTime, default=lambda: datetime.utcnow())
     updated_at = Column(DateTime, onupdate=lambda: datetime.utcnow())
     locked_at = Column(DateTime)  # Quando foi travado
-    
+
     user = relationship("User", back_populates="predictions")
     match = relationship("Match", back_populates="predictions")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'match_id', name='uq_predictions_user_match'),
+    )
 
 
 class GroupPrediction(Base):
