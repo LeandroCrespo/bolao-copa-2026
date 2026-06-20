@@ -139,19 +139,35 @@ def get_live_fixtures():
 
 
 def get_today_fixtures():
-    """Busca todos os jogos da Copa 2026 de hoje."""
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    logger.info(f"Buscando jogos do dia {today}...")
-    data = api_request('fixtures', {
-        'league': LEAGUE_ID,
-        'season': SEASON,
-        'date': today
-    })
-    if data and data.get('results', 0) > 0:
-        logger.info(f"Encontrados {data['results']} jogos hoje")
-        return data['response']
-    logger.info("Nenhum jogo encontrado para hoje")
-    return []
+    """
+    Busca jogos da Copa 2026 de hoje E de ontem (data UTC).
+    Jogos que comecam a noite no Brasil (ex: 19h BRT = 22h UTC) podem
+    terminar depois da meia-noite UTC, caindo na data UTC de ontem -- sem
+    isso, o resultado final desses jogos nunca seria capturado pelo modo
+    'post' assim que o dia UTC virasse.
+    """
+    now_utc = datetime.now(timezone.utc)
+    dates = [
+        (now_utc - timedelta(days=1)).strftime('%Y-%m-%d'),
+        now_utc.strftime('%Y-%m-%d'),
+    ]
+    fixtures = []
+    seen_ids = set()
+    for date_str in dates:
+        logger.info(f"Buscando jogos do dia {date_str}...")
+        data = api_request('fixtures', {
+            'league': LEAGUE_ID,
+            'season': SEASON,
+            'date': date_str
+        })
+        if data and data.get('results', 0) > 0:
+            for fixture in data['response']:
+                fid = fixture['fixture']['id']
+                if fid not in seen_ids:
+                    seen_ids.add(fid)
+                    fixtures.append(fixture)
+    logger.info(f"Encontrados {len(fixtures)} jogos entre as duas datas")
+    return fixtures
 
 
 def get_all_finished_fixtures():
