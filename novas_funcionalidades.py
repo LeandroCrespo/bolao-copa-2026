@@ -723,6 +723,17 @@ def render_comparison(session):
         )
 
     if st.button("🔍 Comparar", key="btn_compare"):
+        st.session_state["comp_show"] = True
+        st.session_state["comp_user1_sel"] = user1_id
+        st.session_state["comp_user2_sel"] = user2_id
+
+    # Usa session_state em vez do retorno do botão, que so e True no instante
+    # do clique -- sem isso, qualquer interacao depois (ex: o checkbox "ver
+    # todos os jogos") recarrega a pagina e o bloco inteiro desaparece.
+    if st.session_state.get("comp_show"):
+        user1_id = st.session_state.get("comp_user1_sel", user1_id)
+        user2_id = st.session_state.get("comp_user2_sel", user2_id)
+
         stats1 = get_user_stats(session, user1_id)
         stats2 = get_user_stats(session, user2_id)
 
