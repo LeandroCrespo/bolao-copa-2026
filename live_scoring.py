@@ -3,7 +3,7 @@ Módulo de pontuação ao vivo para visualização em tempo real
 Calcula pontos temporários e variação de ranking durante os jogos
 """
 
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from models import User, Match, Prediction
 from scoring import calculate_match_points, get_scoring_config, get_ranking
 
@@ -135,9 +135,12 @@ def get_ongoing_matches(session, today_only=True) -> list:
     today_start = now_naive.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 
-    # Pega jogos que já começaram (comparação naive)
+    # Pega jogos que já começaram (comparação naive). O horário programado no
+    # banco pode estar levemente errado em relação ao início real (a API de
+    # placares já corrige o status para 'live'/'finished' nesses casos), por
+    # isso confiamos tambem no status diretamente, não só no horário.
     query = session.query(Match).filter(
-        Match.datetime <= now_naive  # Já começou
+        or_(Match.datetime <= now_naive, Match.status.in_(('live', 'finished')))
     )
     if today_only:
         query = query.filter(
@@ -155,16 +158,20 @@ def get_ongoing_matches(session, today_only=True) -> list:
         # Calcula tempo desde o início
         time_since_start = now_naive - match_time
         
-        # Jogo em andamento: começou há menos de 2 horas e não está finalizado
-        is_live = (
-            time_since_start.total_seconds() > 0 and 
-            time_since_start.total_seconds() < 7200 and  # 2 horas
-            match.status != 'finished'
-        )
-        
         # Status: finalizado ou em andamento
         is_finished = match.status == 'finished'
-        
+
+        # Jogo em andamento: confia primeiro no status (atualizado pela API
+        # de placares a cada poucos minutos); cai para o cálculo por horário
+        # só como reforço, caso o status ainda não tenha sido atualizado.
+        is_live = match.status == 'live' or (
+            not is_finished and
+            time_since_start.total_seconds() > 0 and
+            time_since_start.total_seconds() < 7200  # 2 horas
+        )
+
+        has_started = is_live or is_finished or time_since_start.total_seconds() > 0
+
         result.append({
             'id': match.id,
             'match_number': match.match_number,
@@ -178,7 +185,7 @@ def get_ongoing_matches(session, today_only=True) -> list:
             'status': match.status,
             'is_live': is_live,
             'is_finished': is_finished,
-            'has_started': time_since_start.total_seconds() > 0,
+            'has_started': has_started,
             'is_today': today_start <= match_time < today_end
         })
     
