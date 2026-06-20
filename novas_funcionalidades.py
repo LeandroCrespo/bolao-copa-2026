@@ -782,8 +782,18 @@ def render_comparison(session):
             </tr>
             <tr>
                 <td class="{'comp-winner' if stats1['resultados_corretos'] > stats2['resultados_corretos'] else ''}">{stats1['resultados_corretos']}</td>
-                <td><strong>Resultados Corretos</strong></td>
+                <td><strong>Resultados Corretos (total)</strong></td>
                 <td class="{'comp-winner' if stats2['resultados_corretos'] > stats1['resultados_corretos'] else ''}">{stats2['resultados_corretos']}</td>
+            </tr>
+            <tr>
+                <td class="{'comp-winner' if stats1['resultado_puro'] > stats2['resultado_puro'] else ''}">{stats1['resultado_puro']}</td>
+                <td><strong>↳ Resultado Correto (sem gols)</strong></td>
+                <td class="{'comp-winner' if stats2['resultado_puro'] > stats1['resultado_puro'] else ''}">{stats2['resultado_puro']}</td>
+            </tr>
+            <tr>
+                <td class="{'comp-winner' if stats1['resultado_gols'] > stats2['resultado_gols'] else ''}">{stats1['resultado_gols']}</td>
+                <td><strong>↳ Resultado + Gols de um Time</strong></td>
+                <td class="{'comp-winner' if stats2['resultado_gols'] > stats1['resultado_gols'] else ''}">{stats2['resultado_gols']}</td>
             </tr>
             <tr>
                 <td class="{'comp-winner' if stats1['pontos_grupos'] > stats2['pontos_grupos'] else ''}">{stats1['pontos_grupos']}</td>
@@ -805,16 +815,28 @@ def render_comparison(session):
         
         # Comparação jogo a jogo
         st.markdown("#### Palpites Jogo a Jogo")
-        
+
         tz_brazil = pytz.timezone('America/Sao_Paulo')
         now = datetime.now(tz_brazil).replace(tzinfo=None)
-        
-        matches = session.query(Match).filter(
+
+        total_jogos_realizados = session.query(Match).filter(
             Match.datetime <= now,
             Match.team1_score.isnot(None),
             Match.team2_score.isnot(None)
-        ).order_by(desc(Match.datetime)).limit(20).all()
-        
+        ).count()
+
+        ver_todos = False
+        if total_jogos_realizados > 20:
+            st.caption(f"Mostrando os 20 jogos mais recentes de {total_jogos_realizados} já realizados.")
+            ver_todos = st.checkbox("Ver todos os jogos", key="comp_ver_todos")
+
+        matches_query = session.query(Match).filter(
+            Match.datetime <= now,
+            Match.team1_score.isnot(None),
+            Match.team2_score.isnot(None)
+        ).order_by(desc(Match.datetime))
+        matches = matches_query.all() if ver_todos else matches_query.limit(20).all()
+
         for match in matches:
             pred1 = session.query(Prediction).filter_by(user_id=user1_id, match_id=match.id).first()
             pred2 = session.query(Prediction).filter_by(user_id=user2_id, match_id=match.id).first()

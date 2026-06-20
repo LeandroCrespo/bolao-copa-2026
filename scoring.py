@@ -325,7 +325,9 @@ def get_user_stats(session, user_id: int) -> dict:
     stats = {
         'total_palpites': total_palpites,  # Palpites em jogos com confronto definido
         'placares_exatos': 0,
-        'resultados_corretos': 0,
+        'resultados_corretos': 0,  # cumulativo: exato + resultado_gols + resultado
+        'resultado_puro': 0,       # só acertou o resultado, sem bônus de gols
+        'resultado_gols': 0,       # acertou resultado + gols de um time
         'gols_corretos': 0,
         'palpites_zerados': 0,
         'pontos_jogos': 0,
@@ -333,31 +335,33 @@ def get_user_stats(session, user_id: int) -> dict:
         'pontos_podio': 0,
         'total_pontos': 0
     }
-    
+
     for pred in predictions:
         # Pega placar registrado
         scores = match_scores.get(pred.match_id)
         if not scores:
             continue
-        
+
         # Calcula pontos
         points, points_type, _ = calculate_match_points(
             pred.pred_team1_score, pred.pred_team2_score,
             scores['team1_score'], scores['team2_score'],
             config
         )
-        
+
         stats['pontos_jogos'] += points
-        
+
         if points_type == 'placar_exato':
             stats['placares_exatos'] += 1
             stats['resultados_corretos'] += 1
             stats['gols_corretos'] += 1
         elif points_type == 'resultado_gols':
             stats['resultados_corretos'] += 1
+            stats['resultado_gols'] += 1
             stats['gols_corretos'] += 1
         elif points_type == 'resultado':
             stats['resultados_corretos'] += 1
+            stats['resultado_puro'] += 1
         elif points_type == 'gols':
             stats['gols_corretos'] += 1
         elif points_type == 'nenhum':
