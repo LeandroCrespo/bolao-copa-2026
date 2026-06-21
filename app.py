@@ -1405,16 +1405,17 @@ def _render_arrecadacao_card(session):
 
     st.markdown(f"""
     <div style="
-        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
+        background: linear-gradient(135deg, #FFF9DB 0%, #FFEFAA 100%);
+        border: 1px solid #FFE066;
         border-radius: 14px;
         padding: 16px 20px;
         margin: 10px 0;
         text-align: center;
-        box-shadow: 0 4px 15px rgba(30,58,95,0.3);
+        box-shadow: 0 4px 15px rgba(255,224,102,0.3);
     ">
-        <div style="font-size:0.8rem; font-weight:700; letter-spacing:1px; color:#cfe3f3; text-transform:uppercase;">💰 Total Arrecadado</div>
-        <div style="font-size:1.8rem; font-weight:900; color:#ffffff; margin:4px 0;">R$ {valor_fmt}</div>
-        <div style="font-size:0.85rem; color:#cfe3f3;">{pagos} de {total_participantes} participante(s) já pagaram</div>
+        <div style="font-size:0.8rem; font-weight:700; letter-spacing:1px; color:#7a5c00; text-transform:uppercase;">💰 Total Arrecadado</div>
+        <div style="font-size:1.8rem; font-weight:900; color:#1E3A5F; margin:4px 0;">R$ {valor_fmt}</div>
+        <div style="font-size:0.85rem; color:#7a5c00;">{pagos} de {total_participantes} participante(s) já pagaram</div>
     </div>
     """, unsafe_allow_html=True)
 
