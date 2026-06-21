@@ -1377,6 +1377,48 @@ def _live_jogos_home_fragment():
         st.divider()
 
 
+def _parse_valor_brl(texto: str) -> float:
+    """Converte um valor em formato BR (ex: 'R$ 50,00') para float. Retorna 0.0 se não der pra entender."""
+    if not texto:
+        return 0.0
+    limpo = texto.strip().replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+    try:
+        return float(limpo)
+    except ValueError:
+        return 0.0
+
+
+def _render_arrecadacao_card(session):
+    """Card mostrando quanto já foi arrecadado com as inscrições pagas até o momento."""
+    valor_inscricao = _parse_valor_brl(get_config_value(session, 'premiacao_valor_inscricao', ''))
+    if valor_inscricao <= 0:
+        return
+
+    total_participantes = session.query(User).filter(
+        User.role == 'player', User.active == True
+    ).count()
+    pagos = session.query(User).filter(
+        User.role == 'player', User.active == True, User.paid == True
+    ).count()
+    total_arrecadado = pagos * valor_inscricao
+    valor_fmt = f"{total_arrecadado:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.')
+
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #1E3A5F 0%, #2d5a87 100%);
+        border-radius: 14px;
+        padding: 16px 20px;
+        margin: 10px 0;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(30,58,95,0.3);
+    ">
+        <div style="font-size:0.8rem; font-weight:700; letter-spacing:1px; color:#cfe3f3; text-transform:uppercase;">💰 Total Arrecadado</div>
+        <div style="font-size:1.8rem; font-weight:900; color:#ffffff; margin:4px 0;">R$ {valor_fmt}</div>
+        <div style="font-size:0.85rem; color:#cfe3f3;">{pagos} de {total_participantes} participante(s) já pagaram</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 def page_home():
     """Página inicial com resumo do bolão"""
     # Cabeçalho padrão
@@ -1384,8 +1426,11 @@ def page_home():
     
     # Timer regressivo para a Copa
     render_countdown_timer()
-    
+
     with session_scope(engine) as session:
+        # Card com o total arrecadado das inscrições já pagas
+        _render_arrecadacao_card(session)
+
         # Timer do próximo jogo
         render_next_match_countdown(session)
 
