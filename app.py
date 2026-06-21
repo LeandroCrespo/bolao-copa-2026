@@ -2631,10 +2631,14 @@ def page_ranking():
             }
             
             .ranking-nome {
-                flex: 1;
+                flex: 1 1 auto;
+                min-width: 0;
                 font-size: 1.1rem;
                 font-weight: 600;
                 color: #1a1a2e;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
             
             .ranking-pontos {
@@ -2678,6 +2682,12 @@ def page_ranking():
                 padding: 4px 10px;
                 border-radius: 20px;
                 white-space: nowrap;
+                text-align: right;
+                /* Texto do premio costuma ser mais longo (ex: "R$ 475,00") --
+                   forca quebra pra linha propria dentro do grupo de badges,
+                   em vez de espremer aproveitamento/exatos/pontos. */
+                flex-basis: 100%;
+                order: 99;
             }
 
             /* Agrupa os badges (aproveitamento, exatos, pontos) à direita do
