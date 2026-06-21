@@ -2305,8 +2305,9 @@ def _ranking_live_fragment(qtd_rebaixados):
             <img src="https://raw.githubusercontent.com/LeandroCrespo/bolao-copa-2026/main/assets/taca_copa_v2.png"
                  style="height:110px; width:auto; object-fit:contain; filter:drop-shadow(0 4px 12px rgba(0,0,0,0.35)); margin: 4px 0 10px 0;"
                  alt="Taça Copa do Mundo" />
-            <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}</div>
+            <div style="font-size:1.6rem; font-weight:900; color:#1E3A5F; margin: 4px 0 8px 0; text-shadow: 0 1px 4px rgba(255,255,255,0.6);">{primeiro['nome']}{' ✅' if primeiro.get('paid') else ''}</div>
             <div style="display:inline-block; background: linear-gradient(135deg, #1E3A5F, #2d5a87); color:#FFFFFF; font-size:1.2rem; font-weight:900; padding: 6px 28px; border-radius:30px; margin-top:4px; box-shadow: 0 3px 10px rgba(0,0,0,0.25);">{primeiro['total_pontos']} pts</div>
+            {f'<div style="margin-top:8px; font-size:0.95rem; font-weight:700; color:#145a32;">💰 {premios_por_posicao.get(1, "")}</div>' if premios_por_posicao.get(1) else ''}
         </div>
         """, unsafe_allow_html=True)
 
@@ -2326,8 +2327,9 @@ def _ranking_live_fragment(qtd_rebaixados):
             ">
                 <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#555; text-transform:uppercase; margin-bottom:8px;">2º Lugar</div>
                 <div style="font-size:2.2rem; margin: 4px 0;">&#129352;</div>
-                <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{segundo['nome']}</div>
+                <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{segundo['nome']}{' ✅' if segundo.get('paid') else ''}</div>
                 <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{segundo['total_pontos']} pts</div>
+                {f'<div style="margin-top:8px; font-size:0.85rem; font-weight:700; color:#145a32;">💰 {premios_por_posicao.get(2, "")}</div>' if premios_por_posicao.get(2) else ''}
             </div>
             """, unsafe_allow_html=True)
 
@@ -2348,8 +2350,9 @@ def _ranking_live_fragment(qtd_rebaixados):
             ">
                 <div style="font-size:0.65rem; font-weight:700; letter-spacing:2px; color:#7a4a00; text-transform:uppercase; margin-bottom:8px;">3º Lugar</div>
                 <div style="font-size:2.2rem; margin: 4px 0;">&#129353;</div>
-                <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{terceiro['nome']}</div>
+                <div style="font-size:1rem; font-weight:700; color:#1a1a2e; margin: 8px 0 6px 0;">{terceiro['nome']}{' ✅' if terceiro.get('paid') else ''}</div>
                 <div style="display:inline-block; background:rgba(255,255,255,0.8); color:#1E3A5F; font-size:0.95rem; font-weight:800; padding:4px 16px; border-radius:20px;">{terceiro['total_pontos']} pts</div>
+                {f'<div style="margin-top:8px; font-size:0.85rem; font-weight:700; color:#145a32;">💰 {premios_por_posicao.get(3, "")}</div>' if premios_por_posicao.get(3) else ''}
             </div>
             """, unsafe_allow_html=True)
         
@@ -2380,7 +2383,7 @@ def _ranking_live_fragment(qtd_rebaixados):
         pontos = r['total_pontos']
         aproveitamento = r.get('aproveitamento', 0)
         placares_exatos = r.get('placares_exatos', 0)
-        premio = premios_por_posicao.get(posicao, '')
+        pago_selo = ' <span class="ranking-pago" title="Pagamento confirmado">✅</span>' if r.get('paid') else ''
 
         # Verifica se está na zona de rebaixamento
         is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
@@ -2408,11 +2411,10 @@ def _ranking_live_fragment(qtd_rebaixados):
         row_html = f'''
         <div class="ranking-row {row_class}">
             <div class="ranking-posicao">{icone}</div>
-            <div class="ranking-nome">{nome}</div>
+            <div class="ranking-nome">{nome}{pago_selo}</div>
             <div class="ranking-badges">
                 <span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>
                 <span class="ranking-exatos">🎯 {placares_exatos}</span>
-                {f'<span class="ranking-premio">💰 {premio}</span>' if premio else ''}
                 <div class="ranking-pontos">{pontos} pts</div>
             </div>
         </div>
@@ -2631,14 +2633,14 @@ def page_ranking():
             }
             
             .ranking-nome {
-                flex: 1 1 auto;
-                min-width: 0;
+                flex: 1;
                 font-size: 1.1rem;
                 font-weight: 600;
                 color: #1a1a2e;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+            }
+
+            .ranking-pago {
+                font-size: 0.95rem;
             }
             
             .ranking-pontos {
@@ -2671,23 +2673,6 @@ def page_ranking():
                 padding: 4px 10px;
                 border-radius: 20px;
                 white-space: nowrap;
-            }
-
-            .ranking-premio {
-                font-size: 0.85rem;
-                font-weight: 700;
-                color: #145a32;
-                background: #e8f8ef;
-                border: 1px solid #a8e6c1;
-                padding: 4px 10px;
-                border-radius: 20px;
-                white-space: nowrap;
-                text-align: right;
-                /* Texto do premio costuma ser mais longo (ex: "R$ 475,00") --
-                   forca quebra pra linha propria dentro do grupo de badges,
-                   em vez de espremer aproveitamento/exatos/pontos. */
-                flex-basis: 100%;
-                order: 99;
             }
 
             /* Agrupa os badges (aproveitamento, exatos, pontos) à direita do

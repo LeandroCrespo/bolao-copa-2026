@@ -574,7 +574,8 @@ def get_ranking(session, cutoff_datetime=None, exclude_match_id=None) -> list:
             'grupos_corretos': grupos_corretos,
             'podio_corretos': podio_corretos,
             'resultados_corretos': placares_exatos + resultado_gols + resultado,
-            'created_at': user.created_at
+            'created_at': user.created_at,
+            'paid': bool(user.paid)
         })
     
     # Ordena pelo critério de desempate completo
