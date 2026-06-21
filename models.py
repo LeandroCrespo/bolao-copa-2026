@@ -21,6 +21,8 @@ class User(Base):
     role = Column(String(20), default='player')  # 'admin' ou 'player'
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.utcnow())
+    paid = Column(Boolean, default=False)  # Pagou a inscricao do bolao
+    paid_at = Column(DateTime)  # Quando foi marcado como pago
     
     predictions = relationship("Prediction", back_populates="user")
     group_predictions = relationship("GroupPrediction", back_populates="user")

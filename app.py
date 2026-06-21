@@ -1388,7 +1388,11 @@ def page_home():
     with session_scope(engine) as session:
         # Timer do próximo jogo
         render_next_match_countdown(session)
-        
+
+        current_user = session.query(User).filter_by(id=st.session_state.user['id']).first()
+        if current_user and current_user.paid:
+            st.success("✅ Sua inscrição no bolão está confirmada como paga!")
+
         user_stats = get_user_stats(session, st.session_state.user['id'])
         ranking = cached_ranking(engine)
         
@@ -2262,6 +2266,15 @@ def _ranking_live_fragment(qtd_rebaixados):
         st.info("Nenhum participante no ranking ainda.")
         return
 
+    # Valores de premiação (configurados em Admin -> Premiação), usados para
+    # mostrar quanto cada um dos 3 primeiros colocados está recebendo.
+    with session_scope(engine) as _cfg_session:
+        premios_por_posicao = {
+            1: get_config_value(_cfg_session, 'premiacao_primeiro', ''),
+            2: get_config_value(_cfg_session, 'premiacao_segundo', ''),
+            3: get_config_value(_cfg_session, 'premiacao_terceiro', ''),
+        }
+
     # Adiciona marca d'água do logo Copa 2026
     st.markdown('<div class="ranking-watermark"></div>', unsafe_allow_html=True)
         
@@ -2367,6 +2380,7 @@ def _ranking_live_fragment(qtd_rebaixados):
         pontos = r['total_pontos']
         aproveitamento = r.get('aproveitamento', 0)
         placares_exatos = r.get('placares_exatos', 0)
+        premio = premios_por_posicao.get(posicao, '')
 
         # Verifica se está na zona de rebaixamento
         is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
@@ -2398,6 +2412,7 @@ def _ranking_live_fragment(qtd_rebaixados):
             <div class="ranking-badges">
                 <span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>
                 <span class="ranking-exatos">🎯 {placares_exatos}</span>
+                {f'<span class="ranking-premio">💰 {premio}</span>' if premio else ''}
                 <div class="ranking-pontos">{pontos} pts</div>
             </div>
         </div>
@@ -2649,6 +2664,17 @@ def page_ranking():
                 color: #7a4a00;
                 background: #fff6e0;
                 border: 1px solid #ffe2a8;
+                padding: 4px 10px;
+                border-radius: 20px;
+                white-space: nowrap;
+            }
+
+            .ranking-premio {
+                font-size: 0.85rem;
+                font-weight: 700;
+                color: #145a32;
+                background: #e8f8ef;
+                border: 1px solid #a8e6c1;
                 padding: 4px 10px;
                 border-radius: 20px;
                 white-space: nowrap;
@@ -3325,42 +3351,46 @@ def page_admin():
             "🏆 Pódio",
             "⭐ Pontuação",
             "💰 Premiação",
+            "💳 Pagamentos",
             "📋 Palpites",
             "🔄 Repescagem",
             "💾 Backup"
         ])
-        
+
         with tabs[0]:
             admin_participantes(session)
-        
+
         with tabs[1]:
             admin_selecoes(session)
-        
+
         with tabs[2]:
             admin_jogos(session)
-        
+
         with tabs[3]:
             admin_resultados(session)
-        
+
         with tabs[4]:
             admin_grupos(session)
-        
+
         with tabs[5]:
             admin_podio(session)
-        
+
         with tabs[6]:
             admin_pontuacao(session)
-        
+
         with tabs[7]:
             admin_premiacao(session)
-        
+
         with tabs[8]:
-            admin_palpites(session)
-        
+            admin_pagamentos(session)
+
         with tabs[9]:
-            admin_repescagem(session)
-        
+            admin_palpites(session)
+
         with tabs[10]:
+            admin_repescagem(session)
+
+        with tabs[11]:
             admin_backup_database(session)
 
 
@@ -4152,6 +4182,49 @@ def admin_premiacao(session):
             set_config_value(session, 'premiacao_terceiro', premio_3, category='premiacao')
             set_config_value(session, 'premiacao_observacoes', observacoes, category='premiacao')
             st.success("Premiação salva!")
+
+
+def admin_pagamentos(session):
+    """Controle de quem já pagou a inscrição do bolão"""
+    st.subheader("💳 Controle de Pagamentos")
+    st.caption(
+        "Marque quem já pagou a inscrição. A pessoa marcada verá a confirmação "
+        "na própria página inicial dela."
+    )
+
+    users = session.query(User).filter(
+        User.role == 'player', User.active == True
+    ).order_by(User.name).all()
+
+    pagos = sum(1 for u in users if u.paid)
+    st.markdown(f"**{pagos} de {len(users)} participantes já pagaram.**")
+
+    with st.form("pagamentos_form"):
+        checkboxes = {}
+        for user in users:
+            checkboxes[user.id] = st.checkbox(
+                user.name,
+                value=bool(user.paid),
+                key=f"pago_{user.id}"
+            )
+
+        if st.form_submit_button("💾 Salvar Pagamentos"):
+            agora = datetime.utcnow()
+            alterados = 0
+            for user in users:
+                novo_status = checkboxes[user.id]
+                if novo_status != bool(user.paid):
+                    user.paid = novo_status
+                    user.paid_at = agora if novo_status else None
+                    alterados += 1
+            session.commit()
+            if alterados:
+                log_action(
+                    session, st.session_state.user['id'], 'pagamentos_atualizados',
+                    details=f"{alterados} participante(s) alterado(s)"
+                )
+            st.success(f"Pagamentos salvos! ({alterados} alteração(ões))")
+            st.rerun()
 
 
 def admin_palpites(session):
