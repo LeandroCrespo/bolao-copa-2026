@@ -1521,29 +1521,41 @@ def _save_palpite_jogo(user_id, match_id):
     lendo os valores atuais dos campos de gols no session_state.
     Usado tanto pelo auto-save (on_change) quanto pelo botão Salvar.
 
-    Usa INSERT ... ON CONFLICT (upsert atômico) em vez de "SELECT, depois
-    decide se insere ou atualiza": esse padrão antigo não era seguro contra
-    corridas (o on_change de cada campo de gols dispara uma chamada separada,
-    e duas chamadas quase simultâneas podiam cada uma ver "nenhum palpite
-    existente" e inserir uma linha duplicada). A constraint UNIQUE
-    (user_id, match_id) no banco torna isso impossível mesmo nesse caso."""
+    Usa INSERT ... SELECT ... ON CONFLICT (upsert atômico) em vez de "SELECT,
+    depois decide se insere ou atualiza": esse padrão antigo não era seguro
+    contra corridas (o on_change de cada campo de gols dispara uma chamada
+    separada, e duas chamadas quase simultâneas podiam cada uma ver "nenhum
+    palpite existente" e inserir uma linha duplicada). A constraint UNIQUE
+    (user_id, match_id) no banco torna isso impossível mesmo nesse caso.
+
+    O INSERT ... SELECT só insere/atualiza se o jogo ainda estiver
+    'scheduled' e não tiver começado -- sem isso, um campo de gol com valor
+    antigo ainda carregado num navegador aberto desde antes do início do
+    jogo podia, ao disparar o on_change por qualquer motivo, regravar um
+    palpite desatualizado por cima de um ajuste mais recente do agente
+    (foi exatamente o que aconteceu com o jogo de Portugal x Uzbequistão)."""
     gols1 = st.session_state.get(f"gols1_{match_id}")
     gols2 = st.session_state.get(f"gols2_{match_id}")
     if gols1 is None or gols2 is None:
         return
 
+    now_brt = get_brazil_time().replace(tzinfo=None)
+
     with session_scope(engine) as session:
         session.execute(
             text("""
                 INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at, updated_at)
-                VALUES (:user_id, :match_id, :g1, :g2, :now, :now)
+                SELECT :user_id, :match_id, :g1, :g2, :now, :now
+                FROM matches
+                WHERE id = :match_id AND status = 'scheduled' AND datetime > :now_brt
                 ON CONFLICT (user_id, match_id) DO UPDATE
                 SET pred_team1_score = EXCLUDED.pred_team1_score,
                     pred_team2_score = EXCLUDED.pred_team2_score,
                     updated_at = EXCLUDED.updated_at
                 WHERE predictions.locked_at IS NULL
             """),
-            {"user_id": user_id, "match_id": match_id, "g1": gols1, "g2": gols2, "now": datetime.utcnow()}
+            {"user_id": user_id, "match_id": match_id, "g1": gols1, "g2": gols2,
+             "now": datetime.utcnow(), "now_brt": now_brt}
         )
 
 
@@ -4348,17 +4360,24 @@ def admin_palpites(session):
                         
                         if st.form_submit_button("💾 Salvar"):
                             # Upsert atomico (mesmo padrao de _save_palpite_jogo) --
-                            # evita duplicar a linha de palpite em corridas.
+                            # evita duplicar a linha de palpite em corridas, e so
+                            # grava se o jogo ainda nao comecou (evita um
+                            # formulario aberto desde antes do inicio do jogo
+                            # sobrescrever um ajuste mais recente do agente).
+                            now_brt_admin = get_brazil_time().replace(tzinfo=None)
                             session.execute(
                                 text("""
                                     INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at, updated_at)
-                                    VALUES (:user_id, :match_id, :g1, :g2, :now, :now)
+                                    SELECT :user_id, :match_id, :g1, :g2, :now, :now
+                                    FROM matches
+                                    WHERE id = :match_id AND status = 'scheduled' AND datetime > :now_brt
                                     ON CONFLICT (user_id, match_id) DO UPDATE
                                     SET pred_team1_score = EXCLUDED.pred_team1_score,
                                         pred_team2_score = EXCLUDED.pred_team2_score,
                                         updated_at = EXCLUDED.updated_at
                                 """),
-                                {"user_id": selected_user_id, "match_id": match.id, "g1": gols1, "g2": gols2, "now": datetime.utcnow()}
+                                {"user_id": selected_user_id, "match_id": match.id, "g1": gols1, "g2": gols2,
+                                 "now": datetime.utcnow(), "now_brt": now_brt_admin}
                             )
                             session.commit()
                             log_action(session, st.session_state.user['id'], 'palpite_editado', selected_user_id, f"Jogo #{match.match_number}")
