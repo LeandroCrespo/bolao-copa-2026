@@ -39,7 +39,8 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
     
     # Inicializa estatísticas dos times
     teams_stats = {}
-    
+    h2h_matches = []  # (team1_key, team2_key, gols1, gols2) - usado no desempate por confronto direto
+
     for match in matches:
         # Determina time 1 (pode ser real ou placeholder)
         if match.team1_id:
@@ -64,6 +65,7 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
         # Inicializa times se necessário
         if team1_key not in teams_stats:
             teams_stats[team1_key] = {
+                'team_key': team1_key,
                 'team': team1_obj,
                 'points': 0,
                 'played': 0,
@@ -74,9 +76,10 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
                 'goals_against': 0,
                 'goal_difference': 0
             }
-        
+
         if team2_key not in teams_stats:
             teams_stats[team2_key] = {
+                'team_key': team2_key,
                 'team': team2_obj,
                 'points': 0,
                 'played': 0,
@@ -107,6 +110,8 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
         else:
             continue  # Jogo sem resultado ainda
         
+        h2h_matches.append((team1_key, team2_key, gols1, gols2))
+
         # Atualiza estatísticas
         teams_stats[team1_key]['played'] += 1
         teams_stats[team2_key]['played'] += 1
@@ -142,8 +147,88 @@ def calculate_group_standings(session: Session, group: str, matches_results: dic
         key=lambda x: (x['points'], x['goal_difference'], x['goals_for']),
         reverse=True
     )
-    
+
+    # Desempate adicional por confronto direto (critério oficial da FIFA),
+    # aplicado só entre times empatados em pontos, saldo e gols marcados
+    standings = _apply_head_to_head_tiebreak(standings, h2h_matches)
+
     return standings
+
+
+def _apply_head_to_head_tiebreak(standings: list, h2h_matches: list) -> list:
+    """
+    Reordena clusters de times empatados (mesmos pontos, saldo de gols e
+    gols marcados) usando o confronto direto entre eles: pontos, depois
+    saldo de gols, depois gols marcados, considerando só os jogos entre os
+    próprios times do cluster. Se ainda houver empate total, mantém a ordem
+    original (sorteio/decisão manual ficaria a cargo do admin).
+    """
+    result = []
+    i = 0
+    n = len(standings)
+    while i < n:
+        j = i
+        key_i = (standings[i]['points'], standings[i]['goal_difference'], standings[i]['goals_for'])
+        while j + 1 < n and (
+            standings[j + 1]['points'], standings[j + 1]['goal_difference'], standings[j + 1]['goals_for']
+        ) == key_i:
+            j += 1
+
+        cluster = standings[i:j + 1]
+        if len(cluster) > 1:
+            cluster = _sort_cluster_by_head_to_head(cluster, h2h_matches)
+        result.extend(cluster)
+        i = j + 1
+
+    return result
+
+
+def _sort_cluster_by_head_to_head(cluster: list, h2h_matches: list) -> list:
+    cluster_keys = {item['team_key'] for item in cluster}
+    mini_stats = {item['team_key']: {'points': 0, 'goals_for': 0, 'goals_against': 0} for item in cluster}
+
+    for team1_key, team2_key, gols1, gols2 in h2h_matches:
+        if team1_key not in cluster_keys or team2_key not in cluster_keys:
+            continue  # só conta jogos entre os times do próprio cluster empatado
+
+        mini_stats[team1_key]['goals_for'] += gols1
+        mini_stats[team1_key]['goals_against'] += gols2
+        mini_stats[team2_key]['goals_for'] += gols2
+        mini_stats[team2_key]['goals_against'] += gols1
+
+        if gols1 > gols2:
+            mini_stats[team1_key]['points'] += 3
+        elif gols2 > gols1:
+            mini_stats[team2_key]['points'] += 3
+        else:
+            mini_stats[team1_key]['points'] += 1
+            mini_stats[team2_key]['points'] += 1
+
+    def sort_key(item):
+        m = mini_stats[item['team_key']]
+        return (m['points'], m['goals_for'] - m['goals_against'], m['goals_for'])
+
+    return sorted(cluster, key=sort_key, reverse=True)
+
+
+def is_group_complete(session: Session, group: str) -> bool:
+    """
+    Indica se todos os jogos da fase de grupos desse grupo já terminaram
+    (status='finished' e placar definido nos dois times). Usado pra evitar
+    calcular a classificação oficial com dados parciais.
+    """
+    matches = session.query(Match).filter(
+        Match.group == group,
+        Match.phase == 'Grupos'
+    ).all()
+
+    if not matches:
+        return False
+
+    return all(
+        m.status == 'finished' and m.team1_score is not None and m.team2_score is not None
+        for m in matches
+    )
 
 
 def get_predicted_group_standings(session: Session, user_id: int, group: str):

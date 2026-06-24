@@ -377,10 +377,152 @@ def lock_missing_predictions(conn):
 # PROPAGAÇÃO DE CONFRONTOS DO MATA-MATA
 # ============================================================
 
+def _calculate_group_standings_with_tiebreak(matches_rows):
+    """
+    Calcula a classificação de um grupo a partir das linhas de `matches`
+    (team1_id, team2_id, team1_score, team2_score), aplicando pontos, saldo
+    de gols, gols marcados e, em caso de empate total, confronto direto
+    entre os times empatados (critério oficial da FIFA).
+    """
+    teams_stats = {}
+    h2h_matches = []
+
+    for team1_id, team2_id, gols1, gols2 in matches_rows:
+        if team1_id is None or team2_id is None or gols1 is None or gols2 is None:
+            continue
+
+        for team_id in (team1_id, team2_id):
+            if team_id not in teams_stats:
+                teams_stats[team_id] = {'team_id': team_id, 'points': 0, 'goals_for': 0, 'goals_against': 0}
+
+        teams_stats[team1_id]['goals_for'] += gols1
+        teams_stats[team1_id]['goals_against'] += gols2
+        teams_stats[team2_id]['goals_for'] += gols2
+        teams_stats[team2_id]['goals_against'] += gols1
+
+        if gols1 > gols2:
+            teams_stats[team1_id]['points'] += 3
+        elif gols2 > gols1:
+            teams_stats[team2_id]['points'] += 3
+        else:
+            teams_stats[team1_id]['points'] += 1
+            teams_stats[team2_id]['points'] += 1
+
+        h2h_matches.append((team1_id, team2_id, gols1, gols2))
+
+    for stats in teams_stats.values():
+        stats['goal_difference'] = stats['goals_for'] - stats['goals_against']
+
+    standings = sorted(
+        teams_stats.values(),
+        key=lambda x: (x['points'], x['goal_difference'], x['goals_for']),
+        reverse=True
+    )
+
+    # Desempate por confronto direto entre times empatados em pontos/saldo/gols
+    result = []
+    i = 0
+    n = len(standings)
+    while i < n:
+        j = i
+        key_i = (standings[i]['points'], standings[i]['goal_difference'], standings[i]['goals_for'])
+        while j + 1 < n and (
+            standings[j + 1]['points'], standings[j + 1]['goal_difference'], standings[j + 1]['goals_for']
+        ) == key_i:
+            j += 1
+
+        cluster = standings[i:j + 1]
+        if len(cluster) > 1:
+            cluster_ids = {item['team_id'] for item in cluster}
+            mini = {item['team_id']: {'points': 0, 'goals_for': 0, 'goals_against': 0} for item in cluster}
+            for t1, t2, g1, g2 in h2h_matches:
+                if t1 not in cluster_ids or t2 not in cluster_ids:
+                    continue
+                mini[t1]['goals_for'] += g1
+                mini[t1]['goals_against'] += g2
+                mini[t2]['goals_for'] += g2
+                mini[t2]['goals_against'] += g1
+                if g1 > g2:
+                    mini[t1]['points'] += 3
+                elif g2 > g1:
+                    mini[t2]['points'] += 3
+                else:
+                    mini[t1]['points'] += 1
+                    mini[t2]['points'] += 1
+
+            cluster = sorted(
+                cluster,
+                key=lambda item: (
+                    mini[item['team_id']]['points'],
+                    mini[item['team_id']]['goals_for'] - mini[item['team_id']]['goals_against'],
+                    mini[item['team_id']]['goals_for'],
+                ),
+                reverse=True
+            )
+        result.extend(cluster)
+        i = j + 1
+
+    return result
+
+
+def score_group_predictions(conn, group, first_id, second_id):
+    """
+    Calcula e salva os pontos dos palpites de classificação (group_predictions)
+    de um grupo já decidido. Os palpites foram travados no início da Copa
+    (auto_lock_group_predictions.py), então usa o valor já salvo em cada
+    linha sem nenhuma alteração — só lê e pontua.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT key, value FROM config
+        WHERE key IN ('grupo_ordem_correta', 'grupo_ordem_invertida', 'grupo_um_certo')
+    """)
+    config = {row[0]: int(row[1]) for row in cursor.fetchall()}
+    pts_ordem_correta = config.get('grupo_ordem_correta', 20)
+    pts_ordem_invertida = config.get('grupo_ordem_invertida', 10)
+    pts_um_certo = config.get('grupo_um_certo', 5)
+
+    cursor.execute("""
+        SELECT id, first_place_team_id, second_place_team_id
+        FROM group_predictions
+        WHERE group_name = %s
+    """, (group,))
+    preds = cursor.fetchall()
+
+    updated = 0
+    for pred_id, pred_first, pred_second in preds:
+        if pred_first is None or pred_second is None:
+            pts, desc = 0, "Palpite incompleto"
+        elif pred_first == first_id and pred_second == second_id:
+            pts, desc = pts_ordem_correta, "Acertou 1º e 2º na ordem!"
+        elif pred_first == second_id and pred_second == first_id:
+            pts, desc = pts_ordem_invertida, "Acertou os 2 classificados (ordem invertida)"
+        elif pred_first in (first_id, second_id) or pred_second in (first_id, second_id):
+            pts, desc = pts_um_certo, "Acertou 1 classificado (posição errada)"
+        else:
+            pts, desc = 0, "Nao pontuou"
+
+        cursor.execute("""
+            UPDATE group_predictions
+            SET points_awarded = %s, breakdown = %s
+            WHERE id = %s
+        """, (pts, desc, pred_id))
+        updated += 1
+
+    conn.commit()
+    cursor.close()
+    if updated > 0:
+        logger.info(f"  Pontuacao de classificados calculada para {updated} palpite(s) do Grupo {group}")
+    return updated
+
+
 def update_completed_group_results(conn):
     """
     Para cada grupo com todos os jogos finalizados, calcula 1º e 2º lugar
-    e atualiza group_results — que alimenta propagate_group_results().
+    (com desempate por confronto direto), atualiza group_results — que
+    alimenta propagate_group_results() — e pontua os palpites de
+    classificação (group_predictions) desse grupo.
     """
     cursor = conn.cursor()
     updated = 0
@@ -397,49 +539,26 @@ def update_completed_group_results(conn):
         if not row or row[0] == 0 or row[0] != row[1]:
             continue  # Grupo incompleto ou sem jogos
 
-        # Calcula classificação via SQL (pontos, saldo, gols)
-        cursor.execute("""
-            WITH stats AS (
-                SELECT team1_id AS team_id,
-                       SUM(CASE WHEN team1_score > team2_score THEN 3
-                                WHEN team1_score = team2_score THEN 1
-                                ELSE 0 END) AS pts,
-                       SUM(team1_score - team2_score) AS gd,
-                       SUM(team1_score) AS gf
-                FROM matches
-                WHERE "group" = %s AND phase = 'Grupos' AND status = 'finished'
-                  AND team1_id IS NOT NULL
-                GROUP BY team1_id
-                UNION ALL
-                SELECT team2_id,
-                       SUM(CASE WHEN team2_score > team1_score THEN 3
-                                WHEN team2_score = team1_score THEN 1
-                                ELSE 0 END),
-                       SUM(team2_score - team1_score),
-                       SUM(team2_score)
-                FROM matches
-                WHERE "group" = %s AND phase = 'Grupos' AND status = 'finished'
-                  AND team2_id IS NOT NULL
-                GROUP BY team2_id
-            ),
-            totals AS (
-                SELECT team_id, SUM(pts) AS points, SUM(gd) AS goal_diff, SUM(gf) AS goals_for
-                FROM stats GROUP BY team_id
-            )
-            SELECT team_id FROM totals
-            ORDER BY points DESC, goal_diff DESC, goals_for DESC
-            LIMIT 2
-        """, (group, group))
+        # Já tinha resultado calculado antes? Evita reprocessar/repontuar sem necessidade
+        cursor.execute("SELECT first_place_team_id, second_place_team_id FROM group_results WHERE group_name = %s", (group,))
+        existing = cursor.fetchone()
 
-        top2 = cursor.fetchall()
-        if len(top2) < 2:
+        cursor.execute("""
+            SELECT team1_id, team2_id, team1_score, team2_score
+            FROM matches
+            WHERE "group" = %s AND phase = 'Grupos' AND status = 'finished'
+        """, (group,))
+        matches_rows = cursor.fetchall()
+
+        standings = _calculate_group_standings_with_tiebreak(matches_rows)
+        if len(standings) < 2:
             continue
 
-        first_id, second_id = top2[0][0], top2[1][0]
+        first_id, second_id = standings[0]['team_id'], standings[1]['team_id']
 
-        # UPDATE se já existe, INSERT se não
-        cursor.execute("SELECT id FROM group_results WHERE group_name = %s", (group,))
-        existing = cursor.fetchone()
+        if existing and existing[0] == first_id and existing[1] == second_id:
+            continue  # Resultado já está correto, nada a fazer
+
         if existing:
             cursor.execute("""
                 UPDATE group_results
@@ -452,12 +571,11 @@ def update_completed_group_results(conn):
                 VALUES (%s, %s, %s)
             """, (group, first_id, second_id))
 
+        conn.commit()
         updated += 1
         logger.info(f"✅ Grupo {group} completo — 1º: {first_id}, 2º: {second_id}")
 
-    if updated > 0:
-        conn.commit()
-        logger.info(f"Resultados de {updated} grupo(s) calculados automaticamente")
+        score_group_predictions(conn, group, first_id, second_id)
 
     cursor.close()
     return updated

@@ -3660,9 +3660,14 @@ def _auto_update_group_result(session, group_name):
     """
     Atualiza automaticamente o resultado do grupo baseado nos resultados dos jogos.
     Chamada sempre que um resultado de jogo da fase de grupos é atualizado.
+    Só roda quando TODOS os jogos do grupo já estão finalizados, pra não
+    travar (e pontuar os palpites de classificação) com uma tabela parcial.
     """
-    from group_standings import get_official_group_standings
-    
+    from group_standings import get_official_group_standings, is_group_complete
+
+    if not is_group_complete(session, group_name):
+        return
+
     standings = get_official_group_standings(session, group_name)
     if standings and len(standings) >= 2:
         result = session.query(GroupResult).filter_by(group_name=group_name).first()
@@ -3855,13 +3860,15 @@ def admin_grupos(session):
     st.info("Defina os classificados de cada grupo após o término da fase de grupos")
     
     # Botão para preencher automaticamente todos os grupos
-    from group_standings import get_official_group_standings
-    
+    from group_standings import get_official_group_standings, is_group_complete
+
     col1, col2 = st.columns([2, 1])
     with col1:
-        if st.button("🤖 Preencher Todos Automaticamente", help="Preenche todos os grupos com base nos resultados dos jogos"):
+        if st.button("🤖 Preencher Todos Automaticamente", help="Preenche apenas os grupos com todos os jogos já finalizados"):
             grupos_preenchidos = 0
             for grupo in GRUPOS:
+                if not is_group_complete(session, grupo):
+                    continue
                 standings = get_official_group_standings(session, grupo)
                 if standings and len(standings) >= 2:
                     result = session.query(GroupResult).filter_by(group_name=grupo).first()
