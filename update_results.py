@@ -555,27 +555,35 @@ def update_completed_group_results(conn):
             continue
 
         first_id, second_id = standings[0]['team_id'], standings[1]['team_id']
+        unchanged = existing and existing[0] == first_id and existing[1] == second_id
 
-        if existing and existing[0] == first_id and existing[1] == second_id:
-            continue  # Resultado já está correto, nada a fazer
+        if not unchanged:
+            if existing:
+                cursor.execute("""
+                    UPDATE group_results
+                    SET first_place_team_id = %s, second_place_team_id = %s
+                    WHERE group_name = %s
+                """, (first_id, second_id, group))
+            else:
+                cursor.execute("""
+                    INSERT INTO group_results (group_name, first_place_team_id, second_place_team_id)
+                    VALUES (%s, %s, %s)
+                """, (group, first_id, second_id))
 
-        if existing:
-            cursor.execute("""
-                UPDATE group_results
-                SET first_place_team_id = %s, second_place_team_id = %s
-                WHERE group_name = %s
-            """, (first_id, second_id, group))
-        else:
-            cursor.execute("""
-                INSERT INTO group_results (group_name, first_place_team_id, second_place_team_id)
-                VALUES (%s, %s, %s)
-            """, (group, first_id, second_id))
+            conn.commit()
+            updated += 1
+            logger.info(f"✅ Grupo {group} completo — 1º: {first_id}, 2º: {second_id}")
 
-        conn.commit()
-        updated += 1
-        logger.info(f"✅ Grupo {group} completo — 1º: {first_id}, 2º: {second_id}")
-
-        score_group_predictions(conn, group, first_id, second_id)
+        # Roda sempre (idempotente) -- garante que palpites ainda não
+        # pontuados (ex: grupo decidido antes dessa pontuação existir) sejam
+        # processados, mesmo quando o GroupResult já estava correto.
+        cursor.execute("""
+            SELECT COUNT(*) FROM group_predictions
+            WHERE group_name = %s AND breakdown IS NULL
+        """, (group,))
+        pendentes = cursor.fetchone()[0]
+        if not unchanged or pendentes > 0:
+            score_group_predictions(conn, group, first_id, second_id)
 
     cursor.close()
     return updated
