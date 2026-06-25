@@ -572,6 +572,7 @@ def get_ranking(session, cutoff_datetime=None, exclude_match_id=None) -> list:
             'gols': gols,
             'zeros': zeros,
             'grupos_corretos': grupos_corretos,
+            'pontos_grupos': pontos_grupos,
             'podio_corretos': podio_corretos,
             'resultados_corretos': placares_exatos + resultado_gols + resultado,
             'created_at': user.created_at,

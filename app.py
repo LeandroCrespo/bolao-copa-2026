@@ -2441,7 +2441,12 @@ def _ranking_live_fragment(qtd_rebaixados):
         pontos = r['total_pontos']
         aproveitamento = r.get('aproveitamento', 0)
         placares_exatos = r.get('placares_exatos', 0)
+        pontos_grupos = r.get('pontos_grupos', 0)
         pago_selo = ' <span class="ranking-pago" title="Pagamento confirmado">✅</span>' if r.get('paid') else ''
+        badge_grupos = (
+            f'<span class="ranking-grupos" title="Pontos de classificados de grupo">🏅 {pontos_grupos}</span>'
+            if pontos_grupos > 0 else ''
+        )
 
         # Verifica se está na zona de rebaixamento
         is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
@@ -2473,6 +2478,7 @@ def _ranking_live_fragment(qtd_rebaixados):
             <div class="ranking-badges">
                 <span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>
                 <span class="ranking-exatos">🎯 {placares_exatos}</span>
+                {badge_grupos}
                 <div class="ranking-pontos">{pontos} pts</div>
             </div>
         </div>
@@ -2728,6 +2734,17 @@ def page_ranking():
                 color: #7a4a00;
                 background: #fff6e0;
                 border: 1px solid #ffe2a8;
+                padding: 4px 10px;
+                border-radius: 20px;
+                white-space: nowrap;
+            }
+
+            .ranking-grupos {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #5b2d8e;
+                background: #f3ecfb;
+                border: 1px solid #d9c2f0;
                 padding: 4px 10px;
                 border-radius: 20px;
                 white-space: nowrap;
@@ -3165,6 +3182,14 @@ def page_estatisticas():
         else:
             tipos_acertos = []
 
+        # Soma os pontos de palpites de classificados de grupo (já decididos)
+        pontos_classificados_grupo = session.query(
+            func.sum(GroupPrediction.points_awarded)
+        ).filter(
+            GroupPrediction.user_id == st.session_state.user['id'],
+            GroupPrediction.points_awarded > 0
+        ).scalar() or 0
+
         # Mapeamento de tipos para labels e cores
         # As chaves devem corresponder aos points_type gravados no banco
         # (ver calculate_match_points em scoring.py): placar_exato,
@@ -3176,7 +3201,7 @@ def page_estatisticas():
             'gols': ('Gols de um Time (5pts)', '#F39C12'),
         }
 
-        if tipos_acertos:
+        if tipos_acertos or pontos_classificados_grupo > 0:
             labels = []
             values = []
             colors = []
@@ -3187,6 +3212,11 @@ def page_estatisticas():
                     labels.append(label)
                     values.append(int(pontos or 0))
                     colors.append(color)
+
+            if pontos_classificados_grupo > 0:
+                labels.append('🏅 Classificados de Grupo')
+                values.append(int(pontos_classificados_grupo))
+                colors.append('#9B59B6')
 
             # Só mostra o gráfico se houver dados válidos
             if values and sum(values) > 0:
