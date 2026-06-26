@@ -799,6 +799,16 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
         if db_match['status'] == 'finished':
             logger.debug(f"Jogo #{match_num} já finalizado no banco, pulando")
             return False
+        # Sanity check: não aceitar "FT" da API se o jogo tem menos de 85 min
+        _br_tz = pytz.timezone('America/Sao_Paulo')
+        _now_br = datetime.now(_br_tz).replace(tzinfo=None)
+        _match_dt = db_match['datetime']
+        if _now_br < _match_dt + timedelta(minutes=85):
+            logger.warning(
+                f"⚠️ API retornou 'FT' para #{match_num} antes de 85 min do início "
+                f"(agora={_now_br.strftime('%H:%M')}, início={_match_dt.strftime('%H:%M')}) — ignorado"
+            )
+            return False
         success = update_match_result(conn, match_id, team1_score, team2_score, 'finished')
         if success:
             logger.info(f"✅ Jogo #{match_num} FINALIZADO: {db_match['team1_code']} {team1_score} x {team2_score} {db_match['team2_code']}")
