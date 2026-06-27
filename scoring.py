@@ -128,57 +128,56 @@ def calculate_podium_points(pred_champion: int, pred_runner: int, pred_third: in
                             real_champion: int, real_runner: int, real_third: int,
                             config: dict) -> tuple:
     """
-    Calcula os pontos do palpite de pódio.
-    
+    Calcula os pontos do palpite de pódio (cumulativo por posição).
+
     Regras:
-    - 150 pts: acertou Campeão, Vice e 3º na ordem correta
-    - 100 pts: acertou o Campeão
-    - 50 pts: acertou o Vice-Campeão
-    - 30 pts: acertou o 3º Lugar
-    - 20 pts: acertou posição fora de ordem (ex: indicou campeão como vice)
+    - 15 pts por posição acertada na ordem certa (campeão, vice, 3º)
+    - 10 pts por seleção no pódio mas em posição errada
+    - Máximo: 45 pts (= 15+15+15, todas na ordem exata)
+    Exemplos:
+    - Pódio completo na ordem: 45 pts
+    - Campeão certo + vice/3º invertidos: 15+10+10 = 35 pts
+    - Todos no pódio mas ordens erradas: 10+10+10 = 30 pts
     """
     total_points = 0
     breakdown = []
-    
+
     if real_champion is None:
         return 0, "Resultado ainda não definido"
-    
-    # Verifica pódio completo na ordem
-    if (pred_champion == real_champion and 
-        pred_runner == real_runner and 
-        pred_third == real_third):
+
+    # Pódio completo na ordem exata — retorno antecipado (equivale a 15+15+15)
+    if (pred_champion == real_champion and
+            pred_runner == real_runner and
+            pred_third == real_third):
         return config['podio_completo'], "Pódio completo na ordem exata! 🏆🥈🥉"
-    
-    # Verifica acertos individuais
+
+    # Pontos individuais por posição
     real_podium = {real_champion, real_runner, real_third}
-    
-    # Campeão correto
+
     if pred_champion == real_champion:
         total_points += config['podio_campeao']
         breakdown.append(f"Campeão correto (+{config['podio_campeao']})")
     elif pred_champion in real_podium:
         total_points += config['podio_fora_ordem']
         breakdown.append(f"Campeão no pódio (+{config['podio_fora_ordem']})")
-    
-    # Vice correto
+
     if pred_runner == real_runner:
         total_points += config['podio_vice']
         breakdown.append(f"Vice correto (+{config['podio_vice']})")
     elif pred_runner in real_podium:
         total_points += config['podio_fora_ordem']
         breakdown.append(f"Vice no pódio (+{config['podio_fora_ordem']})")
-    
-    # Terceiro correto
+
     if pred_third == real_third:
         total_points += config['podio_terceiro']
         breakdown.append(f"3º lugar correto (+{config['podio_terceiro']})")
     elif pred_third in real_podium:
         total_points += config['podio_fora_ordem']
         breakdown.append(f"3º lugar no pódio (+{config['podio_fora_ordem']})")
-    
+
     if not breakdown:
         breakdown.append("Não pontuou no pódio")
-    
+
     return total_points, "; ".join(breakdown)
 
 
@@ -573,6 +572,7 @@ def get_ranking(session, cutoff_datetime=None, exclude_match_id=None) -> list:
             'zeros': zeros,
             'grupos_corretos': grupos_corretos,
             'pontos_grupos': pontos_grupos,
+            'pontos_podio': pontos_podio,
             'podio_corretos': podio_corretos,
             'resultados_corretos': placares_exatos + resultado_gols + resultado,
             'created_at': user.created_at,

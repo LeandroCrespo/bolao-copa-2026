@@ -2440,10 +2440,15 @@ def _ranking_live_fragment(qtd_rebaixados):
         aproveitamento = r.get('aproveitamento', 0)
         placares_exatos = r.get('placares_exatos', 0)
         pontos_grupos = r.get('pontos_grupos', 0)
+        pontos_podio = r.get('pontos_podio', 0)
         pago_selo = ' <span class="ranking-pago" title="Pagamento confirmado">✅</span>' if r.get('paid') else ''
         badge_grupos = (
             f'<span class="ranking-grupos" title="Pontos de classificados de grupo">🏅 {pontos_grupos}</span>'
             if pontos_grupos > 0 else ''
+        )
+        badge_podio = (
+            f'<span class="ranking-podio" title="Pontos de pódio">🏆 {pontos_podio}</span>'
+            if pontos_podio > 0 else ''
         )
 
         # Verifica se está na zona de rebaixamento
@@ -2476,6 +2481,7 @@ def _ranking_live_fragment(qtd_rebaixados):
             f'<span class="ranking-aproveitamento">{aproveitamento:.0f}%</span>'
             f'<span class="ranking-exatos">🎯 {placares_exatos}</span>'
             f'{badge_grupos}'
+            f'{badge_podio}'
             f'<div class="ranking-pontos">{pontos} pts</div>'
         )
 
@@ -2748,6 +2754,17 @@ def page_ranking():
                 color: #5b2d8e;
                 background: #f3ecfb;
                 border: 1px solid #d9c2f0;
+                padding: 4px 10px;
+                border-radius: 20px;
+                white-space: nowrap;
+            }
+
+            .ranking-podio {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #7a4f00;
+                background: #fff8e1;
+                border: 1px solid #ffe082;
                 padding: 4px 10px;
                 border-radius: 20px;
                 white-space: nowrap;
