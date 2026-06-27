@@ -344,7 +344,7 @@ def render_ranking_evolution_chart(session):
         plot_bgcolor='white',
         paper_bgcolor='white',
         height=chart_height,
-        margin=dict(l=10, r=110, t=10, b=10)
+        margin=dict(l=50, r=120, t=20, b=50)
     )
 
     fig.update_xaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
@@ -390,7 +390,7 @@ def render_ranking_evolution_chart(session):
 }})();
 </script>
 """
-    st.components.v1.html(html_chart, height=chart_height + 16, scrolling=False)
+    st.components.v1.html(html_chart, height=chart_height + 60, scrolling=False)
 
 
 # =============================================================================
