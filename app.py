@@ -2446,10 +2446,7 @@ def _ranking_live_fragment(qtd_rebaixados):
             f'<span class="ranking-grupos" title="Pontos de classificados de grupo">🏅 {pontos_grupos}</span>'
             if pontos_grupos > 0 else ''
         )
-        badge_podio = (
-            f'<span class="ranking-podio" title="Pontos de pódio">🏆 {pontos_podio}</span>'
-            if pontos_podio > 0 else ''
-        )
+        badge_podio = f'<span class="ranking-podio" title="Pontos de pódio">🏆 {pontos_podio}</span>'
 
         # Verifica se está na zona de rebaixamento
         is_rebaixado = posicao > inicio_rebaixamento and qtd_rebaixados > 0
