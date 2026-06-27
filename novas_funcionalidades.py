@@ -225,33 +225,25 @@ def render_ranking_evolution_chart(session):
     
     config = get_scoring_config(session)
     
-    # Para cada data, calcula o ranking acumulado até aquele ponto
-    dates = list(matches_by_date.keys())
+    # Para cada data, calcula o ranking acumulado até aquele ponto usando
+    # get_ranking com cutoff — inclui pontos de grupos e pódio além dos jogos
+    dates = sorted(matches_by_date.keys(), key=lambda d: matches_by_date[d][0].datetime)
     user_positions = {u.id: {'name': u.name, 'positions': []} for u in users}
-    
-    cumulative_points = {u.id: 0 for u in users}
-    
+
     for date_key in dates:
-        # Soma pontos dos jogos desta data
-        for match in matches_by_date[date_key]:
-            for user in users:
-                pred = session.query(Prediction).filter_by(
-                    user_id=user.id,
-                    match_id=match.id
-                ).first()
-                
-                if pred and match.team1_score is not None and match.team2_score is not None:
-                    points, _, _ = calculate_match_points(
-                        pred.pred_team1_score, pred.pred_team2_score,
-                        match.team1_score, match.team2_score,
-                        config
-                    )
-                    cumulative_points[user.id] += points
-        
-        # Calcula ranking nesta data
-        sorted_users = sorted(cumulative_points.items(), key=lambda x: -x[1])
-        for pos, (uid, pts) in enumerate(sorted_users, 1):
-            user_positions[uid]['positions'].append(pos)
+        # Cutoff = fim do último jogo desta data (23:59:59)
+        last_match_dt = max(m.datetime for m in matches_by_date[date_key])
+        cutoff = last_match_dt.replace(hour=23, minute=59, second=59)
+        ranking_snapshot = get_ranking(session, cutoff_datetime=cutoff)
+        ranking_map = {r['user_id']: r['posicao'] for r in ranking_snapshot}
+        for u in users:
+            pos = ranking_map.get(u.id, len(users))
+            user_positions[u.id]['positions'].append(pos)
+
+    # Ordena user_positions pela posição final atual (igual ao ranking exibido)
+    final_ranking = get_ranking(session)
+    final_order = [r['user_id'] for r in final_ranking]
+    user_positions_ordered = {uid: user_positions[uid] for uid in final_order if uid in user_positions}
     
     if not dates or len(dates) < 1:
         st.info("📊 Dados insuficientes para o gráfico de evolução.")
@@ -270,7 +262,7 @@ def render_ranking_evolution_chart(session):
     except (TypeError, ValueError):
         current_user_id = None
 
-    all_names = [user_positions[u.id]['name'] for u in users]
+    all_names = [user_positions_ordered[uid]['name'] for uid in final_order if uid in user_positions_ordered]
     highlighted = st.multiselect(
         "🔦 Destacar participantes para comparar",
         all_names,
@@ -278,7 +270,7 @@ def render_ranking_evolution_chart(session):
         help="Sua linha já aparece destacada automaticamente"
     )
 
-    if current_user_id not in user_positions:
+    if current_user_id not in user_positions_ordered:
         st.caption(
             "💡 Conta logada não participa do ranking (ex.: admin) — "
             "use o seletor acima para destacar participantes."
@@ -290,7 +282,7 @@ def render_ranking_evolution_chart(session):
     DIM_COLOR = 'rgba(170,170,170,0.45)'
     USER_COLOR = '#E61D25'  # vermelho da identidade visual da Copa
 
-    for i, (uid, data) in enumerate(user_positions.items()):
+    for i, (uid, data) in enumerate(user_positions_ordered.items()):
         is_current_user = (uid == current_user_id)
         is_highlighted = is_current_user or data['name'] in highlighted
 
