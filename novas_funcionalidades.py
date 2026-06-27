@@ -282,13 +282,17 @@ def render_ranking_evolution_chart(session):
     DIM_COLOR = 'rgba(170,170,170,0.45)'
     USER_COLOR = '#E61D25'  # vermelho da identidade visual da Copa
 
+    # Rastreia por índice: se o trace é destacado e sua opacidade original
+    trace_is_highlighted = []
+    trace_orig_opacity = []
+
     for i, (uid, data) in enumerate(user_positions_ordered.items()):
         is_current_user = (uid == current_user_id)
-        is_highlighted = is_current_user or data['name'] in highlighted
+        is_hl = is_current_user or data['name'] in highlighted
 
         if is_current_user:
             color = USER_COLOR
-        elif is_highlighted:
+        elif is_hl:
             color = colors[i % len(colors)]
         else:
             color = DIM_COLOR
@@ -296,28 +300,33 @@ def render_ranking_evolution_chart(session):
         fig.add_trace(go.Scatter(
             x=dates,
             y=data['positions'],
-            mode='lines+markers' if is_highlighted else 'lines',
+            mode='lines+markers' if is_hl else 'lines',
             name=data['name'],
-            line=dict(width=4 if is_highlighted else 1.5, color=color),
+            line=dict(width=4 if is_hl else 1.5, color=color),
             marker=dict(size=8, color=color),
             showlegend=False,
             hovertemplate=f"<b>{data['name']}</b><br>%{{x}} — %{{y}}º lugar<extra></extra>"
         ))
 
         # Nome na ponta direita da linha
-        label = data['name'] if is_highlighted else data['name'].split()[0]
+        label = data['name'] if is_hl else data['name'].split()[0]
         fig.add_annotation(
             x=dates[-1],
             y=data['positions'][-1],
-            text=f"<b>{label} (você)</b>" if is_current_user else (f"<b>{label}</b>" if is_highlighted else label),
+            text=f"<b>{label} (você)</b>" if is_current_user else (f"<b>{label}</b>" if is_hl else label),
             xanchor='left',
             xshift=8,
             showarrow=False,
             font=dict(
-                size=12 if is_highlighted else 10,
-                color=color if is_highlighted else '#555555'
+                size=12 if is_hl else 10,
+                color=color if is_hl else '#555555'
             )
         )
+
+        trace_is_highlighted.append(1 if is_hl else 0)
+        trace_orig_opacity.append(1.0)
+
+    chart_height = max(480, 26 * n_users + 60)
 
     fig.update_layout(
         yaxis=dict(
@@ -334,18 +343,54 @@ def render_ranking_evolution_chart(session):
         hovermode='closest',
         plot_bgcolor='white',
         paper_bgcolor='white',
-        height=max(480, 26 * n_users + 60),
+        height=chart_height,
         margin=dict(l=10, r=110, t=10, b=10)
     )
 
     fig.update_xaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
     fig.update_yaxes(showgrid=True, gridcolor='rgba(200,200,200,0.3)')
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        config={'displayModeBar': False}
-    )
+    # Renderiza via HTML+JS para suportar efeito de hover:
+    # ao passar o mouse numa linha destacada, as demais destacadas ficam
+    # semi-transparentes; ao tirar o mouse tudo volta ao normal.
+    fig_json = fig.to_json()
+    hl_js   = json.dumps(trace_is_highlighted)
+    orig_js = json.dumps(trace_orig_opacity)
+
+    html_chart = f"""
+<div id="evo_chart" style="width:100%;height:{chart_height}px;"></div>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script>
+(function() {{
+    var figData   = {fig_json};
+    var isHL      = {hl_js};
+    var origOp    = {orig_js};
+    var DIM_OP    = 0.18;
+    var div       = document.getElementById('evo_chart');
+
+    Plotly.newPlot(div, figData.data, figData.layout,
+        {{responsive: true, displayModeBar: false}});
+
+    div.on('plotly_hover', function(eventData) {{
+        if (!eventData.points || !eventData.points.length) return;
+        var cn = eventData.points[0].curveNumber;
+        // Só aplica efeito se o trace sob o cursor for destacado
+        if (!isHL[cn]) return;
+        var newOp = origOp.map(function(op, i) {{
+            if (i === cn)   return 1.0;      // linha sob o cursor — total
+            if (isHL[i])    return DIM_OP;   // outras destacadas — esmaece
+            return op;                        // linhas cinzas — sem mudança
+        }});
+        Plotly.restyle(div, {{opacity: newOp}});
+    }});
+
+    div.on('plotly_unhover', function() {{
+        Plotly.restyle(div, {{opacity: origOp}});
+    }});
+}})();
+</script>
+"""
+    st.components.v1.html(html_chart, height=chart_height + 16, scrolling=False)
 
 
 # =============================================================================
