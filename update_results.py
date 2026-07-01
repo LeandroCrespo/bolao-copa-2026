@@ -215,18 +215,34 @@ def get_pending_matches(conn):
     return [dict(zip(columns, row)) for row in rows]
 
 
-def update_match_result(conn, match_id, team1_score, team2_score, status='finished'):
-    """Atualiza o resultado de um jogo no banco."""
+def update_match_result(conn, match_id, team1_score, team2_score, status='finished',
+                        penalty_winner_id=None):
+    """Atualiza o resultado de um jogo no banco.
+    penalty_winner_id: team_id do vencedor nos pênaltis (só para jogos decididos por PEN).
+    O placar armazenado é sempre o do tempo normal/prorrogação — não inclui pênaltis.
+    """
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE matches
-        SET team1_score = %s,
-            team2_score = %s,
-            status = %s,
-            updated_at = NOW()
-        WHERE id = %s
-          AND (status != 'finished' OR status IS NULL);
-    """, (team1_score, team2_score, status, match_id))
+    if penalty_winner_id is not None:
+        cursor.execute("""
+            UPDATE matches
+            SET team1_score = %s,
+                team2_score = %s,
+                status = %s,
+                penalty_winner_id = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND (status != 'finished' OR status IS NULL);
+        """, (team1_score, team2_score, status, penalty_winner_id, match_id))
+    else:
+        cursor.execute("""
+            UPDATE matches
+            SET team1_score = %s,
+                team2_score = %s,
+                status = %s,
+                updated_at = NOW()
+            WHERE id = %s
+              AND (status != 'finished' OR status IS NULL);
+        """, (team1_score, team2_score, status, match_id))
     updated = cursor.rowcount
     conn.commit()
     cursor.close()
@@ -593,17 +609,19 @@ def propagate_knockout_winners(conn):
     """
     Propaga vencedores de jogos finalizados do mata-mata para a próxima fase.
     Resolve placeholders W73, W74, L101, etc.
+    Quando o jogo vai para pênaltis (placar empatado), usa penalty_winner_id.
     Retorna o número de jogos atualizados.
     """
     cursor = conn.cursor()
     updated = 0
-    
+
     # Busca jogos finalizados do mata-mata com ambos os times e placar
     cursor.execute("""
         SELECT m.match_number, m.team1_id, m.team2_id, m.team1_score, m.team2_score,
                m.team1_code, m.team2_code,
                t1.code as t1_code, t1.name as t1_name,
-               t2.code as t2_code, t2.name as t2_name
+               t2.code as t2_code, t2.name as t2_name,
+               m.penalty_winner_id
         FROM matches m
         JOIN teams t1 ON m.team1_id = t1.id
         JOIN teams t2 ON m.team2_id = t2.id
@@ -612,12 +630,12 @@ def propagate_knockout_winners(conn):
           AND m.team1_score IS NOT NULL
           AND m.team2_score IS NOT NULL
     """)
-    
+
     finished_matches = cursor.fetchall()
-    
+
     for row in finished_matches:
-        match_num, t1_id, t2_id, t1_score, t2_score, t1_code, t2_code, t1_cd, t1_nm, t2_cd, t2_nm = row
-        
+        match_num, t1_id, t2_id, t1_score, t2_score, t1_code, t2_code, t1_cd, t1_nm, t2_cd, t2_nm, pen_winner_id = row
+
         # Determina vencedor e perdedor
         if t1_score > t2_score:
             winner_id, winner_code = t1_id, t1_cd
@@ -625,9 +643,17 @@ def propagate_knockout_winners(conn):
         elif t2_score > t1_score:
             winner_id, winner_code = t2_id, t2_cd
             loser_id, loser_code = t1_id, t1_cd
+        elif pen_winner_id is not None:
+            # Empate no tempo normal/prorrogação — decidido nos pênaltis
+            if pen_winner_id == t1_id:
+                winner_id, winner_code = t1_id, t1_cd
+                loser_id, loser_code = t2_id, t2_cd
+            else:
+                winner_id, winner_code = t2_id, t2_cd
+                loser_id, loser_code = t1_id, t1_cd
+            logger.info(f"Jogo #{match_num} decidido nos penaltis: vencedor={winner_code}")
         else:
-            # Empate no mata-mata - não deveria acontecer
-            logger.warning(f"Jogo #{match_num} empatado no mata-mata, não propaga")
+            logger.warning(f"Jogo #{match_num} empatado sem penalty_winner_id — nao propaga")
             continue
         
         w_code = f"W{match_num}"
@@ -809,9 +835,37 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
                 f"(agora={_now_br.strftime('%H:%M')}, início={_match_dt.strftime('%H:%M')}) — ignorado"
             )
             return False
-        success = update_match_result(conn, match_id, team1_score, team2_score, 'finished')
+
+        # Detectar vencedor nos pênaltis (status PEN: placar normal fica 1x1,
+        # a pontuação do bolão usa o tempo normal, mas o bracket usa quem venceu)
+        penalty_winner_id = None
+        if status_short == 'PEN':
+            pen_score = fixture.get('score', {}).get('penalty', {})
+            pen_home = pen_score.get('home')
+            pen_away = pen_score.get('away')
+            if pen_home is not None and pen_away is not None:
+                home_code = db_match['_api_home_code']
+                away_code = db_match['_api_away_code']
+                winner_code = home_code if pen_home > pen_away else away_code
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM teams WHERE code = %s", (winner_code,))
+                row = cursor.fetchone()
+                cursor.close()
+                if row:
+                    penalty_winner_id = row[0]
+                    loser_code = away_code if pen_home > pen_away else home_code
+                    logger.info(
+                        f"  Penaltis: {home_code} {pen_home}x{pen_away} {away_code} "
+                        f"→ vencedor={winner_code} (id={penalty_winner_id})"
+                    )
+                else:
+                    logger.warning(f"  Time '{winner_code}' não encontrado para registrar penalty_winner")
+
+        success = update_match_result(conn, match_id, team1_score, team2_score, 'finished',
+                                      penalty_winner_id=penalty_winner_id)
         if success:
-            logger.info(f"✅ Jogo #{match_num} FINALIZADO: {db_match['team1_code']} {team1_score} x {team2_score} {db_match['team2_code']}")
+            suffix = f" (pênaltis: venc={penalty_winner_id})" if penalty_winner_id else ""
+            logger.info(f"Jogo #{match_num} FINALIZADO: {db_match['team1_code']} {team1_score} x {team2_score} {db_match['team2_code']}{suffix}")
             score_finished_match(conn, match_id, team1_score, team2_score)
         return success
 

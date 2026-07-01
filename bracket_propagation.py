@@ -179,32 +179,34 @@ def resolve_knockout_winners(session: Session):
 def _determine_winner_loser(session, match):
     """
     Determina o vencedor e perdedor de um jogo finalizado.
-    Para jogos decididos nos pênaltis, usa o placar final (que já inclui pênaltis).
-    
+    Placar armazenado = tempo normal/prorrogação (não inclui pênaltis).
+    Para jogos decididos nos pênaltis, usa penalty_winner_id.
     Retorna (winner_team, loser_team) ou (None, None).
     """
     if match.team1_score is None or match.team2_score is None:
         return None, None
-    
+
     team1 = session.query(Team).get(match.team1_id) if match.team1_id else None
     team2 = session.query(Team).get(match.team2_id) if match.team2_id else None
-    
+
     if not team1 or not team2:
         return None, None
-    
-    # No mata-mata, não pode haver empate no resultado final
-    # O placar armazenado deve refletir o resultado final (incluindo prorrogação/pênaltis)
+
     if match.team1_score > match.team2_score:
         return team1, team2
     elif match.team2_score > match.team1_score:
         return team2, team1
     else:
-        # Empate no placar - isso não deveria acontecer no mata-mata
-        # Se acontecer, não podemos determinar o vencedor automaticamente
+        # Empate no tempo normal/prorrogação — verificar vencedor nos pênaltis
+        pen_winner_id = getattr(match, 'penalty_winner_id', None)
+        if pen_winner_id is not None:
+            if pen_winner_id == team1.id:
+                return team1, team2
+            else:
+                return team2, team1
         logger.warning(
-            f"Jogo #{match.match_number} terminou empatado ({match.team1_score}x{match.team2_score}). "
-            f"No mata-mata, o resultado deve incluir prorrogação/pênaltis. "
-            f"O admin precisa definir o vencedor manualmente."
+            f"Jogo #{match.match_number} empatado ({match.team1_score}x{match.team2_score}) "
+            f"sem penalty_winner_id — admin deve definir o vencedor."
         )
         return None, None
 

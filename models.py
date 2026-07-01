@@ -69,6 +69,8 @@ class Match(Base):
     status = Column(String(20), default='scheduled')  # scheduled, finished, cancelled
     team1_score = Column(Integer)
     team2_score = Column(Integer)
+    # Vencedor nos pênaltis (só preenche quando status='PEN'; placar fica como tempo normal)
+    penalty_winner_id = Column(Integer, ForeignKey('teams.id'), nullable=True)
     
     # Controle
     created_at = Column(DateTime, default=lambda: datetime.utcnow())
