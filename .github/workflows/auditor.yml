@@ -2,7 +2,7 @@ name: "🔍 VAR — Auditoria do Bolão"
 
 on:
   schedule:
-    - cron: '*/30 * * 6-7 *'   # A cada 30 min durante a Copa (junho-julho)
+    - cron: '2,17,32,47 * * 6-7 *'   # A cada 15 min, fora dos minutos de pico do GitHub
   workflow_dispatch:
     inputs:
       full:
