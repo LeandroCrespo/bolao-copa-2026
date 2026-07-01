@@ -69,7 +69,8 @@ class Match(Base):
     status = Column(String(20), default='scheduled')  # scheduled, finished, cancelled
     team1_score = Column(Integer)
     team2_score = Column(Integer)
-    # Vencedor nos pênaltis (só preenche quando status='PEN'; placar fica como tempo normal)
+    # Vencedor em AET ou pênaltis (preenchido quando status='AET' ou 'PEN').
+    # O placar armazenado é sempre o dos 90min — gols de prorrogação não contam para o bolão.
     penalty_winner_id = Column(Integer, ForeignKey('teams.id'), nullable=True)
     
     # Controle

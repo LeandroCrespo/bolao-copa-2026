@@ -790,11 +790,18 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
     """
     Processa um fixture da API e atualiza o banco.
     Retorna True se atualizou, False caso contrário.
+
+    Regra de placar para pontuação do bolão:
+      - Sempre armazena o placar dos 90 minutos (fixture['score']['fulltime']).
+      - Gols marcados na prorrogação (AET) ou pênaltis (PEN) NÃO contam para
+        a pontuação — apenas para determinar quem avança (penalty_winner_id).
     """
     fix_info = fixture['fixture']
     status_short = fix_info['status']['short']
     home_name = fixture['teams']['home']['name']
     away_name = fixture['teams']['away']['name']
+    # goals inclui ET mas NÃO pênaltis — usado só para placar ao vivo e para
+    # determinar o vencedor na prorrogação (AET)
     goals_home = fixture['goals']['home']
     goals_away = fixture['goals']['away']
 
@@ -804,19 +811,8 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
         logger.debug(f"Jogo não encontrado no banco: {home_name} vs {away_name}")
         return False
 
-    # Determinar scores na ordem correta do banco
     home_code = db_match['_api_home_code']
-    if db_match['team1_code'] == home_code:
-        team1_score = goals_home
-        team2_score = goals_away
-    else:
-        team1_score = goals_away
-        team2_score = goals_home
-
-    if team1_score is None or team2_score is None:
-        logger.debug(f"Placar não disponível: {home_name} vs {away_name}")
-        return False
-
+    away_code = db_match['_api_away_code']
     match_id = db_match['id']
     match_num = db_match['match_number']
 
@@ -825,6 +821,7 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
         if db_match['status'] == 'finished':
             logger.debug(f"Jogo #{match_num} já finalizado no banco, pulando")
             return False
+
         # Sanity check: não aceitar "FT" da API se o jogo tem menos de 85 min
         _br_tz = pytz.timezone('America/Sao_Paulo')
         _now_br = datetime.now(_br_tz).replace(tzinfo=None)
@@ -836,16 +833,50 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
             )
             return False
 
-        # Detectar vencedor nos pênaltis (status PEN: placar normal fica 1x1,
-        # a pontuação do bolão usa o tempo normal, mas o bracket usa quem venceu)
+        # Placar do bolão = sempre 90 minutos (fulltime)
+        ft = fixture.get('score', {}).get('fulltime', {})
+        ft_home = ft.get('home') if ft else None
+        ft_away = ft.get('away') if ft else None
+        if ft_home is None or ft_away is None:
+            logger.warning(f"Placar fulltime indisponível para #{match_num}, usando goals como fallback")
+            ft_home, ft_away = goals_home, goals_away
+
+        if db_match['team1_code'] == home_code:
+            team1_score, team2_score = ft_home, ft_away
+        else:
+            team1_score, team2_score = ft_away, ft_home
+
+        if team1_score is None or team2_score is None:
+            logger.debug(f"Placar não disponível: {home_name} vs {away_name}")
+            return False
+
+        # Determinar vencedor quando o jogo não foi decidido no tempo normal
+        # (AET ou PEN) — necessário para propagar o bracket
         penalty_winner_id = None
-        if status_short == 'PEN':
-            pen_score = fixture.get('score', {}).get('penalty', {})
-            pen_home = pen_score.get('home')
-            pen_away = pen_score.get('away')
+
+        if status_short == 'AET':
+            # Vencedor decidido na prorrogação: goals inclui ET
+            if goals_home is not None and goals_away is not None and goals_home != goals_away:
+                winner_code = home_code if goals_home > goals_away else away_code
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM teams WHERE code = %s", (winner_code,))
+                row = cursor.fetchone()
+                cursor.close()
+                if row:
+                    penalty_winner_id = row[0]
+                    logger.info(
+                        f"  Prorrogacao: {home_code} {goals_home}x{goals_away} {away_code} "
+                        f"(90min: {ft_home}x{ft_away}) -> vencedor={winner_code}"
+                    )
+                else:
+                    logger.warning(f"  Time '{winner_code}' nao encontrado para registrar tiebreak")
+
+        elif status_short == 'PEN':
+            # Vencedor decidido nos penaltis
+            pen = fixture.get('score', {}).get('penalty', {})
+            pen_home = pen.get('home') if pen else None
+            pen_away = pen.get('away') if pen else None
             if pen_home is not None and pen_away is not None:
-                home_code = db_match['_api_home_code']
-                away_code = db_match['_api_away_code']
                 winner_code = home_code if pen_home > pen_away else away_code
                 cursor = conn.cursor()
                 cursor.execute("SELECT id FROM teams WHERE code = %s", (winner_code,))
@@ -853,28 +884,40 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
                 cursor.close()
                 if row:
                     penalty_winner_id = row[0]
-                    loser_code = away_code if pen_home > pen_away else home_code
                     logger.info(
                         f"  Penaltis: {home_code} {pen_home}x{pen_away} {away_code} "
-                        f"→ vencedor={winner_code} (id={penalty_winner_id})"
+                        f"(90min: {ft_home}x{ft_away}) -> vencedor={winner_code}"
                     )
                 else:
-                    logger.warning(f"  Time '{winner_code}' não encontrado para registrar penalty_winner")
+                    logger.warning(f"  Time '{winner_code}' nao encontrado para registrar tiebreak")
 
         success = update_match_result(conn, match_id, team1_score, team2_score, 'finished',
                                       penalty_winner_id=penalty_winner_id)
         if success:
-            suffix = f" (pênaltis: venc={penalty_winner_id})" if penalty_winner_id else ""
-            logger.info(f"Jogo #{match_num} FINALIZADO: {db_match['team1_code']} {team1_score} x {team2_score} {db_match['team2_code']}{suffix}")
+            extra = ""
+            if status_short == 'AET':
+                extra = f" [AET: {goals_home}x{goals_away}]"
+            elif status_short == 'PEN' and penalty_winner_id:
+                extra = f" [PEN: venc id={penalty_winner_id}]"
+            logger.info(
+                f"Jogo #{match_num} FINALIZADO ({status_short}): "
+                f"{db_match['team1_code']} {team1_score}x{team2_score} {db_match['team2_code']}{extra}"
+            )
             score_finished_match(conn, match_id, team1_score, team2_score)
         return success
 
-    # Jogo ao vivo (só atualiza no modo live)
+    # Jogo ao vivo (só atualiza no modo live) — usa goals (placar corrente com ET)
     elif status_short in LIVE_STATUSES and mode == 'live':
+        if goals_home is None or goals_away is None:
+            return False
+        if db_match['team1_code'] == home_code:
+            team1_score, team2_score = goals_home, goals_away
+        else:
+            team1_score, team2_score = goals_away, goals_home
         elapsed = fix_info['status'].get('elapsed', '?')
         success = update_match_live(conn, match_id, team1_score, team2_score)
         if success:
-            logger.info(f"🔴 Jogo #{match_num} AO VIVO ({elapsed}'): {db_match['team1_code']} {team1_score} x {team2_score} {db_match['team2_code']}")
+            logger.info(f"🔴 Jogo #{match_num} AO VIVO ({elapsed}'): {db_match['team1_code']} {team1_score}x{team2_score} {db_match['team2_code']}")
         return success
 
     return False
