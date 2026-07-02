@@ -3570,6 +3570,19 @@ def page_analise_desempenho():
                 if sf_found is not None:
                     bracket_half[team_id] = 1 if sf_found == 101 else 2
 
+        # Correção manual para times atribuídos ao grupo errado no R32
+        # (copa2026_data.py tinha grupos incorretos → admin colocou no slot errado).
+        # Verificado pelo admin via chaveamento oficial Copa 2026:
+        # França e Paraguai estão na Oitava 1 (Lado 1); Brasil e Noruega na Oitava 5 (Lado 2).
+        # Busca os IDs pelo code para não depender de IDs fixos.
+        _half_fixes = {'FRA': 1, 'PAR': 1, 'BRA': 2, 'NOR': 2}
+        _fix_teams = session.execute(text(
+            "SELECT id, code FROM teams WHERE code IN ('FRA','PAR','BRA','NOR')"
+        )).fetchall()
+        for t in _fix_teams:
+            if t.code in _half_fixes and t.id in bracket_half:
+                bracket_half[t.id] = _half_fixes[t.code]
+
         # Dados de debug: buscar nomes dos times e palpites de pódio dentro da sessão
         dbg_teams = {t.id: f"{t.name} ({t.code})"
                      for t in session.execute(text(
