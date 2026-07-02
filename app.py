@@ -3513,8 +3513,15 @@ def page_analise_desempenho():
         out_top2  = {r.elim_id for r in elim_rows}
         out_third = {r.elim_id for r in elim_rows if r.phase != 'SF'}
 
-        # Palpites de pódio e config de pontuação
-        pod_preds = {pp.user_id: pp for pp in session.query(PodiumPrediction).all()}
+        # Palpites de pódio como dict simples (evita DetachedInstanceError fora da sessão)
+        pod_preds = {
+            pp.user_id: {
+                'champion': pp.champion_team_id,
+                'vice':     pp.runner_up_team_id,
+                'third':    pp.third_place_team_id,
+            }
+            for pp in session.query(PodiumPrediction).all()
+        }
         scoring_cfg = get_scoring_config(session)
 
     if not rows:
@@ -3600,12 +3607,12 @@ def page_analise_desempenho():
         pp = pod_preds.get(r['id'])
         max_pod = 0
         if pp:
-            if pp.champion_team_id and pp.champion_team_id not in out_top2:
-                max_pod += scoring_cfg.get('podio_campeao', 100)
-            if pp.runner_up_team_id and pp.runner_up_team_id not in out_top2:
-                max_pod += scoring_cfg.get('podio_vice', 50)
-            if pp.third_place_team_id and pp.third_place_team_id not in out_third:
-                max_pod += scoring_cfg.get('podio_terceiro', 30)
+            if pp['champion'] and pp['champion'] not in out_top2:
+                max_pod += scoring_cfg.get('podio_campeao', 15)
+            if pp['vice'] and pp['vice'] not in out_top2:
+                max_pod += scoring_cfg.get('podio_vice', 15)
+            if pp['third'] and pp['third'] not in out_third:
+                max_pod += scoring_cfg.get('podio_terceiro', 15)
         # current_total já inclui podium_pts (=0 enquanto torneio não termina)
         proj_total = r['total'] + proj_add + max_pod
         proj_list.append({**r, 'rem': r_rem, 'proj_add': proj_add,
@@ -3837,7 +3844,7 @@ svg{{display:block;overflow:visible}}
 <div class="card wrap" style="padding:0"><table id="ptbl"></table></div>
 <p class="note" style="margin-bottom:16px">
   Projeção assume que cada participante mantém sua média atual de pts/jogo nos {games_rem} jogos restantes.<br>
-  Pódio potencial = máximo possível com os times ainda vivos (campeão +100, vice +50, 3° +30).<br>
+  Pódio potencial = máximo possível com os times ainda vivos (campeão +15, vice +15, 3° +15 = máx. 45 pts).<br>
   Pts de classificação de grupos já computados. Atualizado automaticamente a cada acesso.
 </p>
 <script>
