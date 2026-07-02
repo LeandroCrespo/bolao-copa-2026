@@ -3702,11 +3702,11 @@ def page_analise_desempenho():
 
             # Todos os palpites de pódio
             all_pp = dbg_s.execute(text("""
-                SELECT pp.user_id, u.full_name,
+                SELECT pp.user_id, u.name,
                        pp.champion_team_id, pp.runner_up_team_id, pp.third_place_team_id
                 FROM podium_predictions pp
                 JOIN users u ON u.id = pp.user_id
-                ORDER BY u.full_name
+                ORDER BY u.name
             """)).fetchall()
 
         st.markdown("**Palpites de pódio (todos os participantes):**")
@@ -3717,7 +3717,7 @@ def page_analise_desempenho():
             vh = bracket_half.get(V) if V else None
             conflict = "⚠️ SIM" if (ch and vh and ch == vh) else "não"
             rows_debug.append({
-                "Participante": pp.full_name,
+                "Participante": pp.name,
                 "1° (Campeão)": tid_to_name.get(C, f"id={C}") if C else "—",
                 "Half C": ch,
                 "2° (Vice)": tid_to_name.get(V, f"id={V}") if V else "—",
