@@ -3524,51 +3524,45 @@ def page_analise_desempenho():
         }
         scoring_cfg = get_scoring_config(session)
 
-        # Lado do chaveamento por time: rastreia via códigos "W{N}" (vencedor da partida N).
-        # Cada partida futura tem team1_code/team2_code com o código da partida de origem.
-        # Traçamos o caminho de cada time até a SF para saber em qual metade ele está.
-        # Só campeão x vice no mesmo lado é conflito: eles se eliminam antes da final.
-        all_ko = session.execute(text("""
-            SELECT match_number, team1_id, team2_id, team1_code, team2_code, phase
+        # Chaveamento correto Copa 2026 — hardcoded por ser fixo e o banco ter QF98/QF99 trocados.
+        # Lado 1 → SF 101: Oitavas 1+2 (R16 89,90) e Oitavas 3+4 (R16 93,94)
+        # Lado 2 → SF 102: Oitavas 5+6 (R16 91,92) e Oitavas 7+8 (R16 95,96)
+        # copa2026_data.py tinha W91/W92 em QF 98 e W93/W94 em QF 99 — invertido vs bracket real.
+        COPA2026_WINNER_NEXT = {
+            73: 89, 74: 89, 75: 90, 76: 90,  # R32 → R16 (Oitavas 1,2)
+            77: 91, 78: 91, 79: 92, 80: 92,  # R32 → R16 (Oitavas 5,6)
+            81: 93, 82: 93, 83: 94, 84: 94,  # R32 → R16 (Oitavas 3,4)
+            85: 95, 86: 95, 87: 96, 88: 96,  # R32 → R16 (Oitavas 7,8)
+            89: 97, 90: 97, 93: 98, 94: 98,  # R16 → QF (Lado 1 → SF 101)
+            91: 99, 92: 99, 95: 100, 96: 100, # R16 → QF (Lado 2 → SF 102)
+            97: 101, 98: 101,                  # QF → SF 101
+            99: 102, 100: 102,                 # QF → SF 102
+        }
+
+        team_matches = session.execute(text("""
+            SELECT match_number, team1_id, team2_id
             FROM matches
             WHERE phase IN ('R32', 'R16', 'QF', 'SF')
-              AND match_number IS NOT NULL
+              AND (team1_id IS NOT NULL OR team2_id IS NOT NULL)
         """)).fetchall()
 
-        # SFs ordenadas: half 1 = SF com menor match_number, half 2 = a outra
-        sf_nums_sorted = sorted({m.match_number for m in all_ko if m.phase == 'SF'})
-        sf_num_set = set(sf_nums_sorted)
-
-        # winner_next[N] = match_number da próxima partida para o vencedor da partida N
-        # Construído a partir de team1_code/team2_code no formato "W{N}"
-        winner_next = {}
-        for m in all_ko:
-            for code in (m.team1_code or '', m.team2_code or ''):
-                if code.startswith('W') and len(code) > 1:
-                    try:
-                        src = int(code[1:])
-                        winner_next[src] = m.match_number
-                    except ValueError:
-                        pass
-
-        # Para cada time, traça o caminho a partir do seu jogo atual até a SF
         bracket_half = {}
-        for m in all_ko:
+        for m in team_matches:
             for team_id in (m.team1_id, m.team2_id):
                 if not team_id or team_id in bracket_half:
                     continue
                 current = m.match_number
                 sf_found = None
                 for _ in range(8):
-                    if current in sf_num_set:
+                    if current in (101, 102):
                         sf_found = current
                         break
-                    nxt = winner_next.get(current)
+                    nxt = COPA2026_WINNER_NEXT.get(current)
                     if nxt is None:
                         break
                     current = nxt
-                if sf_found is not None and sf_nums_sorted:
-                    bracket_half[team_id] = 1 if sf_found == sf_nums_sorted[0] else 2
+                if sf_found is not None:
+                    bracket_half[team_id] = 1 if sf_found == 101 else 2
 
     if not rows:
         st.info("Sem dados disponíveis ainda.")
