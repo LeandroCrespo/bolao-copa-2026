@@ -3691,6 +3691,20 @@ def page_analise_desempenho():
 
     admin_proj = next(r for r in proj_sorted if r['id'] == admin_id)
 
+    # ── DEBUG TEMPORÁRIO (remover após diagnóstico) ──────────────────────────
+    with st.expander("🔧 Debug chaveamento", expanded=True):
+        admin_pp = pod_preds.get(admin_id)
+        if admin_pp:
+            C, V, T = admin_pp['champion'], admin_pp['vice'], admin_pp['third']
+            st.write(f"**Palpite pódio Leandro (user_id={admin_id}):** C={C} V={V} T={T}")
+            st.write(f"**bracket_half:** C→{bracket_half.get(C)} V→{bracket_half.get(V)} T→{bracket_half.get(T)}")
+        else:
+            st.write(f"Sem palpite de pódio para user_id={admin_id}")
+        st.write(f"**bracket_half size:** {len(bracket_half)}")
+        st.write(f"**bracket_half completo:** {bracket_half}")
+        st.write(f"**admin_proj max_pod:** {admin_proj['max_pod']}")
+    # ── FIM DEBUG ────────────────────────────────────────────────────────────
+
     pb_h = 20 + len(proj_sorted) * 26 + 20
 
     proj_js_rows = []
