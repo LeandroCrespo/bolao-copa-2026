@@ -3540,14 +3540,20 @@ def page_analise_desempenho():
         }
 
         team_matches = session.execute(text("""
-            SELECT match_number, team1_id, team2_id
+            SELECT match_number, team1_id, team2_id, phase
             FROM matches
             WHERE phase IN ('R32', 'R16', 'QF', 'SF')
               AND (team1_id IS NOT NULL OR team2_id IS NOT NULL)
         """)).fetchall()
 
+        # Processar fases mais avançadas primeiro (R16 antes de R32) para que
+        # a atribuição correta de vagas R16 prevaleça sobre erros de grupo no R32.
+        PHASE_ORD = {'SF': 4, 'QF': 3, 'R16': 2, 'R32': 1}
+        team_matches_sorted = sorted(team_matches,
+                                     key=lambda m: -PHASE_ORD.get(m.phase, 0))
+
         bracket_half = {}
-        for m in team_matches:
+        for m in team_matches_sorted:
             for team_id in (m.team1_id, m.team2_id):
                 if not team_id or team_id in bracket_half:
                     continue
