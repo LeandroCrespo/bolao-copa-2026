@@ -3443,6 +3443,8 @@ def page_analise_desempenho():
 
     with session_scope(engine) as session:
         # ── ranking completo (jogos + grupos + pódio) ─────────────────────────
+        # Usa team1_score IS NOT NULL para incluir só jogos com placar registrado,
+        # igual ao critério de get_user_stats() e get_ranking() em scoring.py.
         ranking_sql = text("""
             SELECT
                 u.id,
@@ -3460,8 +3462,8 @@ def page_analise_desempenho():
                     + COALESCE(gp.gp_pts, 0)
                     + COALESCE(pp.pp_pts, 0) AS total_pts
             FROM users u
-            LEFT JOIN predictions p ON p.user_id = u.id
-            LEFT JOIN matches m ON p.match_id = m.id AND m.status = 'finished'
+            JOIN predictions p ON p.user_id = u.id
+            JOIN matches m ON p.match_id = m.id
             LEFT JOIN (
                 SELECT user_id, SUM(points_awarded) AS gp_pts
                 FROM group_predictions GROUP BY user_id
@@ -3471,6 +3473,8 @@ def page_analise_desempenho():
                 FROM podium_predictions
             ) pp ON pp.user_id = u.id
             WHERE u.active = true AND u.role != 'admin'
+              AND m.team1_score IS NOT NULL
+              AND m.team2_score IS NOT NULL
             GROUP BY u.id, u.name, gp.gp_pts, pp.pp_pts
             ORDER BY total_pts DESC
         """)
@@ -3484,7 +3488,9 @@ def page_analise_desempenho():
             FROM predictions p
             JOIN users u ON p.user_id = u.id
             JOIN matches m ON p.match_id = m.id
-            WHERE u.active = true AND u.role != 'admin' AND m.status = 'finished'
+            WHERE u.active = true AND u.role != 'admin'
+              AND m.team1_score IS NOT NULL
+              AND m.team2_score IS NOT NULL
             GROUP BY u.id, m.phase
         """)
         phase_rows = session.execute(phase_sql).fetchall()
