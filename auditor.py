@@ -76,13 +76,13 @@ def check_db_health(cur) -> list[str]:
     return alerts, pred_count, group_count, podium_count, user_count
 
 
-def check_upcoming_no_prediction(cur) -> list[str]:
-    """Jogos iniciando nas próximas WINDOW_HOURS sem palpite de algum usuário ativo."""
-    alerts = []
+def check_upcoming_no_prediction(cur):
+    """Jogos iniciando nas próximas WINDOW_HOURS — sempre reporta status de palpites."""
+    alerts = []        # jogos com palpites faltando
+    ok_alerts = []     # jogos em que todos palpitaram
     now = now_brazil()
     limite = now + timedelta(hours=WINDOW_HOURS)
 
-    # Jogos futuros dentro da janela
     cur.execute("""
         SELECT m.id, m.match_number, m.datetime,
                COALESCE(t1.flag || ' ' || t1.name, m.team1_code) AS team1,
@@ -98,9 +98,8 @@ def check_upcoming_no_prediction(cur) -> list[str]:
     upcoming = cur.fetchall()
 
     if not upcoming:
-        return alerts
+        return alerts, ok_alerts
 
-    # Usuários ativos (não admin)
     cur.execute("""
         SELECT id, name FROM users
         WHERE active = true AND role != 'admin'
@@ -108,12 +107,11 @@ def check_upcoming_no_prediction(cur) -> list[str]:
     """)
     users = cur.fetchall()
     if not users:
-        return alerts
+        return alerts, ok_alerts
 
     user_ids = {u[0]: u[1] for u in users}
 
     for match_id, match_num, match_dt, team1, team2 in upcoming:
-        # Quem já palpitou para este jogo
         cur.execute("""
             SELECT user_id FROM predictions
             WHERE match_id = %s
@@ -123,16 +121,24 @@ def check_upcoming_no_prediction(cur) -> list[str]:
         palpitaram = {r[0] for r in cur.fetchall()}
 
         faltam = [name for uid, name in user_ids.items() if uid not in palpitaram]
+        hora_jogo = match_dt.strftime("%H:%M")
+        minutos = int((match_dt - now).total_seconds() / 60)
+
         if faltam:
-            hora_jogo = match_dt.strftime("%H:%M")
-            minutos = int((match_dt - now).total_seconds() / 60)
             faltam_str = ", ".join(faltam)
             alerts.append(
                 f"⏰ <b>Jogo #{match_num} em {minutos}min ({hora_jogo} Brasília)</b>\n"
                 f"   {team1} x {team2}\n"
                 f"   Sem palpite: {faltam_str}"
             )
-    return alerts
+        else:
+            ok_alerts.append(
+                f"✅ <b>Jogo #{match_num} em {minutos}min ({hora_jogo} Brasília)</b>\n"
+                f"   {team1} x {team2}\n"
+                f"   Todos os {len(user_ids)} participantes palpitaram!"
+            )
+
+    return alerts, ok_alerts
 
 
 def check_invalid_predictions(cur) -> list[str]:
@@ -384,14 +390,14 @@ def main():
     health_alerts, pred_count, group_count, podium_count, user_count = check_db_health(cur)
 
     # --- Todas as verificações ---
-    pre_copa_alerts   = check_pre_copa_missing_predictions(cur)
-    upcoming_alerts   = check_upcoming_no_prediction(cur)
-    invalid_preds     = check_invalid_predictions(cur)
-    duplicate_preds   = check_duplicate_predictions(cur)
-    invalid_groups    = check_invalid_group_predictions(cur)
-    invalid_podium    = check_invalid_podium_predictions(cur)
-    unscored          = check_unscored_finished(cur)
-    count_drop        = check_prediction_count_drop(cur)
+    pre_copa_alerts          = check_pre_copa_missing_predictions(cur)
+    upcoming_alerts, upcoming_ok = check_upcoming_no_prediction(cur)
+    invalid_preds            = check_invalid_predictions(cur)
+    duplicate_preds          = check_duplicate_predictions(cur)
+    invalid_groups           = check_invalid_group_predictions(cur)
+    invalid_podium           = check_invalid_podium_predictions(cur)
+    unscored                 = check_unscored_finished(cur)
+    count_drop               = check_prediction_count_drop(cur)
     conn.commit()
 
     all_alerts = (
@@ -399,6 +405,7 @@ def main():
         duplicate_preds + invalid_groups + invalid_podium +
         unscored + count_drop
     )
+    has_upcoming_any = bool(upcoming_alerts or upcoming_ok)
 
     # Log no console sempre
     summary = (
@@ -409,39 +416,40 @@ def main():
     if all_alerts:
         for a in all_alerts:
             print(" •", a.replace("<b>", "").replace("</b>", ""))
-    else:
+    if upcoming_ok:
+        for a in upcoming_ok:
+            print(" •", a.replace("<b>", "").replace("</b>", ""))
+    if not all_alerts and not upcoming_ok:
         print("Nenhum alerta — sistema saudável.")
 
     cur.close()
     conn.close()
 
     # --- Telegram ---
-    # Envia sempre se houver alertas, ou se --full foi passado
-    has_upcoming = bool(upcoming_alerts)
-    has_critical  = bool(
-        pre_copa_alerts + invalid_preds + duplicate_preds + invalid_groups +
-        invalid_podium + unscored + count_drop + health_alerts
-    )
-
-    if not (all_alerts or force_full):
-        print("Sem alertas e sem --full — Telegram não enviado (anti-spam).")
+    # Envia se houver alertas, jogos próximos (mesmo com todos palpitados) ou --full
+    if not (all_alerts or has_upcoming_any or force_full):
+        print("Sem alertas e sem jogos próximos — Telegram não enviado (anti-spam).")
         return
 
     ts = now.strftime("%d/%m/%Y %H:%M")
     linhas = [f"⚽ <b>VAR — Bolão Copa 2026</b> | {ts}\n"]
     linhas.append(f"📊 {summary}\n")
 
-    if not all_alerts:
+    if not all_alerts and not has_upcoming_any:
         linhas.append("✅ Sistema saudável — 0 alertas.")
     else:
         if pre_copa_alerts:
             linhas.append("─── ⚠️ Atenção: Copa em breve! ───")
             linhas.extend(pre_copa_alerts)
             linhas.append("")
-        if has_upcoming:
-            linhas.append("─── Palpites pendentes ───")
+        if upcoming_alerts:
+            linhas.append("─── ⏰ Palpites pendentes ───")
             linhas.extend(upcoming_alerts)
-        if has_critical:
+        if upcoming_ok:
+            linhas.append("─── ✅ Jogos próximos OK ───")
+            linhas.extend(upcoming_ok)
+        if any([invalid_preds, duplicate_preds, invalid_groups,
+                invalid_podium, unscored, count_drop, health_alerts]):
             linhas.append("\n─── Integridade ───")
             for a in (invalid_preds + duplicate_preds + invalid_groups +
                       invalid_podium + unscored + count_drop + health_alerts):
