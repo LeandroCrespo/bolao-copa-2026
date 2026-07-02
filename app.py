@@ -3564,6 +3564,26 @@ def page_analise_desempenho():
                 if sf_found is not None:
                     bracket_half[team_id] = 1 if sf_found == 101 else 2
 
+        # Dados de debug: buscar nomes dos times e palpites de pódio dentro da sessão
+        dbg_teams = {t.id: f"{t.name} ({t.code})"
+                     for t in session.execute(text(
+                         "SELECT id, code, name FROM teams ORDER BY id"
+                     )).fetchall()}
+        dbg_pod_all = session.execute(text("""
+            SELECT pp.user_id, u.name,
+                   pp.champion_team_id, pp.runner_up_team_id, pp.third_place_team_id
+            FROM podium_predictions pp
+            JOIN users u ON u.id = pp.user_id
+            ORDER BY u.name
+        """)).fetchall()
+        dbg_pod_list = [
+            {
+                "user_id": r.user_id, "nome": r.name,
+                "C": r.champion_team_id, "V": r.runner_up_team_id, "T": r.third_place_team_id,
+            }
+            for r in dbg_pod_all
+        ]
+
     if not rows:
         st.info("Sem dados disponíveis ainda.")
         return
@@ -3693,43 +3713,27 @@ def page_analise_desempenho():
 
     # ── DEBUG TEMPORÁRIO (remover após diagnóstico) ──────────────────────────
     with st.expander("🔧 Debug pódio + chaveamento", expanded=True):
-        with session_scope(engine) as dbg_s:
-            # Todos os times com seus IDs e bracket_half
-            teams_rows = dbg_s.execute(text(
-                "SELECT id, code, name FROM teams ORDER BY id"
-            )).fetchall()
-            tid_to_name = {t.id: f"{t.name} ({t.code})" for t in teams_rows}
-
-            # Todos os palpites de pódio
-            all_pp = dbg_s.execute(text("""
-                SELECT pp.user_id, u.name,
-                       pp.champion_team_id, pp.runner_up_team_id, pp.third_place_team_id
-                FROM podium_predictions pp
-                JOIN users u ON u.id = pp.user_id
-                ORDER BY u.name
-            """)).fetchall()
-
         st.markdown("**Palpites de pódio (todos os participantes):**")
         rows_debug = []
-        for pp in all_pp:
-            C, V, T = pp.champion_team_id, pp.runner_up_team_id, pp.third_place_team_id
+        for pp in dbg_pod_list:
+            C, V, T = pp['C'], pp['V'], pp['T']
             ch = bracket_half.get(C) if C else None
             vh = bracket_half.get(V) if V else None
             conflict = "⚠️ SIM" if (ch and vh and ch == vh) else "não"
             rows_debug.append({
-                "Participante": pp.name,
-                "1° (Campeão)": tid_to_name.get(C, f"id={C}") if C else "—",
+                "Participante": pp['nome'],
+                "1° (Campeão)": dbg_teams.get(C, f"id={C}") if C else "—",
                 "Half C": ch,
-                "2° (Vice)": tid_to_name.get(V, f"id={V}") if V else "—",
+                "2° (Vice)": dbg_teams.get(V, f"id={V}") if V else "—",
                 "Half V": vh,
-                "3° Lugar": tid_to_name.get(T, f"id={T}") if T else "—",
+                "3° Lugar": dbg_teams.get(T, f"id={T}") if T else "—",
                 "Half T": bracket_half.get(T) if T else None,
                 "Conflito C+V?": conflict,
             })
         st.dataframe(rows_debug, use_container_width=True)
 
-        st.markdown("**bracket_half completo** (team_id → metade):")
-        half_table = [{"team_id": k, "nome": tid_to_name.get(k, "?"), "metade": v}
+        st.markdown(f"**bracket_half** ({len(bracket_half)} times):")
+        half_table = [{"team_id": k, "nome": dbg_teams.get(k, "?"), "metade": v}
                       for k, v in sorted(bracket_half.items())]
         st.dataframe(half_table, use_container_width=True)
     # ── FIM DEBUG ────────────────────────────────────────────────────────────
