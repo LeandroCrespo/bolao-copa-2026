@@ -3494,7 +3494,8 @@ def page_analise_desempenho():
         return
 
     # ── Montar estrutura de dados ─────────────────────────────────────────────
-    admin_id = st.session_state.user['id']
+    # A página roda na sessão do admin (id=1), mas Leandro compete como jogador (id=15).
+    admin_id = 15
 
     # índice de posição
     ranking = []
@@ -3537,21 +3538,28 @@ def page_analise_desempenho():
         }
 
     if not admin_row:
-        st.warning("Usuário admin não encontrado no ranking de participantes.")
+        st.warning("Usuário Leandro (id=15) não encontrado no ranking de participantes.")
         return
 
     def phase_avg(uid, phase_key):
         return phase_map.get(uid, {}).get(phase_key, {}).get('avg', 0)
 
-    # ── três jogadores para os gráficos ───────────────────────────────────────
-    trio = [admin_row]
-    if leader and leader['id'] != admin_id:
-        trio.append(leader)
-    if third and third['id'] != admin_id and (not leader or third['id'] != leader['id']):
-        trio.append(third)
+    # ── selecionar jogadores para os gráficos ────────────────────────────────
+    # Admin no pódio (top 3): compara com os outros 2 do pódio.
+    # Admin fora do pódio: compara com os 3 do pódio.
+    PLAYER_COLORS = ['#1A56DB', '#9A6E00', '#0D9E6A', '#7B3FA0']
+    podium = ranking[:3]
 
-    COLORS = {'admin': '#1A56DB', 'leader': '#9A6E00', 'third': '#0D9E6A'}
-    trio_colors = [COLORS['admin'], COLORS['leader'], COLORS['third']]
+    if admin_row['pos'] <= 3:
+        trio = [admin_row] + [r for r in podium if r['id'] != admin_id]
+    else:
+        trio = [admin_row] + podium
+
+    trio_colors = PLAYER_COLORS[:len(trio)]
+
+    # Dimensões dos SVGs dependem do nº de jogadores
+    db_h = 22 + len(trio) * 44 + 38
+    sb_h = 20 + len(trio) * 42 + 28
 
     # 2022 hardcoded (final, copa Qatar)
     hist_2022 = {
@@ -3677,13 +3685,13 @@ svg{{display:block;overflow:visible}}
 <div class="sec">Evolução 2022 → 2026 · média de pontos por jogo</div>
 <div class="card">
   <div class="cs">Apenas palpites de jogos · 2022: 64 jogos, exc. bônus de campeão · 2026: {admin_row['games']} jogos</div>
-  <svg id="db" viewBox="0 0 520 170" width="100%"></svg>
+  <svg id="db" viewBox="0 0 520 {db_h}" width="100%"></svg>
   <div class="leg" id="db-leg"></div>
 </div>
 <div class="sec">Distribuição de acertos — 2026</div>
 <div class="card">
   <div class="cs">Percentual de jogos por tipo de acerto · {admin_row['games']} jogos cada</div>
-  <svg id="sb" viewBox="0 0 520 155" width="100%"></svg>
+  <svg id="sb" viewBox="0 0 520 {sb_h}" width="100%"></svg>
   <div class="leg">
     <div class="li"><div class="ld" style="background:#0A7040"></div>Placar exato (20 pts)</div>
     <div class="li"><div class="ld" style="background:#1A56DB"></div>Resultado + gols (15)</div>
@@ -3708,6 +3716,7 @@ svg{{display:block;overflow:visible}}
 <script>
 const TRIO=[{trio_js}];
 const ALL=[{ranking_js}];
+const DB_H={db_h},SB_H={sb_h};
 const tt=document.getElementById('tt');
 function showTT(e,h){{tt.innerHTML=h;tt.classList.add('on');mvTT(e);}}
 function mvTT(e){{const x=e.clientX+13,y=e.clientY-9;
@@ -3748,7 +3757,7 @@ document.getElementById('ph-leg').innerHTML=TRIO.map(legHTML).join('');
 
 /* ── DUMBBELL ── */
 (function(){{
-  const W=520,H=170,lm=80,rm=62,tm=22,bm=38;
+  const W=520,H=DB_H,lm=80,rm=62,tm=22,bm=38;
   const cw=W-lm-rm,ch=H-tm-bm;
   const hasPast=TRIO.some(p=>p.v22!==null);
   const allV=TRIO.flatMap(p=>p.v22!=null?[p.v22,p.v26]:[p.v26]);
@@ -3788,7 +3797,7 @@ document.getElementById('ph-leg').innerHTML=TRIO.map(legHTML).join('');
 
 /* ── STACKED BAR ── */
 (function(){{
-  const W=520,H=155,lm=80,rm=8,tm=16,bm=28;
+  const W=520,H=SB_H,lm=80,rm=8,tm=16,bm=28;
   const cw=W-lm-rm,ch=H-tm-bm,total=TRIO[0].games;
   const cats=[
     {{label:'Placar exato',pts:20,color:'#0A7040',key:'exact'}},
@@ -3797,7 +3806,7 @@ document.getElementById('ph-leg').innerHTML=TRIO.map(legHTML).join('');
     {{label:'Gol de 1 time',pts:5,color:'#B87800',key:'gol'}},
     {{label:'Errou tudo',pts:0,color:'#C0322A',key:'zeros'}},
   ];
-  const rowH=ch/TRIO.length,barH=30;
+  const rowH=ch/TRIO.length,barH=Math.min(30,Math.floor(rowH)-5);
   let s='';
   [0,25,50,75,100].forEach(p=>{{const x=lm+p/100*cw;
     s+=`<line x1="${{x}}" y1="${{tm}}" x2="${{x}}" y2="${{H-bm}}" stroke="#E2E7EF" stroke-width="1"/>`;
