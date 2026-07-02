@@ -3524,6 +3524,34 @@ def page_analise_desempenho():
         }
         scoring_cfg = get_scoring_config(session)
 
+        # Lado do chaveamento por time: times no mesmo lado se encontram antes da final.
+        # Só campeão x vice no mesmo lado é conflito real: nesse caso o vice não pode ser
+        # vice (eles se eliminam entre si antes da final). Os outros pares (vice x 3° ou
+        # campeão x 3°) não conflitam: o perdedor da SF ainda joga pelo 3° lugar.
+        # SF 1 match → half 1 | SF 2 match → half 2
+        # QF matches 1-2 → half 1 | QF matches 3-4 → half 2
+        # R16 matches 1-4 → half 1 | R16 matches 5-8 → half 2
+        # R32 matches 1-8 → half 1 | R32 matches 9-16 → half 2
+        bracket_rows = session.execute(text("""
+            SELECT id, team1_id, team2_id, phase
+            FROM matches
+            WHERE phase IN ('SF', 'QF', 'R16', 'R32')
+              AND (team1_id IS NOT NULL OR team2_id IS NOT NULL)
+        """)).fetchall()
+
+        # Agrupa por fase e ordena por id para determinar metade do chaveamento
+        bracket_half = {}
+        phase_split = {'SF': 1, 'QF': 2, 'R16': 4, 'R32': 8}
+        for phase in ('SF', 'QF', 'R16', 'R32'):
+            phase_matches = sorted([r for r in bracket_rows if r.phase == phase], key=lambda r: r.id)
+            split = phase_split.get(phase, 1)
+            for i, m in enumerate(phase_matches):
+                half = 1 if i < split else 2
+                if m.team1_id:
+                    bracket_half.setdefault(m.team1_id, half)
+                if m.team2_id:
+                    bracket_half.setdefault(m.team2_id, half)
+
     if not rows:
         st.info("Sem dados disponíveis ainda.")
         return
@@ -3603,16 +3631,31 @@ def page_analise_desempenho():
     for r in ranking:
         r_rem = total_matches - r['games']
         proj_add = round(r['avg'] * r_rem)
-        # Pódio máximo possível (times ainda vivos)
+        # Pódio máximo possível com restrição de chaveamento
         pp = pod_preds.get(r['id'])
         max_pod = 0
         if pp:
-            if pp['champion'] and pp['champion'] not in out_top2:
+            C, V, T = pp['champion'], pp['vice'], pp['third']
+            c_alive = bool(C and C not in out_top2)
+            v_alive = bool(V and V not in out_top2)
+            t_alive = bool(T and T not in out_third)
+
+            # Conflito de chaveamento: campeão e vice no mesmo lado do bracket
+            # → não podem se enfrentar na final; apenas um chega lá.
+            # Vice vs. 3°, ou campeão vs. 3°, no mesmo lado NÃO são conflito real:
+            # o perdedor da SF ainda disputa o 3° lugar e pode acertar a posição.
+            ch = bracket_half.get(C) if C else None
+            vh = bracket_half.get(V) if V else None
+            conflict_cv = (c_alive and v_alive and ch is not None
+                           and vh is not None and ch == vh)
+
+            if c_alive:
                 max_pod += scoring_cfg.get('podio_campeao', 15)
-            if pp['vice'] and pp['vice'] not in out_top2:
+            if v_alive and not conflict_cv:
                 max_pod += scoring_cfg.get('podio_vice', 15)
-            if pp['third'] and pp['third'] not in out_third:
+            if t_alive:
                 max_pod += scoring_cfg.get('podio_terceiro', 15)
+            max_pod = min(max_pod, scoring_cfg.get('podio_completo', 45))
         # current_total já inclui podium_pts (=0 enquanto torneio não termina)
         proj_total = r['total'] + proj_add + max_pod
         proj_list.append({**r, 'rem': r_rem, 'proj_add': proj_add,
