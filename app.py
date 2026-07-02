@@ -3583,25 +3583,6 @@ def page_analise_desempenho():
             if t.code in _half_fixes and t.id in bracket_half:
                 bracket_half[t.id] = _half_fixes[t.code]
 
-        # Dados de debug: buscar nomes dos times e palpites de pódio dentro da sessão
-        dbg_teams = {t.id: f"{t.name} ({t.code})"
-                     for t in session.execute(text(
-                         "SELECT id, code, name FROM teams ORDER BY id"
-                     )).fetchall()}
-        dbg_pod_all = session.execute(text("""
-            SELECT pp.user_id, u.name,
-                   pp.champion_team_id, pp.runner_up_team_id, pp.third_place_team_id
-            FROM podium_predictions pp
-            JOIN users u ON u.id = pp.user_id
-            ORDER BY u.name
-        """)).fetchall()
-        dbg_pod_list = [
-            {
-                "user_id": r.user_id, "nome": r.name,
-                "C": r.champion_team_id, "V": r.runner_up_team_id, "T": r.third_place_team_id,
-            }
-            for r in dbg_pod_all
-        ]
 
     if not rows:
         st.info("Sem dados disponíveis ainda.")
@@ -3729,30 +3710,6 @@ def page_analise_desempenho():
         pr['delta'] = pr['pos'] - pr['proj_pos']  # positivo = sobe posições
 
     admin_proj = next(r for r in proj_sorted if r['id'] == admin_id)
-
-    # ── DEBUG TEMPORÁRIO (remover após diagnóstico) ──────────────────────────
-    with st.expander("🔧 Debug pódio + chaveamento", expanded=True):
-        lines_pod = ["PARTICIPANTE | CAMPEÃO (id,half) | VICE (id,half) | 3° (id,half) | CONFLITO C+V?"]
-        lines_pod.append("-" * 90)
-        for pp in dbg_pod_list:
-            C, V, T = pp['C'], pp['V'], pp['T']
-            ch = bracket_half.get(C) if C else None
-            vh = bracket_half.get(V) if V else None
-            th = bracket_half.get(T) if T else None
-            conflict = "SIM" if (ch and vh and ch == vh) else "nao"
-            cn = dbg_teams.get(C, f"id={C}") if C else "—"
-            vn = dbg_teams.get(V, f"id={V}") if V else "—"
-            tn = dbg_teams.get(T, f"id={T}") if T else "—"
-            lines_pod.append(
-                f"{pp['nome']:<20} | {cn} (id={C},h={ch}) | {vn} (id={V},h={vh}) | {tn} (id={T},h={th}) | {conflict}"
-            )
-        st.code("\n".join(lines_pod), language=None)
-
-        lines_half = [f"bracket_half: {len(bracket_half)} times", "-" * 50]
-        for k, v in sorted(bracket_half.items()):
-            lines_half.append(f"  id={k:<4} metade={v}  {dbg_teams.get(k, '?')}")
-        st.code("\n".join(lines_half), language=None)
-    # ── FIM DEBUG ────────────────────────────────────────────────────────────
 
     pb_h = 20 + len(proj_sorted) * 26 + 20
 
