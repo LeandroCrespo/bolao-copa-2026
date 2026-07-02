@@ -3524,39 +3524,51 @@ def page_analise_desempenho():
         }
         scoring_cfg = get_scoring_config(session)
 
-        # Lado do chaveamento por time: times no mesmo lado se encontram antes da final.
-        # Só campeão x vice no mesmo lado é conflito real: nesse caso o vice não pode ser
-        # vice (eles se eliminam entre si antes da final). Os outros pares (vice x 3° ou
-        # campeão x 3°) não conflitam: o perdedor da SF ainda joga pelo 3° lugar.
-        # SF 1 match → half 1 | SF 2 match → half 2
-        # QF matches 1-2 → half 1 | QF matches 3-4 → half 2
-        # R16 matches 1-4 → half 1 | R16 matches 5-8 → half 2
-        # R32 matches 1-8 → half 1 | R32 matches 9-16 → half 2
-        bracket_rows = session.execute(text("""
-            SELECT match_number, team1_id, team2_id, phase
+        # Lado do chaveamento por time: rastreia via códigos "W{N}" (vencedor da partida N).
+        # Cada partida futura tem team1_code/team2_code com o código da partida de origem.
+        # Traçamos o caminho de cada time até a SF para saber em qual metade ele está.
+        # Só campeão x vice no mesmo lado é conflito: eles se eliminam antes da final.
+        all_ko = session.execute(text("""
+            SELECT match_number, team1_id, team2_id, team1_code, team2_code, phase
             FROM matches
-            WHERE phase IN ('SF', 'QF', 'R16', 'R32')
-              AND (team1_id IS NOT NULL OR team2_id IS NOT NULL)
+            WHERE phase IN ('R32', 'R16', 'QF', 'SF')
+              AND match_number IS NOT NULL
         """)).fetchall()
 
-        # Agrupa por fase e ordena por match_number (número oficial do jogo, 1-104)
-        # que reflete a posição no bracket — NÃO por id (auto-increment sem ordem garantida).
-        # R16 matches 89-92 → QF 97-98 → SF1 (half 1)
-        # R16 matches 93-96 → QF 99-100 → SF2 (half 2)
+        # SFs ordenadas: half 1 = SF com menor match_number, half 2 = a outra
+        sf_nums_sorted = sorted({m.match_number for m in all_ko if m.phase == 'SF'})
+        sf_num_set = set(sf_nums_sorted)
+
+        # winner_next[N] = match_number da próxima partida para o vencedor da partida N
+        # Construído a partir de team1_code/team2_code no formato "W{N}"
+        winner_next = {}
+        for m in all_ko:
+            for code in (m.team1_code or '', m.team2_code or ''):
+                if code.startswith('W') and len(code) > 1:
+                    try:
+                        src = int(code[1:])
+                        winner_next[src] = m.match_number
+                    except ValueError:
+                        pass
+
+        # Para cada time, traça o caminho a partir do seu jogo atual até a SF
         bracket_half = {}
-        phase_split = {'SF': 1, 'QF': 2, 'R16': 4, 'R32': 8}
-        for phase in ('SF', 'QF', 'R16', 'R32'):
-            phase_matches = sorted(
-                [r for r in bracket_rows if r.phase == phase],
-                key=lambda r: r.match_number
-            )
-            split = phase_split.get(phase, 1)
-            for i, m in enumerate(phase_matches):
-                half = 1 if i < split else 2
-                if m.team1_id:
-                    bracket_half.setdefault(m.team1_id, half)
-                if m.team2_id:
-                    bracket_half.setdefault(m.team2_id, half)
+        for m in all_ko:
+            for team_id in (m.team1_id, m.team2_id):
+                if not team_id or team_id in bracket_half:
+                    continue
+                current = m.match_number
+                sf_found = None
+                for _ in range(8):
+                    if current in sf_num_set:
+                        sf_found = current
+                        break
+                    nxt = winner_next.get(current)
+                    if nxt is None:
+                        break
+                    current = nxt
+                if sf_found is not None and sf_nums_sorted:
+                    bracket_half[team_id] = 1 if sf_found == sf_nums_sorted[0] else 2
 
     if not rows:
         st.info("Sem dados disponíveis ainda.")
