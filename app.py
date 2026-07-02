@@ -3430,6 +3430,456 @@ def admin_repescagem(session):
 
 
 # =============================================================================
+# PÁGINA DE ANÁLISE DE DESEMPENHO (apenas admin)
+# =============================================================================
+def page_analise_desempenho():
+    """Análise de desempenho do admin comparado com líder e 3° lugar, vs Copa 2022."""
+    if st.session_state.user['role'] != 'admin':
+        st.error("Acesso negado!")
+        return
+
+    render_page_header()
+    st.markdown("## 📊 Análise de Desempenho")
+
+    with session_scope(engine) as session:
+        # ── ranking completo (jogos + grupos + pódio) ─────────────────────────
+        ranking_sql = text("""
+            SELECT
+                u.id,
+                u.name,
+                COALESCE(SUM(p.points_awarded), 0) AS match_pts,
+                ROUND(AVG(p.points_awarded)::numeric, 2) AS avg_pts,
+                COUNT(p.id) AS games,
+                SUM(CASE WHEN p.points_type = 'placar_exato'   THEN 1 ELSE 0 END) AS exact,
+                SUM(CASE WHEN p.points_type = 'resultado_gols' THEN 1 ELSE 0 END) AS resgols,
+                SUM(CASE WHEN p.points_type = 'resultado'      THEN 1 ELSE 0 END) AS resultado,
+                SUM(CASE WHEN p.points_awarded = 0             THEN 1 ELSE 0 END) AS zeros,
+                COALESCE(gp.gp_pts, 0) AS group_pts,
+                COALESCE(pp.pp_pts, 0) AS podium_pts,
+                COALESCE(SUM(p.points_awarded), 0)
+                    + COALESCE(gp.gp_pts, 0)
+                    + COALESCE(pp.pp_pts, 0) AS total_pts
+            FROM users u
+            LEFT JOIN predictions p ON p.user_id = u.id
+            LEFT JOIN matches m ON p.match_id = m.id AND m.status = 'finished'
+            LEFT JOIN (
+                SELECT user_id, SUM(points_awarded) AS gp_pts
+                FROM group_predictions GROUP BY user_id
+            ) gp ON gp.user_id = u.id
+            LEFT JOIN (
+                SELECT user_id, points_awarded AS pp_pts
+                FROM podium_predictions
+            ) pp ON pp.user_id = u.id
+            WHERE u.active = true AND u.role != 'admin'
+            GROUP BY u.id, u.name, gp.gp_pts, pp.pp_pts
+            ORDER BY total_pts DESC
+        """)
+        rows = session.execute(ranking_sql).fetchall()
+
+        # ── fase grupos vs mata-mata ───────────────────────────────────────────
+        phase_sql = text("""
+            SELECT u.id, m.phase,
+                   ROUND(AVG(p.points_awarded)::numeric, 2) AS avg_pts,
+                   COUNT(p.id) AS games
+            FROM predictions p
+            JOIN users u ON p.user_id = u.id
+            JOIN matches m ON p.match_id = m.id
+            WHERE u.active = true AND u.role != 'admin' AND m.status = 'finished'
+            GROUP BY u.id, m.phase
+        """)
+        phase_rows = session.execute(phase_sql).fetchall()
+
+    if not rows:
+        st.info("Sem dados disponíveis ainda.")
+        return
+
+    # ── Montar estrutura de dados ─────────────────────────────────────────────
+    admin_id = st.session_state.user['id']
+
+    # índice de posição
+    ranking = []
+    for i, r in enumerate(rows):
+        games = r.games or 0
+        mp = r.match_pts or 0
+        avg = float(r.avg_pts or 0)
+        exact = r.exact or 0
+        rg = r.resgols or 0
+        res = r.resultado or 0
+        zeros = r.zeros or 0
+        gol = max(0, games - exact - rg - res - zeros)
+        aprov = round(avg / 20 * 100, 1)
+        ranking.append({
+            'pos': i + 1,
+            'id': r.id,
+            'name': r.name,
+            'total': r.total_pts or 0,
+            'match_pts': mp,
+            'avg': avg,
+            'aprov': aprov,
+            'games': games,
+            'exact': exact,
+            'resgols': rg,
+            'resultado': res,
+            'gol': gol,
+            'zeros': zeros,
+        })
+
+    # Identificar admin no ranking, líder e 3°
+    admin_row = next((r for r in ranking if r['id'] == admin_id), None)
+    leader = ranking[0] if ranking else None
+    third  = ranking[2] if len(ranking) > 2 else None
+
+    # pontos de fase por usuário
+    phase_map = {}
+    for pr in phase_rows:
+        phase_map.setdefault(pr.id, {})[pr.phase] = {
+            'avg': float(pr.avg_pts or 0), 'games': pr.games or 0
+        }
+
+    if not admin_row:
+        st.warning("Usuário admin não encontrado no ranking de participantes.")
+        return
+
+    def phase_avg(uid, phase_key):
+        return phase_map.get(uid, {}).get(phase_key, {}).get('avg', 0)
+
+    # ── três jogadores para os gráficos ───────────────────────────────────────
+    trio = [admin_row]
+    if leader and leader['id'] != admin_id:
+        trio.append(leader)
+    if third and third['id'] != admin_id and (not leader or third['id'] != leader['id']):
+        trio.append(third)
+
+    COLORS = {'admin': '#1A56DB', 'leader': '#9A6E00', 'third': '#0D9E6A'}
+    trio_colors = [COLORS['admin'], COLORS['leader'], COLORS['third']]
+
+    # 2022 hardcoded (final, copa Qatar)
+    hist_2022 = {
+        'Leandro': {'avg': 8.67, 'pos': '3°'},
+        'Mauricio': {'avg': 6.95, 'pos': '15°'},
+        'Danilo':   {'avg': 9.14, 'pos': '1°'},
+    }
+
+    # ── gerar HTML ────────────────────────────────────────────────────────────
+    def js_obj(r, color, h22):
+        first_name = r['name'].split()[0]
+        v22 = h22.get(first_name, {}).get('avg', None)
+        pos22 = h22.get(first_name, {}).get('pos', '—')
+        g_avg = phase_avg(r['id'], 'Grupos')
+        mm_avg = phase_avg(r['id'], 'R32') or phase_avg(r['id'], 'Oitavas') or \
+                 phase_avg(r['id'], 'Quartas') or phase_avg(r['id'], 'Semi') or \
+                 phase_avg(r['id'], 'Final')
+        # todos os jogos fora de Grupos
+        non_group = {k: v for k, v in phase_map.get(r['id'], {}).items() if k != 'Grupos'}
+        if non_group:
+            total_mm = sum(v['avg'] * v['games'] for v in non_group.values())
+            games_mm = sum(v['games'] for v in non_group.values())
+            mm_avg = round(total_mm / games_mm, 1) if games_mm else 0
+        return (
+            f"{{name:'{first_name}',fullName:'{r['name']}',"
+            f"color:'{color}',"
+            f"v22:{v22 if v22 is not None else 'null'},pos22:'{pos22}',"
+            f"v26:{r['avg']},pos26:'{r['pos']}°',"
+            f"aprov:{r['aprov']},exact:{r['exact']},resgols:{r['resgols']},"
+            f"resultado:{r['resultado']},gol:{r['gol']},zeros:{r['zeros']},"
+            f"games:{r['games']},gAvg:{g_avg:.1f},mmAvg:{mm_avg:.1f}}}"
+        )
+
+    trio_js = ',\n'.join(js_obj(trio[i], trio_colors[i], hist_2022)
+                         for i in range(len(trio)))
+
+    ranking_js_rows = []
+    for r in ranking:
+        me = 'true' if r['id'] == admin_id else 'false'
+        best_avg = max(x['avg'] for x in ranking)
+        is_best = 'true' if r['avg'] == best_avg else 'false'
+        ranking_js_rows.append(
+            f"{{pos:{r['pos']},name:'{r['name'].replace(chr(39), ' ')}',"
+            f"total:{r['total']},avg:{r['avg']},aprov:{r['aprov']},"
+            f"exact:{r['exact']},zeros:{r['zeros']},me:{me},best:{is_best}}}"
+        )
+    ranking_js = ',\n'.join(ranking_js_rows)
+
+    admin_name = admin_row['name'].split()[0]
+    leader_name = leader['name'].split()[0] if leader else '—'
+    v22_admin = hist_2022.get(admin_name, {}).get('avg')
+    delta_vs_22 = f"+{admin_row['avg'] - v22_admin:.2f}".replace('.', ',') if v22_admin else '—'
+
+    html = f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{{--bg:#EEF1F6;--surface:#fff;--accent:#1A56DB;--gold:#9A6E00;--green:#0D9E6A;
+--ink:#0D1422;--ink2:#4B5672;--muted:#8896A7;--grid:#E2E7EF;--border:#D4DAE5;
+--good:#0A7040;--lbg:#EFF4FF;}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);
+color:var(--ink);padding:16px;max-width:640px;margin:0 auto;font-size:14px;line-height:1.5}}
+.ph{{padding-bottom:12px;margin-bottom:16px;border-bottom:2px solid var(--accent)}}
+.ey{{font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}}
+.pt{{font-size:1.1rem;font-weight:800;letter-spacing:-.02em}}
+.ps{{font-size:.7rem;color:var(--ink2)}}
+.sec{{font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:20px 0 8px}}
+.card{{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:10px}}
+.cs{{font-size:.67rem;color:var(--ink2);margin-bottom:12px}}
+.kgrid{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}}
+.kpi{{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:11px 13px}}
+.kl{{font-size:.6rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}}
+.kv{{font-size:1.85rem;font-weight:800;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-bottom:2px}}
+.kd{{font-size:.63rem;font-weight:600;color:var(--good)}}
+.ins{{background:var(--lbg);border:1px solid #C3D5F8;border-left:3px solid var(--accent);
+border-radius:0 6px 6px 0;padding:9px 13px;font-size:.72rem;color:var(--ink2);margin-bottom:10px;line-height:1.55}}
+.ins strong{{color:var(--ink)}}
+.leg{{display:flex;flex-wrap:wrap;gap:5px 13px;margin-top:10px}}
+.li{{display:flex;align-items:center;gap:5px;font-size:.67rem;color:var(--ink2)}}
+.ld{{width:9px;height:9px;border-radius:50%;flex-shrink:0}}
+.ttip{{position:fixed;background:#0D1422;color:#fff;padding:6px 9px;border-radius:5px;
+font-size:.68rem;pointer-events:none;opacity:0;transition:opacity .1s;z-index:999;line-height:1.7;max-width:190px}}
+.ttip.on{{opacity:1}}
+.wrap{{overflow-x:auto}}
+table{{width:100%;border-collapse:collapse;font-size:.72rem}}
+th{{padding:6px 6px;font-size:.59rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+color:var(--muted);border-bottom:2px solid var(--grid);text-align:right;white-space:nowrap}}
+th:nth-child(-n+2){{text-align:left}}
+td{{padding:5px 6px;border-bottom:1px solid var(--grid);text-align:right;
+font-variant-numeric:tabular-nums;white-space:nowrap}}
+td:first-child{{text-align:center;color:var(--muted);font-weight:700;width:28px}}
+td:nth-child(2){{text-align:left}}
+tr.me td{{background:var(--lbg);font-weight:600}}
+tr.me td:first-child{{color:var(--accent)}}
+tr:last-child td{{border-bottom:none}}
+.ba{{color:var(--accent);font-weight:700}}
+.st{{font-size:.58rem;vertical-align:super;color:var(--accent)}}
+.note{{font-size:.63rem;color:var(--muted);line-height:1.6;margin-top:8px}}
+svg{{display:block;overflow:visible}}
+</style></head><body>
+<div class="ttip" id="tt"></div>
+<div class="ph">
+  <div class="ey">Copa do Mundo 2026 · {admin_row['games']} jogos concluídos</div>
+  <div class="pt">Análise de Desempenho</div>
+  <div class="ps">Bolão dos Lemes · {admin_row['name']} vs {leader_name} (1°) · Comparativo Copa 2022</div>
+</div>
+<div class="sec">{admin_row['name'].split()[0]} {admin_row['name'].split()[1]} — números da Copa 2026</div>
+<div class="kgrid">
+  <div class="kpi"><div class="kl">Ranking geral</div>
+    <div class="kv">{admin_row['pos']}°</div>
+    <div class="kd">de {len(ranking)} participantes</div></div>
+  <div class="kpi"><div class="kl">Média pts / jogo</div>
+    <div class="kv" style="color:var(--accent)">{str(admin_row['avg']).replace('.',',')}</div>
+    <div class="kd" id="avg-badge"></div></div>
+  <div class="kpi"><div class="kl">Aproveitamento</div>
+    <div class="kv">{str(admin_row['aprov']).replace('.',',')}%</div>
+    <div class="kd">máx 100% = 20 pts/jogo</div></div>
+  <div class="kpi"><div class="kl">Evolução vs 2022</div>
+    <div class="kv" style="color:var(--good)">{delta_vs_22}</div>
+    <div class="kd">pontos por jogo</div></div>
+</div>
+<div class="ins" id="insight-box"></div>
+<div class="sec">Evolução 2022 → 2026 · média de pontos por jogo</div>
+<div class="card">
+  <div class="cs">Apenas palpites de jogos · 2022: 64 jogos, exc. bônus de campeão · 2026: {admin_row['games']} jogos</div>
+  <svg id="db" viewBox="0 0 520 170" width="100%"></svg>
+  <div class="leg" id="db-leg"></div>
+</div>
+<div class="sec">Distribuição de acertos — 2026</div>
+<div class="card">
+  <div class="cs">Percentual de jogos por tipo de acerto · {admin_row['games']} jogos cada</div>
+  <svg id="sb" viewBox="0 0 520 155" width="100%"></svg>
+  <div class="leg">
+    <div class="li"><div class="ld" style="background:#0A7040"></div>Placar exato (20 pts)</div>
+    <div class="li"><div class="ld" style="background:#1A56DB"></div>Resultado + gols (15)</div>
+    <div class="li"><div class="ld" style="background:#5A7AC0"></div>Resultado (10)</div>
+    <div class="li"><div class="ld" style="background:#B87800"></div>Gol de 1 time (5)</div>
+    <div class="li"><div class="ld" style="background:#C0322A"></div>Errou tudo (0)</div>
+  </div>
+</div>
+<div class="sec">Desempenho por fase — 2026</div>
+<div class="card">
+  <div class="cs">Média de pontos por jogo · grupos vs mata-mata</div>
+  <svg id="ph" viewBox="0 0 520 155" width="100%"></svg>
+  <div class="leg" id="ph-leg"></div>
+</div>
+<div class="sec">Ranking completo — 2026</div>
+<div class="card wrap" style="padding:0"><table id="tbl"></table></div>
+<p class="note">
+  * Total geral = palpites de jogos + classificação de grupos + pódio.<br>
+  Pts/jogo calculado apenas sobre palpites de jogos (máx. 20 pts/jogo).<br>
+  Copa 2022 (Qatar, 64 jogos): líder Danilo com 9,14 pts/jogo.
+</p>
+<script>
+const TRIO=[{trio_js}];
+const ALL=[{ranking_js}];
+const tt=document.getElementById('tt');
+function showTT(e,h){{tt.innerHTML=h;tt.classList.add('on');mvTT(e);}}
+function mvTT(e){{const x=e.clientX+13,y=e.clientY-9;
+  tt.style.left=Math.min(x,window.innerWidth-200)+'px';
+  tt.style.top=Math.max(y,5)+'px';}}
+function hideTT(){{tt.classList.remove('on');}}
+function hover(sel,fn){{document.querySelectorAll(sel).forEach(el=>{{
+  el.style.cursor='pointer';
+  el.addEventListener('mouseenter',e=>showTT(e,fn(el)));
+  el.addEventListener('mousemove',mvTT);
+  el.addEventListener('mouseleave',hideTT);
+}});}}
+
+/* insight badge */
+const adminT=TRIO[0];
+const bestAvgAll=Math.max(...ALL.map(r=>r.avg));
+document.getElementById('avg-badge').textContent=
+  adminT.v26===bestAvgAll?'★ melhor do bolão':'';
+const leaderT=TRIO.length>1?TRIO[1]:null;
+let ins='';
+if(adminT.v26===bestAvgAll&&adminT.pos26!=='1°'){{
+  const diff=leaderT?Math.round((leaderT.total-(ALL.find(r=>r.me)||{{total:0}}).total)):0;
+  ins=`<strong>${{adminT.name}} tem a melhor média por jogo do bolão (${{adminT.v26.toFixed(2)}} pts)</strong>, ` +
+      `mas está em ${{adminT.pos26}} no ranking geral. No critério de desempenho por jogo, a posição é 1°.`;
+}}else if(adminT.pos26==='1°'){{
+  ins=`<strong>${{adminT.name}} lidera tanto no ranking geral quanto em média por jogo (${{adminT.v26.toFixed(2)}} pts/jogo).</strong>`;
+}}else{{
+  ins=`<strong>Posição atual: ${{adminT.pos26}} lugar</strong> · ${{adminT.v26.toFixed(2)}} pts/jogo · ${{adminT.aprov}}% de aproveitamento.`;
+}}
+document.getElementById('insight-box').innerHTML=ins;
+
+/* legend helpers */
+function legHTML(p){{return `<div class="li"><div class="ld" style="background:${{p.color}}"></div>${{p.name}}</div>`;}}
+document.getElementById('db-leg').innerHTML=
+  '<div class="li"><div class="ld" style="background:#D0D7E0;border:1px solid #B0BCCB"></div>2022</div>'+
+  TRIO.map(p=>`<div class="li"><div class="ld" style="background:${{p.color}}"></div>${{p.name}} 2026</div>`).join('');
+document.getElementById('ph-leg').innerHTML=TRIO.map(legHTML).join('');
+
+/* ── DUMBBELL ── */
+(function(){{
+  const W=520,H=170,lm=80,rm=62,tm=22,bm=38;
+  const cw=W-lm-rm,ch=H-tm-bm;
+  const hasPast=TRIO.some(p=>p.v22!==null);
+  const allV=TRIO.flatMap(p=>p.v22!=null?[p.v22,p.v26]:[p.v26]);
+  const xMin=Math.floor(Math.min(...allV))-0.5;
+  const xMax=Math.ceil(Math.max(...allV))+0.5;
+  const px=v=>lm+(v-xMin)/(xMax-xMin)*cw;
+  let s='';
+  const ticks=[];
+  for(let t=Math.ceil(xMin);t<=Math.floor(xMax);t++)ticks.push(t);
+  ticks.forEach(t=>{{const x=px(t);
+    s+=`<line x1="${{x}}" y1="${{tm}}" x2="${{x}}" y2="${{H-bm}}" stroke="#E2E7EF" stroke-width="1"/>`;
+    s+=`<text x="${{x}}" y="${{H-bm+16}}" text-anchor="middle" font-size="10" fill="#8896A7" font-family="system-ui">${{t}}</text>`;
+  }});
+  s+=`<line x1="${{lm}}" y1="${{H-bm}}" x2="${{W-rm}}" y2="${{H-bm}}" stroke="#D4DAE5" stroke-width="1"/>`;
+  s+=`<text x="${{lm+cw/2}}" y="${{H-5}}" text-anchor="middle" font-size="9" fill="#8896A7" font-family="system-ui" letter-spacing=".08em">PONTOS POR JOGO</text>`;
+  TRIO.forEach((p,i)=>{{
+    const y=tm+(i+.5)*ch/TRIO.length;
+    const x26=px(p.v26);
+    const bold=i===0;
+    if(hasPast&&p.v22!=null){{
+      const x22=px(p.v22);
+      s+=`<line x1="${{x22}}" y1="${{y}}" x2="${{x26}}" y2="${{y}}" stroke="${{p.color}}" stroke-width="2" opacity=".3"/>`;
+      s+=`<circle cx="${{x22}}" cy="${{y}}" r="8" fill="#EEF1F6" stroke="#B0BCCB" stroke-width="1.5" class="d22"
+        data-n="${{p.name}}" data-v="${{p.v22}}" data-p="${{p.pos22}}"/>`;
+      const delta=(p.v26-p.v22).toFixed(2);
+      s+=`<text x="${{x26+12}}" y="${{y+4}}" font-size="10.5" fill="${{p.color}}" font-weight="700" font-family="system-ui">+${{delta}}</text>`;
+    }}
+    s+=`<circle cx="${{x26}}" cy="${{y}}" r="8" fill="${{p.color}}" stroke="white" stroke-width="2" class="d26"
+      data-n="${{p.name}}" data-v="${{p.v26}}" data-p="${{p.pos26}}"/>`;
+    s+=`<text x="${{lm-8}}" y="${{y+4}}" text-anchor="end" font-size="11.5" fill="${{bold?'#0D1422':'#4B5672'}}"
+      font-weight="${{bold?700:400}}" font-family="system-ui">${{p.name}}</text>`;
+  }});
+  document.getElementById('db').innerHTML=s;
+  hover('.d22',el=>{{const d=el.dataset;return `<strong>${{d.n}} · 2022</strong><br>${{parseFloat(d.v).toFixed(2)}} pts/jogo<br>${{d.p}} lugar`;}});
+  hover('.d26',el=>{{const d=el.dataset;return `<strong>${{d.n}} · 2026</strong><br>${{parseFloat(d.v).toFixed(2)}} pts/jogo<br>${{d.p}} lugar`;}});
+}})();
+
+/* ── STACKED BAR ── */
+(function(){{
+  const W=520,H=155,lm=80,rm=8,tm=16,bm=28;
+  const cw=W-lm-rm,ch=H-tm-bm,total=TRIO[0].games;
+  const cats=[
+    {{label:'Placar exato',pts:20,color:'#0A7040',key:'exact'}},
+    {{label:'Resultado + gols',pts:15,color:'#1A56DB',key:'resgols'}},
+    {{label:'Resultado',pts:10,color:'#5A7AC0',key:'resultado'}},
+    {{label:'Gol de 1 time',pts:5,color:'#B87800',key:'gol'}},
+    {{label:'Errou tudo',pts:0,color:'#C0322A',key:'zeros'}},
+  ];
+  const rowH=ch/TRIO.length,barH=30;
+  let s='';
+  [0,25,50,75,100].forEach(p=>{{const x=lm+p/100*cw;
+    s+=`<line x1="${{x}}" y1="${{tm}}" x2="${{x}}" y2="${{H-bm}}" stroke="#E2E7EF" stroke-width="1"/>`;
+    s+=`<text x="${{x}}" y="${{H-bm+14}}" text-anchor="middle" font-size="9.5" fill="#8896A7" font-family="system-ui">${{p}}%</text>`;
+  }});
+  TRIO.forEach((pl,i)=>{{
+    const barY=tm+i*rowH+(rowH-barH)/2;
+    let xc=lm,rem=cw;
+    cats.forEach((cat,ci)=>{{
+      const cnt=pl[cat.key]||0;
+      const isLast=ci===cats.length-1;
+      const segW=isLast?rem:Math.round(cnt/total*cw);
+      rem-=segW;
+      if(segW<2)return;
+      s+=`<rect x="${{xc+1}}" y="${{barY}}" width="${{segW-2}}" height="${{barH}}" fill="${{cat.color}}" class="sb"
+        data-n="${{pl.name}}" data-c="${{cat.label}}" data-pts="${{cat.pts}}" data-cnt="${{cnt}}"
+        data-pct="${{(cnt/total*100).toFixed(1)}}"/>`;
+      if(segW>28)s+=`<text x="${{xc+segW/2}}" y="${{barY+barH/2+4}}" text-anchor="middle" font-size="10"
+        fill="white" font-weight="600" font-family="system-ui">${{cnt}}</text>`;
+      xc+=segW;
+    }});
+    const bold=i===0;
+    s+=`<text x="${{lm-8}}" y="${{barY+barH/2+4}}" text-anchor="end" font-size="11.5"
+      fill="${{bold?'#0D1422':'#4B5672'}}" font-weight="${{bold?700:400}}" font-family="system-ui">${{pl.name}}</text>`;
+  }});
+  document.getElementById('sb').innerHTML=s;
+  hover('.sb',el=>{{const d=el.dataset;return `<strong>${{d.n}}</strong><br>${{d.c}} (${{d.pts}} pts)<br>${{d.cnt}} jogos · ${{d.pct}}%`;}});
+}})();
+
+/* ── PHASE GROUPED BAR ── */
+(function(){{
+  const W=520,H=155,lm=36,rm=12,tm=16,bm=38;
+  const cw=W-lm-rm,ch=H-tm-bm,yMax=16;
+  const py=v=>H-bm-(v/yMax)*ch;
+  const phases=[['Fase de Grupos','gAvg'],['Mata-mata','mmAvg']];
+  const groupW=cw/2,barW=38,gap=7;
+  const gBarW=TRIO.length*barW+(TRIO.length-1)*gap;
+  let s='';
+  [0,5,10,15].forEach(v=>{{const y=py(v);
+    s+=`<line x1="${{lm}}" y1="${{y}}" x2="${{W-rm}}" y2="${{y}}" stroke="#E2E7EF" stroke-width="1"/>`;
+    s+=`<text x="${{lm-5}}" y="${{y+4}}" text-anchor="end" font-size="9.5" fill="#8896A7" font-family="system-ui">${{v}}</text>`;
+  }});
+  s+=`<line x1="${{lm}}" y1="${{py(0)}}" x2="${{W-rm}}" y2="${{py(0)}}" stroke="#D4DAE5" stroke-width="1.5"/>`;
+  phases.forEach(([label,key],pi)=>{{
+    const gx=lm+pi*groupW+(groupW-gBarW)/2;
+    TRIO.forEach((p,j)=>{{
+      const val=p[key]||0;
+      if(val<=0)return;
+      const x=gx+j*(barW+gap),y=py(val),bh=py(0)-y;
+      s+=`<rect x="${{x}}" y="${{y}}" width="${{barW}}" height="${{bh}}" fill="${{p.color}}" rx="2" class="ph"
+        data-n="${{p.name}}" data-ph="${{label}}" data-v="${{val}}"/>`;
+      s+=`<text x="${{x+barW/2}}" y="${{y-5}}" text-anchor="middle" font-size="10"
+        fill="${{p.color}}" font-weight="700" font-family="system-ui">${{val.toFixed(1)}}</text>`;
+    }});
+    const cx=lm+(pi+.5)*groupW;
+    s+=`<text x="${{cx}}" y="${{H-bm+14}}" text-anchor="middle" font-size="11"
+      fill="#4B5672" font-weight="600" font-family="system-ui">${{label}}</text>`;
+  }});
+  document.getElementById('ph').innerHTML=s;
+  hover('.ph',el=>{{const d=el.dataset;return `<strong>${{d.n}}</strong><br>${{d.ph}}<br>${{d.v}} pts/jogo`;}});
+}})();
+
+/* ── RANKING TABLE ── */
+(function(){{
+  const bestAvg=Math.max(...ALL.map(r=>r.avg));
+  let h=`<thead><tr><th>#</th><th>Nome</th><th title="Total incl. grupos e pódio">Total*</th>
+    <th>Pts/jogo</th><th>Aprov%</th><th title="Placar exato">Exatos</th><th title="Sem pontos">Zeros</th>
+  </tr></thead><tbody>`;
+  ALL.forEach(r=>{{
+    const avgD=r.avg===bestAvg?`<span class="ba">${{r.avg.toFixed(2)}}<sup class="st">★</sup></span>`:r.avg.toFixed(2);
+    h+=`<tr${{r.me?' class="me"':''}}><td>${{r.pos}}°</td><td>${{r.name}}</td>
+      <td>${{r.total}}</td><td>${{avgD}}</td><td>${{r.aprov.toFixed(1)}}%</td>
+      <td>${{r.exact}}</td><td>${{r.zeros}}</td></tr>`;
+  }});
+  document.getElementById('tbl').innerHTML=h+'</tbody>';
+}})();
+</script></body></html>"""
+
+    st.components.v1.html(html, height=1800, scrolling=True)
+
+
+# =============================================================================
 # PÁGINA DE ADMINISTRAÇÃO
 # =============================================================================
 def page_admin():
@@ -5833,6 +6283,7 @@ def main():
                     "📋 Regras": "regras",
                     "⚙️ Configurações": "configuracoes",
                     "🔧 Admin": "admin",
+                    "📊 Minha Análise": "analise_desempenho",
                 }
             else:
                 # Participantes veem todas as opções de palpites
@@ -5893,6 +6344,7 @@ def main():
             "regras": page_regras_wrapper,
             "configuracoes": page_configuracoes,
             "admin": page_admin,
+            "analise_desempenho": page_analise_desempenho,
         }
         
         page_func = pages.get(st.session_state.page, page_home)
