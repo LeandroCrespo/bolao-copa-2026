@@ -3496,6 +3496,27 @@ def page_analise_desempenho():
         phase_rows = session.execute(phase_sql).fetchall()
         total_matches = session.execute(text("SELECT COUNT(*) FROM matches")).fetchone()[0]
 
+        # Times eliminados do mata-mata
+        elim_rows = session.execute(text("""
+            SELECT
+              CASE WHEN penalty_winner_id IS NOT NULL THEN
+                CASE WHEN penalty_winner_id = team1_id THEN team2_id ELSE team1_id END
+              ELSE
+                CASE WHEN team1_score < team2_score THEN team1_id ELSE team2_id END
+              END AS elim_id,
+              phase
+            FROM matches
+            WHERE status = 'finished'
+              AND phase NOT IN ('Grupos', '3RD')
+              AND team1_id IS NOT NULL AND team2_id IS NOT NULL
+        """)).fetchall()
+        out_top2  = {r.elim_id for r in elim_rows}
+        out_third = {r.elim_id for r in elim_rows if r.phase != 'SF'}
+
+        # Palpites de pódio e config de pontuação
+        pod_preds = {pp.user_id: pp for pp in session.query(PodiumPrediction).all()}
+        scoring_cfg = get_scoring_config(session)
+
     if not rows:
         st.info("Sem dados disponíveis ainda.")
         return
@@ -3575,8 +3596,20 @@ def page_analise_desempenho():
     for r in ranking:
         r_rem = total_matches - r['games']
         proj_add = round(r['avg'] * r_rem)
-        proj_total = r['total'] + proj_add
-        proj_list.append({**r, 'rem': r_rem, 'proj_add': proj_add, 'proj': proj_total})
+        # Pódio máximo possível (times ainda vivos)
+        pp = pod_preds.get(r['id'])
+        max_pod = 0
+        if pp:
+            if pp.champion_team_id and pp.champion_team_id not in out_top2:
+                max_pod += scoring_cfg.get('podio_campeao', 100)
+            if pp.runner_up_team_id and pp.runner_up_team_id not in out_top2:
+                max_pod += scoring_cfg.get('podio_vice', 50)
+            if pp.third_place_team_id and pp.third_place_team_id not in out_third:
+                max_pod += scoring_cfg.get('podio_terceiro', 30)
+        # current_total já inclui podium_pts (=0 enquanto torneio não termina)
+        proj_total = r['total'] + proj_add + max_pod
+        proj_list.append({**r, 'rem': r_rem, 'proj_add': proj_add,
+                          'max_pod': max_pod, 'proj': proj_total})
 
     proj_sorted = sorted(proj_list, key=lambda x: -x['proj'])
     for i, pr in enumerate(proj_sorted):
@@ -3594,7 +3627,7 @@ def page_analise_desempenho():
             f"{{pos:{r['pos']},projPos:{r['proj_pos']},delta:{r['delta']},"
             f"name:'{r['name'].replace(chr(39), ' ')}',"
             f"total:{r['total']},proj:{r['proj']},projAdd:{r['proj_add']},"
-            f"avg:{r['avg']},me:{me}}}"
+            f"podMax:{r['max_pod']},avg:{r['avg']},me:{me}}}"
         )
     proj_js = ',\n'.join(proj_js_rows)
 
@@ -3776,36 +3809,36 @@ svg{{display:block;overflow:visible}}
     <div class="kv" style="color:var(--gold)">{admin_proj['proj_pos']}°</div>
     <div class="kd">{proj_delta_str}</div></div>
   <div class="kpi">
-    <div class="kl">Pts projetados</div>
+    <div class="kl">Pts projetados (total)</div>
     <div class="kv">{admin_proj['proj']}</div>
-    <div class="kd">de {len(ranking)} participantes</div></div>
+    <div class="kd">{games_rem} jogos restantes de {total_matches}</div></div>
   <div class="kpi">
-    <div class="kl">Jogos restantes</div>
-    <div class="kv">{games_rem}</div>
-    <div class="kd">de {total_matches} no torneio</div></div>
-  <div class="kpi">
-    <div class="kl">Pts a ganhar</div>
+    <div class="kl">Pts a ganhar (jogos)</div>
     <div class="kv" style="color:var(--green)">+{admin_proj['proj_add']}</div>
     <div class="kd">{admin_row['avg']:.2f} pts/jogo × {games_rem} jogos</div></div>
+  <div class="kpi" style="border-left-color:#7B3FA0">
+    <div class="kl">Pódio potencial</div>
+    <div class="kv" style="color:#7B3FA0">+{admin_proj['max_pod']}</div>
+    <div class="kd">máx. possível com times vivos</div></div>
 </div>
 <div class="ins">{proj_ins}</div>
 <div class="sec">Pontuação projetada — todos os participantes</div>
 <div class="card">
-  <div class="cs">Sólido = pts atuais · claro = estimativa dos {games_rem} jogos restantes · mantendo a média atual</div>
+  <div class="cs">Sólido = pts atuais · claro = estimativa dos {games_rem} jogos restantes + pódio potencial</div>
   <svg id="pb" viewBox="0 0 520 {pb_h}" width="100%"></svg>
   <div class="leg">
     <div class="li"><div class="ld" style="background:#1A56DB"></div>Leandro (atual)</div>
-    <div class="li"><div class="ld" style="background:#C3D5F8;border:1px solid #9AB7F0"></div>Leandro (projetado)</div>
+    <div class="li"><div class="ld" style="background:#C3D5F8;border:1px solid #9AB7F0"></div>Leandro (projetado + pódio)</div>
     <div class="li"><div class="ld" style="background:#8896A7"></div>Outros (atual)</div>
-    <div class="li"><div class="ld" style="background:#D4DAE5;border:1px solid #B8C4D0"></div>Outros (projetado)</div>
+    <div class="li"><div class="ld" style="background:#D4DAE5;border:1px solid #B8C4D0"></div>Outros (projetado + pódio)</div>
   </div>
 </div>
 <div class="sec">Classificação projetada — ao final da Copa 2026</div>
 <div class="card wrap" style="padding:0"><table id="ptbl"></table></div>
 <p class="note" style="margin-bottom:16px">
   Projeção assume que cada participante mantém sua média atual de pts/jogo nos {games_rem} jogos restantes.<br>
-  Pts de classificação de grupos e pódio já computados; não entram na projeção de pts/jogo.<br>
-  Atualizado automaticamente a cada acesso.
+  Pódio potencial = máximo possível com os times ainda vivos (campeão +100, vice +50, 3° +30).<br>
+  Pts de classificação de grupos já computados. Atualizado automaticamente a cada acesso.
 </p>
 <script>
 const TRIO=[{trio_js}];
@@ -3981,7 +4014,7 @@ document.getElementById('ph-leg').innerHTML=TRIO.map(legHTML).join('');
 
 /* ── PROJEÇÃO: BARRA HORIZONTAL ── */
 (function(){{
-  const W=520,H=PB_H,lm=90,rm=62,tm=16,bm=16;
+  const W=520,H=PB_H,lm=120,rm=62,tm=16,bm=16;
   const cw=W-lm-rm,ch=H-tm-bm;
   const maxV=Math.max(...PROJ.map(r=>r.proj));
   const pw=v=>lm+v/maxV*cw;
@@ -3995,36 +4028,40 @@ document.getElementById('ph-leg').innerHTML=TRIO.map(legHTML).join('');
     const colL=r.me?'#C3D5F8':'#D4DAE5';
     const bold=r.me;
     s+=`<rect x="${{lm}}" y="${{barY}}" width="${{Math.max(0,xC-lm)}}" height="${{barH}}" fill="${{col}}" rx="1" class="pbar"
-      data-n="${{r.name}}" data-curr="${{r.total}}" data-proj="${{r.proj}}" data-add="${{r.projAdd}}"/>`;
+      data-n="${{r.name}}" data-curr="${{r.total}}" data-proj="${{r.proj}}" data-add="${{r.projAdd}}" data-pod="${{r.podMax}}"/>`;
     if(xP>xC+1){{
       s+=`<rect x="${{xC}}" y="${{barY}}" width="${{xP-xC}}" height="${{barH}}" fill="${{colL}}" rx="1" class="pbar"
-        data-n="${{r.name}}" data-curr="${{r.total}}" data-proj="${{r.proj}}" data-add="${{r.projAdd}}"/>`;
+        data-n="${{r.name}}" data-curr="${{r.total}}" data-proj="${{r.proj}}" data-add="${{r.projAdd}}" data-pod="${{r.podMax}}"/>`;
     }}
     s+=`<text x="${{xP+5}}" y="${{barY+barH/2+4}}" font-size="10.5" fill="${{bold?'#1A56DB':'#4B5672'}}"
       font-weight="${{bold?700:400}}" font-family="system-ui">${{r.proj}}</text>`;
     const fn=r.name.split(' ')[0];
-    s+=`<text x="${{lm-6}}" y="${{barY+barH/2+4}}" text-anchor="end" font-size="11"
+    s+=`<text x="30" y="${{barY+barH/2+4}}" text-anchor="start" font-size="10.5"
       fill="${{bold?'#0D1422':'#4B5672'}}" font-weight="${{bold?700:400}}" font-family="system-ui">${{fn}}</text>`;
-    s+=`<text x="${{lm-35}}" y="${{barY+barH/2+4}}" text-anchor="middle" font-size="10"
+    s+=`<text x="15" y="${{barY+barH/2+4}}" text-anchor="middle" font-size="9.5"
       fill="${{bold?'#1A56DB':'#8896A7'}}" font-weight="700" font-family="system-ui">${{r.projPos}}°</text>`;
   }});
   document.getElementById('pb').innerHTML=s;
-  hover('.pbar',el=>{{const d=el.dataset;return `<strong>${{d.n}}</strong><br>Atual: ${{d.curr}} pts<br>+${{d.add}} projetados<br><strong>Final: ${{d.proj}} pts</strong>`;}});
+  hover('.pbar',el=>{{const d=el.dataset;
+    return `<strong>${{d.n}}</strong><br>Atual: ${{d.curr}} pts<br>+${{d.add}} (jogos) +${{d.pod}} (pódio)<br><strong>Final: ${{d.proj}} pts</strong>`;}});
 }})();
 
 /* ── PROJEÇÃO: TABELA ── */
 (function(){{
   let h=`<thead><tr><th>Proj</th><th style="text-align:center">Δ</th><th>Nome</th>
-    <th title="Pontuação atual">Atual</th><th title="Projeção final">Final proj.</th>
+    <th title="Pontuação atual">Atual</th><th title="Projeção final incluindo pódio potencial">Final proj.</th>
+    <th title="Máximo de pontos de pódio ainda possíveis">Pódio +</th>
     <th>Pts/jogo</th></tr></thead><tbody>`;
   PROJ.forEach(r=>{{
     const dv=r.delta;
     const arr=dv>0?`<span style="color:#0A7040;font-weight:700">▲${{dv}}</span>`:
               dv<0?`<span style="color:#C0322A;font-weight:700">▼${{Math.abs(dv)}}</span>`:
               `<span style="color:#8896A7">—</span>`;
+    const podStyle=r.podMax>0?'color:#7B3FA0;font-weight:600':'color:#8896A7';
     h+=`<tr${{r.me?' class="me"':''}}><td>${{r.projPos}}°</td>
       <td style="text-align:center">${{arr}}</td><td>${{r.name}}</td>
       <td>${{r.total}}</td><td><strong>${{r.proj}}</strong></td>
+      <td style="${{podStyle}}">${{r.podMax>0?'+'+r.podMax:'—'}}</td>
       <td>${{r.avg.toFixed(2)}}</td></tr>`;
   }});
   document.getElementById('ptbl').innerHTML=h+'</tbody>';
