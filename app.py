@@ -3533,17 +3533,23 @@ def page_analise_desempenho():
         # R16 matches 1-4 → half 1 | R16 matches 5-8 → half 2
         # R32 matches 1-8 → half 1 | R32 matches 9-16 → half 2
         bracket_rows = session.execute(text("""
-            SELECT id, team1_id, team2_id, phase
+            SELECT match_number, team1_id, team2_id, phase
             FROM matches
             WHERE phase IN ('SF', 'QF', 'R16', 'R32')
               AND (team1_id IS NOT NULL OR team2_id IS NOT NULL)
         """)).fetchall()
 
-        # Agrupa por fase e ordena por id para determinar metade do chaveamento
+        # Agrupa por fase e ordena por match_number (número oficial do jogo, 1-104)
+        # que reflete a posição no bracket — NÃO por id (auto-increment sem ordem garantida).
+        # R16 matches 89-92 → QF 97-98 → SF1 (half 1)
+        # R16 matches 93-96 → QF 99-100 → SF2 (half 2)
         bracket_half = {}
         phase_split = {'SF': 1, 'QF': 2, 'R16': 4, 'R32': 8}
         for phase in ('SF', 'QF', 'R16', 'R32'):
-            phase_matches = sorted([r for r in bracket_rows if r.phase == phase], key=lambda r: r.id)
+            phase_matches = sorted(
+                [r for r in bracket_rows if r.phase == phase],
+                key=lambda r: r.match_number
+            )
             split = phase_split.get(phase, 1)
             for i, m in enumerate(phase_matches):
                 half = 1 if i < split else 2
