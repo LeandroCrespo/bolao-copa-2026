@@ -3713,29 +3713,26 @@ def page_analise_desempenho():
 
     # ── DEBUG TEMPORÁRIO (remover após diagnóstico) ──────────────────────────
     with st.expander("🔧 Debug pódio + chaveamento", expanded=True):
-        st.markdown("**Palpites de pódio (todos os participantes):**")
-        rows_debug = []
+        lines_pod = ["PARTICIPANTE | CAMPEÃO (id,half) | VICE (id,half) | 3° (id,half) | CONFLITO C+V?"]
+        lines_pod.append("-" * 90)
         for pp in dbg_pod_list:
             C, V, T = pp['C'], pp['V'], pp['T']
             ch = bracket_half.get(C) if C else None
             vh = bracket_half.get(V) if V else None
-            conflict = "⚠️ SIM" if (ch and vh and ch == vh) else "não"
-            rows_debug.append({
-                "Participante": pp['nome'],
-                "1° (Campeão)": dbg_teams.get(C, f"id={C}") if C else "—",
-                "Half C": ch,
-                "2° (Vice)": dbg_teams.get(V, f"id={V}") if V else "—",
-                "Half V": vh,
-                "3° Lugar": dbg_teams.get(T, f"id={T}") if T else "—",
-                "Half T": bracket_half.get(T) if T else None,
-                "Conflito C+V?": conflict,
-            })
-        st.dataframe(rows_debug, use_container_width=True)
+            th = bracket_half.get(T) if T else None
+            conflict = "SIM" if (ch and vh and ch == vh) else "nao"
+            cn = dbg_teams.get(C, f"id={C}") if C else "—"
+            vn = dbg_teams.get(V, f"id={V}") if V else "—"
+            tn = dbg_teams.get(T, f"id={T}") if T else "—"
+            lines_pod.append(
+                f"{pp['nome']:<20} | {cn} (id={C},h={ch}) | {vn} (id={V},h={vh}) | {tn} (id={T},h={th}) | {conflict}"
+            )
+        st.code("\n".join(lines_pod), language=None)
 
-        st.markdown(f"**bracket_half** ({len(bracket_half)} times):")
-        half_table = [{"team_id": k, "nome": dbg_teams.get(k, "?"), "metade": v}
-                      for k, v in sorted(bracket_half.items())]
-        st.dataframe(half_table, use_container_width=True)
+        lines_half = [f"bracket_half: {len(bracket_half)} times", "-" * 50]
+        for k, v in sorted(bracket_half.items()):
+            lines_half.append(f"  id={k:<4} metade={v}  {dbg_teams.get(k, '?')}")
+        st.code("\n".join(lines_half), language=None)
     # ── FIM DEBUG ────────────────────────────────────────────────────────────
 
     pb_h = 20 + len(proj_sorted) * 26 + 20
