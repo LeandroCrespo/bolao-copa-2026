@@ -3649,12 +3649,23 @@ def page_analise_desempenho():
             conflict_cv = (c_alive and v_alive and ch is not None
                            and vh is not None and ch == vh)
 
-            if c_alive:
+            if conflict_cv:
+                # Um de C/V acerta a posição exata (campeão ou vice = 15 pts)
                 max_pod += scoring_cfg.get('podio_campeao', 15)
-            if v_alive and not conflict_cv:
-                max_pod += scoring_cfg.get('podio_vice', 15)
-            if t_alive:
-                max_pod += scoring_cfg.get('podio_terceiro', 15)
+                # O outro de C/V perde a SF, disputa o 3° → fora_ordem (10 pts)
+                max_pod += scoring_cfg.get('podio_fora_ordem', 10)
+                # T vai à final pelo outro lado → posição errada → fora_ordem (10 pts)
+                # Somente se T estiver vivo E no lado oposto de C/V no chaveamento
+                th = bracket_half.get(T) if T else None
+                if t_alive and th is not None and ch is not None and th != ch:
+                    max_pod += scoring_cfg.get('podio_fora_ordem', 10)
+            else:
+                if c_alive:
+                    max_pod += scoring_cfg.get('podio_campeao', 15)
+                if v_alive:
+                    max_pod += scoring_cfg.get('podio_vice', 15)
+                if t_alive:
+                    max_pod += scoring_cfg.get('podio_terceiro', 15)
             max_pod = min(max_pod, scoring_cfg.get('podio_completo', 45))
         # current_total já inclui podium_pts (=0 enquanto torneio não termina)
         proj_total = r['total'] + proj_add + max_pod
@@ -3887,7 +3898,8 @@ svg{{display:block;overflow:visible}}
 <div class="card wrap" style="padding:0"><table id="ptbl"></table></div>
 <p class="note" style="margin-bottom:16px">
   Projeção assume que cada participante mantém sua média atual de pts/jogo nos {games_rem} jogos restantes.<br>
-  Pódio potencial = máximo possível com os times ainda vivos (campeão +15, vice +15, 3° +15 = máx. 45 pts).<br>
+  Pódio potencial = máx. possível considerando times vivos e chaveamento.<br>
+  Sem conflito: 45 pts (15+15+15). Se campeão e vice apostados disputam a mesma semifinal: máx. 35 pts (15 exato + 10 fora_ordem + 10 fora_ordem).<br>
   Pts de classificação de grupos já computados. Atualizado automaticamente a cada acesso.
 </p>
 <script>
