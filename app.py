@@ -1517,10 +1517,14 @@ def page_home():
 # =============================================================================
 # PÁGINA DE PALPITES - JOGOS
 # =============================================================================
-def _save_palpite_jogo(user_id, match_id):
+def _save_palpite_jogo(user_id, match_id, manually_confirmed=False):
     """Salva (cria ou atualiza) o palpite de placar do usuário para um jogo,
     lendo os valores atuais dos campos de gols no session_state.
     Usado tanto pelo auto-save (on_change) quanto pelo botão Salvar.
+
+    manually_confirmed=True apenas quando chamado pelo botão 💾 Salvar Palpite.
+    on_change passa False (default) — salva o placar mas não confirma a intenção.
+    Uma vez confirmado (TRUE), o flag nunca regride para FALSE em saves posteriores.
 
     Usa INSERT ... SELECT ... ON CONFLICT (upsert atômico) em vez de "SELECT,
     depois decide se insere ou atualiza": esse padrão antigo não era seguro
@@ -1545,18 +1549,19 @@ def _save_palpite_jogo(user_id, match_id):
     with session_scope(engine) as session:
         session.execute(
             text("""
-                INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at, updated_at)
-                SELECT :user_id, :match_id, :g1, :g2, :now, :now
+                INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, manually_confirmed, created_at, updated_at)
+                SELECT :user_id, :match_id, :g1, :g2, :confirmed, :now, :now
                 FROM matches
                 WHERE id = :match_id AND status = 'scheduled' AND datetime + interval '2 hours' > :now_brt
                 ON CONFLICT (user_id, match_id) DO UPDATE
                 SET pred_team1_score = EXCLUDED.pred_team1_score,
                     pred_team2_score = EXCLUDED.pred_team2_score,
+                    manually_confirmed = CASE WHEN :confirmed THEN TRUE ELSE predictions.manually_confirmed END,
                     updated_at = EXCLUDED.updated_at
                 WHERE predictions.locked_at IS NULL
             """),
             {"user_id": user_id, "match_id": match_id, "g1": gols1, "g2": gols2,
-             "now": datetime.utcnow(), "now_brt": now_brt}
+             "confirmed": manually_confirmed, "now": datetime.utcnow(), "now_brt": now_brt}
         )
 
 
@@ -1669,7 +1674,7 @@ def page_palpites_jogos():
                             )
 
                         if st.button("💾 Salvar Palpite", key=f"save_{match.id}"):
-                            _save_palpite_jogo(st.session_state.user['id'], match.id)
+                            _save_palpite_jogo(st.session_state.user['id'], match.id, manually_confirmed=True)
                             st.success("✅ Palpite salvo com sucesso!")
                             st.rerun()
                     else:

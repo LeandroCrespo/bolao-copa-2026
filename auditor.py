@@ -117,6 +117,7 @@ def check_upcoming_no_prediction(cur):
             WHERE match_id = %s
               AND pred_team1_score IS NOT NULL
               AND pred_team2_score IS NOT NULL
+              AND manually_confirmed = TRUE
         """, (match_id,))
         palpitaram = {r[0] for r in cur.fetchall()}
 
