@@ -156,8 +156,11 @@ MATCHES_KNOCKOUT = [
     (96, "R16", "W87", "W88", "2026-07-07", "17:00", "Vancouver"),
     
     # ========== QUARTAS DE FINAL ==========
-    (97, "QF", "W89", "W90", "2026-07-09", "17:00", "Boston"),
-    (98, "QF", "W91", "W92", "2026-07-10", "16:00", "Los Angeles"),
+    # Emparelhamento correto: vencedores do mesmo dia de R16 se enfrentam
+    # Dia 04/jul: W89 (Houston) vs W91 (Filadélfia)
+    # Dia 05/jul: W90 (MetLife) vs W92 (Cidade do México)
+    (97, "QF", "W89", "W91", "2026-07-09", "17:00", "Boston"),
+    (98, "QF", "W90", "W92", "2026-07-10", "16:00", "Los Angeles"),
     (99, "QF", "W93", "W94", "2026-07-11", "18:00", "Miami"),
     (100, "QF", "W95", "W96", "2026-07-11", "22:00", "Kansas City"),
     
