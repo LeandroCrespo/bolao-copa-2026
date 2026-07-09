@@ -165,8 +165,10 @@ MATCHES_KNOCKOUT = [
     (100, "QF", "W95", "W96", "2026-07-11", "22:00", "Kansas City"),
     
     # ========== SEMIFINAIS ==========
-    (101, "SF", "W97", "W98", "2026-07-14", "16:00", "Dallas"),
-    (102, "SF", "W99", "W100", "2026-07-15", "16:00", "Atlanta"),
+    # Emparelhamento correto: W97 x W99 e W100 x W98
+    # (ex.: se avançarem FRA, ENG, ESP e ARG -> FRA x ESP e ARG x ENG)
+    (101, "SF", "W97", "W99", "2026-07-14", "16:00", "Dallas"),
+    (102, "SF", "W100", "W98", "2026-07-15", "16:00", "Atlanta"),
     
     # ========== DISPUTA DE 3º LUGAR ==========
     (103, "3RD", "L101", "L102", "2026-07-18", "18:00", "Miami"),
