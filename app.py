@@ -1220,8 +1220,8 @@ def can_predict_match(match):
     if match.status != 'scheduled':
         return False
     now = get_brazil_time().replace(tzinfo=None)
-    # Fallback: se o status ao vivo falhar, bloqueia 2h após o horário previsto
-    return now < match.datetime + timedelta(hours=2)
+    # Fallback: bloqueia no horário de início do jogo caso o status ao vivo falhe
+    return now < match.datetime
 
 def can_predict_podium(session):
     """Verifica se ainda é possível fazer palpite de pódio"""
@@ -1552,7 +1552,7 @@ def _save_palpite_jogo(user_id, match_id, manually_confirmed=False):
                 INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, manually_confirmed, created_at, updated_at)
                 SELECT :user_id, :match_id, :g1, :g2, :confirmed, :now, :now
                 FROM matches
-                WHERE id = :match_id AND status = 'scheduled' AND datetime + interval '2 hours' > :now_brt
+                WHERE id = :match_id AND status = 'scheduled' AND datetime > :now_brt
                 ON CONFLICT (user_id, match_id) DO UPDATE
                 SET pred_team1_score = EXCLUDED.pred_team1_score,
                     pred_team2_score = EXCLUDED.pred_team2_score,
@@ -5165,7 +5165,7 @@ def admin_palpites(session):
                                     INSERT INTO predictions (user_id, match_id, pred_team1_score, pred_team2_score, created_at, updated_at)
                                     SELECT :user_id, :match_id, :g1, :g2, :now, :now
                                     FROM matches
-                                    WHERE id = :match_id AND status = 'scheduled' AND datetime + interval '2 hours' > :now_brt
+                                    WHERE id = :match_id AND status = 'scheduled' AND datetime > :now_brt
                                     ON CONFLICT (user_id, match_id) DO UPDATE
                                     SET pred_team1_score = EXCLUDED.pred_team1_score,
                                         pred_team2_score = EXCLUDED.pred_team2_score,
