@@ -147,20 +147,22 @@ def resolve_knockout_winners(session: Session):
     
     for match in all_knockout:
         changed = False
-        
-        # Resolver team1
-        if match.team1_id is None and match.team1_code:
+
+        # Resolver team1: verifica se o código ainda é um placeholder W/L
+        # (não checa team1_id IS None para cobrir estado inconsistente onde
+        # o id foi setado mas o code ficou como placeholder)
+        if match.team1_code and _resolve_wl_code(match.team1_code, results):
             team = _resolve_wl_code(match.team1_code, results)
-            if team:
+            if team and match.team1_code != team.code:
                 match.team1_id = team.id
                 match.team1_code = team.code
                 changed = True
                 logger.info(f"Jogo #{match.match_number} team1: W/L -> {team.flag} {team.name}")
-        
+
         # Resolver team2
-        if match.team2_id is None and match.team2_code:
+        if match.team2_code and _resolve_wl_code(match.team2_code, results):
             team = _resolve_wl_code(match.team2_code, results)
-            if team:
+            if team and match.team2_code != team.code:
                 match.team2_id = team.id
                 match.team2_code = team.code
                 changed = True

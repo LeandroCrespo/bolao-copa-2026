@@ -660,30 +660,32 @@ def propagate_knockout_winners(conn):
         l_code = f"L{match_num}"
         
         # Atualiza jogos que têm W{match_num} como team1
+        # Sem AND team1_id IS NULL: corrige também casos onde o id foi setado
+        # mas o code ficou como placeholder (estado inconsistente)
         cursor.execute("""
             UPDATE matches SET team1_id = %s, team1_code = %s
-            WHERE team1_code = %s AND team1_id IS NULL
+            WHERE team1_code = %s
         """, (winner_id, winner_code, w_code))
         updated += cursor.rowcount
-        
+
         # Atualiza jogos que têm W{match_num} como team2
         cursor.execute("""
             UPDATE matches SET team2_id = %s, team2_code = %s
-            WHERE team2_code = %s AND team2_id IS NULL
+            WHERE team2_code = %s
         """, (winner_id, winner_code, w_code))
         updated += cursor.rowcount
-        
+
         # Atualiza jogos que têm L{match_num} como team1 (disputa de 3º)
         cursor.execute("""
             UPDATE matches SET team1_id = %s, team1_code = %s
-            WHERE team1_code = %s AND team1_id IS NULL
+            WHERE team1_code = %s
         """, (loser_id, loser_code, l_code))
         updated += cursor.rowcount
-        
+
         # Atualiza jogos que têm L{match_num} como team2 (disputa de 3º)
         cursor.execute("""
             UPDATE matches SET team2_id = %s, team2_code = %s
-            WHERE team2_code = %s AND team2_id IS NULL
+            WHERE team2_code = %s
         """, (loser_id, loser_code, l_code))
         updated += cursor.rowcount
     
@@ -989,14 +991,14 @@ def run_post():
                 updated += 1
 
         logger.info(f"Total de jogos atualizados: {updated}")
-        
-        # Propaga confrontos do mata-mata
-        if updated > 0:
-            update_completed_group_results(conn)
-            prop_groups = propagate_group_results(conn)
-            prop_knockout = propagate_knockout_winners(conn)
-            if prop_groups + prop_knockout > 0:
-                logger.info(f"Propagados: {prop_groups} de grupo + {prop_knockout} de mata-mata")
+
+        # Propaga sempre — independente de ter atualizado jogos nesta execução,
+        # pode haver placeholders pendentes de execuções anteriores
+        update_completed_group_results(conn)
+        prop_groups = propagate_group_results(conn)
+        prop_knockout = propagate_knockout_winners(conn)
+        if prop_groups + prop_knockout > 0:
+            logger.info(f"Propagados: {prop_groups} de grupo + {prop_knockout} de mata-mata")
     finally:
         conn.close()
 
