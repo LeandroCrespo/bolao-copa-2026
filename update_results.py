@@ -908,8 +908,16 @@ def process_fixture(conn, fixture, pending_matches, mode='post'):
             score_finished_match(conn, match_id, team1_score, team2_score)
         return success
 
-    # Jogo ao vivo (só atualiza no modo live) — usa goals (placar corrente com ET)
+    # Jogo ao vivo (só atualiza no modo live)
     elif status_short in LIVE_STATUSES and mode == 'live':
+        # O placar de referência do bolão é SEMPRE o dos 90 minutos. Durante a
+        # prorrogação/pênaltis (ET, BT, P), 'goals' já inclui os gols do tempo
+        # extra — usar score.fulltime (placar dos 90 min), que a API preenche
+        # assim que o tempo regulamentar termina.
+        if status_short in ('ET', 'BT', 'P'):
+            ft = fixture.get('score', {}).get('fulltime', {}) or {}
+            if ft.get('home') is not None and ft.get('away') is not None:
+                goals_home, goals_away = ft['home'], ft['away']
         if goals_home is None or goals_away is None:
             return False
         if db_match['team1_code'] == home_code:
