@@ -3518,6 +3518,42 @@ def page_analise_desempenho():
         out_top2  = {r.elim_id for r in elim_rows}
         out_third = {r.elim_id for r in elim_rows if r.phase != 'SF'}
 
+        # Cenários de pódio EXATOS a partir do estado real dos jogos 103/104.
+        # Quando final e 3º lugar já têm confrontos definidos, o pódio máximo
+        # é calculado por enumeração (2 a 4 cenários) em vez da heurística de
+        # chaveamento — isso captura automaticamente o 3º lugar já decidido.
+        def _match_state(n):
+            return session.execute(text("""
+                SELECT team1_id, team2_id, team1_score, team2_score,
+                       status, penalty_winner_id
+                FROM matches WHERE match_number = :n
+            """), {"n": n}).fetchone()
+
+        def _match_winner(row):
+            if not row or row.status != 'finished' or row.team1_score is None:
+                return None
+            if row.team1_score > row.team2_score:
+                return row.team1_id
+            if row.team2_score > row.team1_score:
+                return row.team2_id
+            return row.penalty_winner_id
+
+        podium_scenarios = None
+        _final = _match_state(104)
+        _third = _match_state(103)
+        if (_final and _final.team1_id and _final.team2_id
+                and _third and _third.team1_id and _third.team2_id):
+            _w3 = _match_winner(_third)
+            _thirds = [_w3] if _w3 else [_third.team1_id, _third.team2_id]
+            _wf = _match_winner(_final)
+            if _wf:
+                _lf = _final.team1_id if _wf == _final.team2_id else _final.team2_id
+                _finals = [(_wf, _lf)]
+            else:
+                _finals = [(_final.team1_id, _final.team2_id),
+                           (_final.team2_id, _final.team1_id)]
+            podium_scenarios = [(c, v, t) for (c, v) in _finals for t in _thirds]
+
         # Palpites de pódio como dict simples (evita DetachedInstanceError fora da sessão)
         pod_preds = {
             pp.user_id: {
@@ -3529,19 +3565,20 @@ def page_analise_desempenho():
         }
         scoring_cfg = get_scoring_config(session)
 
-        # Chaveamento correto Copa 2026 — hardcoded por ser fixo e o banco ter QF98/QF99 trocados.
-        # Lado 1 → SF 101: Oitavas 1+2 (R16 89,90) e Oitavas 3+4 (R16 93,94)
-        # Lado 2 → SF 102: Oitavas 5+6 (R16 91,92) e Oitavas 7+8 (R16 95,96)
-        # copa2026_data.py tinha W91/W92 em QF 98 e W93/W94 em QF 99 — invertido vs bracket real.
+        # Chaveamento correto Copa 2026 (banco já corrigido em 15/07):
+        # QF 97 = W89 x W91 | QF 98 = W90 x W92 | QF 99 = W93 x W94 | QF 100 = W95 x W96
+        # SF 101 = W97 x W99 (Lado 1) | SF 102 = W100 x W98 (Lado 2)
         COPA2026_WINNER_NEXT = {
-            73: 89, 74: 89, 75: 90, 76: 90,  # R32 → R16 (Oitavas 1,2)
-            77: 91, 78: 91, 79: 92, 80: 92,  # R32 → R16 (Oitavas 5,6)
-            81: 93, 82: 93, 83: 94, 84: 94,  # R32 → R16 (Oitavas 3,4)
-            85: 95, 86: 95, 87: 96, 88: 96,  # R32 → R16 (Oitavas 7,8)
-            89: 97, 90: 97, 93: 98, 94: 98,  # R16 → QF (Lado 1 → SF 101)
-            91: 99, 92: 99, 95: 100, 96: 100, # R16 → QF (Lado 2 → SF 102)
-            97: 101, 98: 101,                  # QF → SF 101
-            99: 102, 100: 102,                 # QF → SF 102
+            73: 89, 74: 89, 75: 90, 76: 90,   # R32 → R16
+            77: 91, 78: 91, 79: 92, 80: 92,   # R32 → R16
+            81: 93, 82: 93, 83: 94, 84: 94,   # R32 → R16
+            85: 95, 86: 95, 87: 96, 88: 96,   # R32 → R16
+            89: 97, 91: 97,                    # R16 → QF 97
+            90: 98, 92: 98,                    # R16 → QF 98
+            93: 99, 94: 99,                    # R16 → QF 99
+            95: 100, 96: 100,                  # R16 → QF 100
+            97: 101, 99: 101,                  # QF → SF 101 (Lado 1)
+            100: 102, 98: 102,                 # QF → SF 102 (Lado 2)
         }
 
         team_matches = session.execute(text("""
@@ -3671,7 +3708,17 @@ def page_analise_desempenho():
         # Pódio máximo possível com restrição de chaveamento
         pp = pod_preds.get(r['id'])
         max_pod = 0
-        if pp:
+        if pp and podium_scenarios:
+            # Enumeração exata dos desfechos possíveis (final/3º lugar reais)
+            from scoring import calculate_podium_points
+            max_pod = max(
+                calculate_podium_points(
+                    pp['champion'], pp['vice'], pp['third'],
+                    c, v, t, scoring_cfg
+                )[0]
+                for (c, v, t) in podium_scenarios
+            )
+        elif pp:
             C, V, T = pp['champion'], pp['vice'], pp['third']
             c_alive = bool(C and C not in out_top2)
             v_alive = bool(V and V not in out_top2)
